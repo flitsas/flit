@@ -252,6 +252,13 @@ public static class IdentityInfrastructureExtensions
         services.AddScoped<ITenantProductSecretProtector, DataProtectionTenantProductSecretProtector>();
         services.AddScoped<IProductAccessStore, ProductAccessStore>();
         services.AddScoped<IProductManifestStore, ProductManifestStore>();
+        // HU #14694 (plan §1.1 E2 y §1.3 P1): trabajos de aprovisionamiento por la outbox del host (core-api: tramites;
+        // core-identity: plataforma), precondición de activación y datos del alta. La outbox es opcional al resolver: sin
+        // ella, encolar falla (fail-closed) en vez de perder el trabajo.
+        services.AddScoped<ITenantProductChangeJobs>(sp => new Platform.TenantProductChangeJobsOutbox(
+            sp.GetService<Flit.Platform.Sdk.Messaging.IPlatformOutbox>(), sp.GetRequiredService<IIdentityDb>()));
+        services.AddScoped<IPrecondicionActivacion, Platform.PrecondicionAdminCompanyActivo>();
+        services.AddScoped<Flit.Modules.Platform.Application.Companies.IDatosAltaProveedorStore, Platform.DatosAltaProveedorStore>();
         return services;
     }
 }

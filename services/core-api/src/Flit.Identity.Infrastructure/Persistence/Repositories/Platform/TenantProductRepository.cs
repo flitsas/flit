@@ -12,7 +12,8 @@ namespace Flit.Infrastructure.Persistence.Repositories.Platform;
 /// Cada consulta filtra <c>tenant_id</c> explícitamente (sin <c>HasQueryFilter</c>, convención del
 /// repo). La auditoría legible se escribe en <c>admin.tenant_config_audit_logs</c> en el MISMO
 /// <c>SaveChanges</c> que la fila (patrón <c>TenantDomainRepository</c>), una fila por campo que
-/// cambia; el rastro técnico lo deja el trigger <c>tr_tenant_products_audit</c>.
+/// cambia; el rastro técnico lo deja el trigger <c>tr_tenant_products_audit</c>. HU #14694: lo que encole
+/// <c>antesDeGuardar</c> en el mismo contexto (la outbox) entra en ese mismo <c>SaveChanges</c>.
 /// </summary>
 internal sealed class TenantProductRepository : ITenantProductRepository
 {
@@ -60,6 +61,7 @@ internal sealed class TenantProductRepository : ITenantProductRepository
         bool enabled,
         string? notes,
         Guid? changedBy,
+        Action<TenantProductChange>? antesDeGuardar = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
@@ -91,8 +93,10 @@ internal sealed class TenantProductRepository : ITenantProductRepository
                 AddAudit(tenantId, row.Id, "notes", null, JsonSerializer.Serialize(notes), AuditVocabulary.Operations.Create, changedBy, now);
             }
 
+            var created = new TenantProductChange(Map(row), Changed: true);
+            antesDeGuardar?.Invoke(created);
             await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return new TenantProductChange(Map(row), Changed: true);
+            return created;
         }
 
         var enabledChanged = row.Enabled != enabled;
@@ -126,8 +130,10 @@ internal sealed class TenantProductRepository : ITenantProductRepository
         row.UpdatedAt = now;
         row.UpdatedBy = changedBy;
 
+        var updated = new TenantProductChange(Map(row), Changed: true);
+        antesDeGuardar?.Invoke(updated);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return new TenantProductChange(Map(row), Changed: true);
+        return updated;
     }
 
     private void AddAudit(

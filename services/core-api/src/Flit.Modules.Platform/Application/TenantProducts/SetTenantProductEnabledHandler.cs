@@ -13,22 +13,37 @@ namespace Flit.Modules.Platform.Application.TenantProducts;
 /// Jerarquía (ADR-0057, contrato §4): no se enciende un producto a una empresa hija si alguno de sus
 /// ancestros lo tiene apagado (HU #12966). Apagar la cabeza no reescribe a las hijas: el resolutor de
 /// acceso (B-05) ya las deja sin el producto, y al volver a encender la cabeza recuperan su estado.
-/// El evento <c>platform.tenant_product.changed</c> se publica cuando exista el outbox (C-01).
+/// HU #14694 (plan §1.1, decisión E2): en un producto con aprovisionamiento (<see cref="ProductosConAprovisionamiento"/>)
+/// encender exige un AdminCompany activo (409 <see cref="TenantProductException.ProvisioningPrerequisiteMissing"/>) y todo
+/// cambio deja el trabajo <c>&lt;producto&gt;.producto.cambiado</c> en la outbox del host, en el mismo guardado. El canal
+/// <c>platform.tenant_product.changed</c> sigue sin emitirse (deuda R-10 del plan).
 /// </remarks>
 public sealed class SetTenantProductEnabledHandler
 {
     /// <summary>Largo máximo de las notas (<c>varchar(500)</c> en el DDL 119).</summary>
     public const int NotesMaxLength = 500;
 
+    /// <summary>Literal del 409 <c>PROVISIONING_PREREQUISITE_MISSING</c> (platform.v1 1.1.0); el front lo muestra tal cual.</summary>
+    public const string ProvisioningPrerequisiteMissingDetail = "La compañía no tiene un Administrador de Compañía activo";
+
     private readonly IProductCatalog _catalog;
     private readonly ITenantProductRepository _repository;
     private readonly IProductAccessStore _access;
+    private readonly ITenantProductChangeJobs _jobs;
+    private readonly IPrecondicionActivacion _precondicion;
 
-    public SetTenantProductEnabledHandler(IProductCatalog catalog, ITenantProductRepository repository, IProductAccessStore access)
+    public SetTenantProductEnabledHandler(
+        IProductCatalog catalog,
+        ITenantProductRepository repository,
+        IProductAccessStore access,
+        ITenantProductChangeJobs jobs,
+        IPrecondicionActivacion precondicion)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _access = access ?? throw new ArgumentNullException(nameof(access));
+        _jobs = jobs ?? throw new ArgumentNullException(nameof(jobs));
+        _precondicion = precondicion ?? throw new ArgumentNullException(nameof(precondicion));
     }
 
     public async Task<TenantProductChange> HandleAsync(
@@ -82,8 +97,25 @@ public sealed class SetTenantProductEnabledHandler
                 $"Las notas no pueden pasar de {NotesMaxLength} caracteres.");
         }
 
+        if (!ProductosConAprovisionamiento.Tiene(code))
+        {
+            return await _repository
+                .SetAsync(command.TenantId, code, command.Enabled, notes, changedBy, antesDeGuardar: null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // HU #14694 (D-EMAIL): sin AdminCompany activo no hay a quién dar de alta en el proveedor. Apagar nunca la exige.
+        if (command.Enabled
+            && !await _precondicion.CumpleAsync(command.TenantId, code, cancellationToken).ConfigureAwait(false))
+        {
+            throw new TenantProductException(
+                TenantProductException.ProvisioningPrerequisiteMissing,
+                ProvisioningPrerequisiteMissingDetail);
+        }
+
+        // HU #14694 (plan §1.1, decisión E2): el trabajo viaja en el mismo guardado; sin cambio no se encola.
         return await _repository
-            .SetAsync(command.TenantId, code, command.Enabled, notes, changedBy, cancellationToken)
+            .SetAsync(command.TenantId, code, command.Enabled, notes, changedBy, change => _jobs.EncolarCambio(change.Current), cancellationToken)
             .ConfigureAwait(false);
     }
 }
