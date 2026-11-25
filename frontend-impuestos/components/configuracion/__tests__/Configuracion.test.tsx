@@ -350,6 +350,53 @@ describe("Configuración — estados y permisos", () => {
     expect(await screen.findByText("Elige una compañía.")).toBeInTheDocument();
   });
 
+  it("Super Admin: GET /configuracion?empresa= con 404 EMPRESA_NO_ENCONTRADA muestra el literal en línea, sin ir a la 403", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=e-inexistente");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(u), "http://app");
+        llamadas.push({ url, method: init?.method ?? "GET", body: undefined });
+        if (url.pathname === "/api/v1/impuestos/backoffice/empresas") return Response.json({ items: [], total: 0, page: 1, pageSize: 200 });
+        return Response.json({ code: "EMPRESA_NO_ENCONTRADA", error: "detalle interno" }, { status: 404 });
+      }),
+    );
+
+    render(<Configuracion />);
+
+    expect(await screen.findByText("No se pudo cargar la configuración")).toBeInTheDocument();
+    expect(screen.getByText("La compañía no existe o no tiene Impuestos.")).toBeInTheDocument();
+    expect(llamadas.find((l) => l.url.pathname === "/api/v1/impuestos/configuracion")?.url.searchParams.get("empresa")).toBe("e-inexistente");
+    expect(replace).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+  });
+
+  it("PUT /configuracion con 404 EMPRESA_NO_ENCONTRADA: «No se guardó la configuración» con el literal y conserva lo digitado", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "EMPRESA_NO_ENCONTRADA", error: "x" }, { status: 404 }) }));
+
+    render(<Configuracion />);
+    fireEvent.change(await screen.findByLabelText("Máximo de placas por lote"), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    expect(await screen.findByText("La compañía no existe o no tiene Impuestos.")).toBeInTheDocument();
+    expect(screen.getByText("No se guardó la configuración")).toBeInTheDocument();
+    expect(campoMaximo()).toHaveValue(120);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("PUT /configuracion con 403 EMPRESA_SOLO_SUPER_ADMIN: literal en línea, nunca la 403 ni el texto genérico", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "EMPRESA_SOLO_SUPER_ADMIN", error: "x" }, { status: 403 }) }));
+
+    render(<Configuracion />);
+    fireEvent.change(await screen.findByLabelText("Máximo de placas por lote"), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    expect(await screen.findByText("Solo el Super Admin puede elegir la compañía.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("No tienes permiso para esta acción.");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("el Gestor (sin impuestos.configuracion.ver) va a la 403", async () => {
     conSesion("gestor");
     vi.stubGlobal("fetch", api());

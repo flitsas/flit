@@ -238,6 +238,61 @@ describe("FormularioCredenciales — carga protegida", () => {
     expect(await screen.findByText("En el estado actual de la compañía no se pueden cargar credenciales.")).toBeInTheDocument();
   });
 
+  it.each([400, 422])("%s CREDENCIAL_REQUERIDA del servidor: literal del contrato en la tarjeta, sin el texto del servidor", async (status) => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "CREDENCIAL_REQUERIDA", error: "detalle interno" }, { status }) }));
+
+    montar();
+    const { secreto } = await abrir();
+    fireEvent.change(secreto, { target: { value: SECRETO } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar y guardar" }));
+
+    const tarjeta = screen.getByRole("group", { name: "Credenciales" });
+    expect(await within(tarjeta).findByText("Escribe la API key o el secreto del webhook.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+    expect(screen.getByLabelText("Secreto del webhook (opcional)")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("409 ESTADO_NO_ADMITE_CARGA queda dentro de la tarjeta «Credenciales» y el formulario sigue abierto", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "ESTADO_NO_ADMITE_CARGA", error: "detalle interno" }, { status: 409 }) }));
+
+    montar("PENDIENTE");
+    const { apiKey } = await abrir();
+    fireEvent.change(apiKey, { target: { value: API_KEY } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar y guardar" }));
+
+    const tarjeta = screen.getByRole("group", { name: "Credenciales" });
+    expect(await within(tarjeta).findByText("En el estado actual de la compañía no se pueden cargar credenciales.")).toBeInTheDocument();
+    expect(screen.getByLabelText("API key")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+  });
+
+  it("503 PROVEEDOR_NO_DISPONIBLE: literal del contrato en la tarjeta, sin «guardadas» y sin el texto del servidor", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "PROVEEDOR_NO_DISPONIBLE", error: "detalle interno" }, { status: 503 }) }));
+
+    montar();
+    const { apiKey } = await abrir();
+    fireEvent.change(apiKey, { target: { value: API_KEY } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar y guardar" }));
+
+    const tarjeta = screen.getByRole("group", { name: "Credenciales" });
+    expect(await within(tarjeta).findByText("El proveedor no responde. Intenta más tarde.")).toBeInTheDocument();
+    expect(screen.queryByText("Credenciales guardadas y validadas.")).toBeNull();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+  });
+
+  it("404 EMPRESA_NO_ENCONTRADA al guardar: literal de ERRORES_EMPRESA en línea, nunca la 403", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "EMPRESA_NO_ENCONTRADA", error: "x" }, { status: 404 }) }));
+
+    montar();
+    const { apiKey } = await abrir();
+    fireEvent.change(apiKey, { target: { value: API_KEY } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar y guardar" }));
+
+    expect(await screen.findByText("La compañía no existe o no tiene Impuestos.")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("«Cancelar» cierra y vacía lo escrito", async () => {
     vi.stubGlobal("fetch", api());
 
@@ -262,6 +317,7 @@ const EMPRESAS = {
 };
 
 const DETALLE = {
+  empresa: { id: TENANT, nombre: "Compañía Uno", nit: "900000001" },
   estado: "ERROR",
   motivo: "ALTA_DATOS_RECHAZADOS",
   accion: "REINTENTAR",

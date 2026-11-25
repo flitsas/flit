@@ -42,8 +42,21 @@ const LUIS = { id: "u-luis", nombre: "Luis Demo", email: "luis@empresa.com", rol
 const EVA = { id: "u-eva", nombre: "Eva Demo", email: "eva@empresa.com", rol: "gestor_impuestos", estado: "INVITADO" };
 const PROPIO = { id: YO, nombre: "Persona Demo", email: "nombre@empresa.com", rol: "admin_impuestos", estado: "ACTIVO" };
 
-const pagina = (items: unknown[]) => ({ items, total: items.length, page: 1, pageSize: 50 });
-const EMPRESAS = { items: [{ id: "e-1", nombre: "Compañía Uno", nit: "900000001", aprovisionamiento: { estado: "LISTO", motivo: null, accion: null, firmaConfirmada: true }, suspendida: false }], total: 1, page: 1, pageSize: 50 };
+// AdminCompany de la compañía (D-ROL-ADMIN, contrato 1.1.0 delta 6): `protegido`, sin acciones.
+const CARLA = { id: "u-carla", nombre: "Carla Demo", email: "carla@empresa.com", rol: "admin_impuestos", estado: "ACTIVO", protegido: true };
+
+const pagina = (items: unknown[], empresa?: unknown) => ({ items, total: items.length, page: 1, pageSize: 50, ...(empresa === undefined ? {} : { empresa }) });
+/** EmpresaIdentificada de PaginaUsuarios (contrato 1.1.0 delta 7): la compañía elegida por el Super Admin. */
+const EMPRESA_UNO = { id: "e-1", nombre: "Compañía Uno", nit: "900000001" };
+const EMPRESAS = {
+  items: [
+    { id: "e-1", nombre: "Compañía Uno", nit: "900000001", aprovisionamiento: { estado: "LISTO", motivo: null, accion: null, firmaConfirmada: true }, suspendida: false, usuarios: 7 },
+    { id: "e-2", nombre: "Compañía Dos", nit: null, aprovisionamiento: { estado: "LISTO", motivo: null, accion: null, firmaConfirmada: true }, suspendida: false },
+  ],
+  total: 2,
+  page: 1,
+  pageSize: 50,
+};
 
 type Llamada = { url: URL; method: string; body: unknown };
 let llamadas: Llamada[];
@@ -55,7 +68,8 @@ function api(respuestas: { usuarios?: () => Response; accion?: (l: Llamada) => R
     const llamada = { url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined };
     llamadas.push(llamada);
     if (url.pathname === "/api/v1/impuestos/backoffice/empresas") return Response.json(EMPRESAS);
-    if (url.pathname === "/api/v1/impuestos/usuarios" && llamada.method === "GET") return respuestas.usuarios ? respuestas.usuarios() : Response.json(pagina([ANA, LUIS, EVA, PROPIO]));
+    if (url.pathname === "/api/v1/impuestos/usuarios" && llamada.method === "GET")
+      return respuestas.usuarios ? respuestas.usuarios() : Response.json(pagina([ANA, LUIS, EVA, PROPIO], url.searchParams.get("empresa") ? EMPRESA_UNO : undefined));
     return respuestas.accion ? respuestas.accion(llamada) : new Response(null, { status: 204 });
   });
 }
@@ -321,5 +335,145 @@ describe("Super Admin", () => {
       "admin_impuestos",
       "gestor_impuestos",
     ]);
+  });
+});
+
+describe("Contrato 1.1.0 — usuario protegido (delta 6)", () => {
+  it("el AdminCompany (protegido) no tiene menú de acciones y muestra el literal del contrato", async () => {
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([ANA, CARLA])) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Carla Demo");
+
+    const carla = fila("Carla Demo");
+    expect(within(carla).queryByRole("button", { name: "Acciones del usuario" })).toBeNull();
+    expect(within(carla).getByText("Este usuario se gestiona desde el administrador de la plataforma.")).toBeInTheDocument();
+    expect(within(carla).getByText("Administrador Impuestos")).toBeInTheDocument();
+    expect(within(fila("Ana Demo")).getByRole("button", { name: "Acciones del usuario" })).toBeInTheDocument();
+  });
+
+  it("protegido también para el Super Admin (que sí podría dar Administrador): sin Cambiar rol, Suspender ni Reactivar", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=e-1");
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([{ ...CARLA, estado: "SUSPENDIDO" }], EMPRESA_UNO)) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Carla Demo");
+
+    expect(within(fila("Carla Demo")).queryByRole("button", { name: "Acciones del usuario" })).toBeNull();
+    expect(within(fila("Carla Demo")).getByText("Este usuario se gestiona desde el administrador de la plataforma.")).toBeInTheDocument();
+  });
+
+  it("sin `protegido` (campo opcional) la fila conserva sus acciones", async () => {
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([ANA])) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Ana Demo");
+
+    await elegirAccion("Ana Demo", "Suspender");
+    expect(screen.getByRole("dialog", { name: "Suspender usuario" })).toBeInTheDocument();
+  });
+});
+
+describe("Contrato 1.1.0 — filtros Rol y Estado (delta 6)", () => {
+  it("Rol y Estado con etiquetas del contrato y «Todos»; cada cambio pide GET /usuarios con rol/estado, q y page=1", async () => {
+    vi.stubGlobal("fetch", api());
+
+    render(<Usuarios />);
+    await screen.findByText("Ana Demo");
+
+    const rol = screen.getByLabelText("Rol") as HTMLSelectElement;
+    const estado = screen.getByLabelText("Estado") as HTMLSelectElement;
+    expect(Array.from(rol.options).map((o) => [o.value, o.textContent])).toEqual([
+      ["", "Todos"],
+      ["admin_impuestos", "Administrador Impuestos"],
+      ["gestor_impuestos", "Gestor Impuestos"],
+    ]);
+    expect(Array.from(estado.options).map((o) => [o.value, o.textContent])).toEqual([
+      ["", "Todos"],
+      ["ACTIVO", "Activo"],
+      ["INVITADO", "Invitado"],
+      ["SUSPENDIDO", "Suspendido"],
+    ]);
+    expect(gets()[0].url.searchParams.get("rol")).toBeNull();
+    expect(gets()[0].url.searchParams.get("estado")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Buscar nombre o correo"), { target: { value: "ana" } });
+    fireEvent.submit(screen.getByRole("search"));
+    await waitFor(() => expect(gets().at(-1)?.url.searchParams.get("q")).toBe("ana"));
+
+    fireEvent.change(rol, { target: { value: "gestor_impuestos" } });
+    await waitFor(() => expect(gets().at(-1)?.url.searchParams.get("rol")).toBe("gestor_impuestos"));
+    fireEvent.change(estado, { target: { value: "SUSPENDIDO" } });
+    await waitFor(() => expect(gets().at(-1)?.url.searchParams.get("estado")).toBe("SUSPENDIDO"));
+    const ultima = gets().at(-1)!.url.searchParams;
+    expect(ultima.get("q")).toBe("ana");
+    expect(ultima.get("rol")).toBe("gestor_impuestos");
+    expect(ultima.get("page")).toBe("1");
+
+    fireEvent.change(rol, { target: { value: "" } });
+    await waitFor(() => expect(gets().at(-1)?.url.searchParams.get("rol")).toBeNull());
+    expect(gets().at(-1)?.url.searchParams.get("estado")).toBe("SUSPENDIDO");
+  });
+
+  it("con un filtro de estado y sin resultados: «Ningún usuario coincide» y «Limpiar filtros» quita rol y estado", async () => {
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([])) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Aún no hay usuarios en Impuestos");
+
+    fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "INVITADO" } });
+    expect(await screen.findByText("Ningún usuario coincide")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+
+    await waitFor(() => expect(gets().at(-1)?.url.searchParams.get("estado")).toBeNull());
+    expect((screen.getByLabelText("Estado") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("Rol") as HTMLSelectElement).value).toBe("");
+  });
+});
+
+describe("Contrato 1.1.0 — compañía del Super Admin (delta 7) y conteo de usuarios (delta 6)", () => {
+  it("con ?empresa= la cabecera usa PaginaUsuarios.empresa (nombre y NIT) sin recorrer la lista del backoffice", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=e-1");
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([ANA], { id: "e-1", nombre: "Compañía Elegida", nit: "900123456" })) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Ana Demo");
+
+    const miga = await screen.findByRole("navigation", { name: /miga/i });
+    expect(within(miga).getByText("Compañía Elegida")).toBeInTheDocument();
+    expect(screen.getByText(/NIT 900123456/)).toBeInTheDocument();
+    expect(llamadas.some((l) => l.url.pathname === "/api/v1/impuestos/backoffice/empresas")).toBe(false);
+  });
+
+  it("compañía suspendida (nombre vacío y NIT null): nunca una miga o descripción vacía, cae al id", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=e-1");
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([ANA], { id: "e-1", nombre: "", nit: null })) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Ana Demo");
+
+    const miga = await screen.findByRole("navigation", { name: /miga/i });
+    expect(miga.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe("e-1");
+    expect(document.body).not.toHaveTextContent("NIT null");
+  });
+
+  it("la tabla de compañías del Super Admin trae la columna «Usuarios» con el conteo y la deja vacía si no llega", async () => {
+    conSesion("superadmin");
+    vi.stubGlobal("fetch", api());
+
+    render(<Usuarios />);
+    await screen.findByText("Compañía Uno");
+
+    expect(screen.getByRole("columnheader", { name: "Usuarios" })).toBeInTheDocument();
+    const uno = screen.getByText("Compañía Uno").closest("tr") as HTMLElement;
+    expect(within(uno).getByText("7")).toBeInTheDocument();
+    const dos = screen.getByText("Compañía Dos").closest("tr") as HTMLElement;
+    const celda = Array.from(dos.querySelectorAll("td")).find((td) => td.getAttribute("data-label") === "Usuarios");
+    expect(celda).toBeDefined();
+    expect(celda?.textContent?.trim()).toBe("");
+    expect(dos).not.toHaveTextContent("undefined");
   });
 });
