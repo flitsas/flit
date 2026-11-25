@@ -24,6 +24,9 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
 
     private sealed record Reclamo(Guid LoteId, Guid DocumentoId, short Intentos);
 
+    /// <summary>Solo pruebas: se llama al empezar cada documento (para simular un error técnico del trabajador).</summary>
+    internal Action<Guid>? AntesDeProcesar { get; set; }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -60,7 +63,15 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
             RETURNING lote_id, documento_id, intentos
             """).ToListAsync(ct).ConfigureAwait(false);
         if (reclamos.Count == 0)
+        {
+            // Si un cierre falló justo al final, el lote queda sin fecha de término: se repara cuando la cola está vacía.
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE comparendos.asociacion_lote l SET terminado_en = {ahora}
+                WHERE l.terminado_en IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM comparendos.asociacion_lote_documento i WHERE i.lote_id = l.id AND i.resultado = 'PorAsociar')
+                """, ct).ConfigureAwait(false);
             return false;
+        }
 
         var r = reclamos[0];
         var servicio = scope.ServiceProvider.GetRequiredService<ServicioOcr>();
@@ -68,6 +79,7 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
         var actor = new Actor(ActorTipo.Usuario, lote.SolicitadoPor, lote.SolicitadoPorNombre);
         try
         {
+            AntesDeProcesar?.Invoke(r.DocumentoId);
             await ProcesarAsync(scope.ServiceProvider, db, servicio, lote.TenantId, lote.PaqueteId, lote.SolicitadoEn, r, actor, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -75,8 +87,23 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
             // Un error técnico: la concesión vence y se reintenta; al tercero el documento vuelve a Duplicado con un motivo.
             LogFallo(logger, ex);
             db.ChangeTracker.Clear();
-            if (r.Intentos >= IntentosMaximos)
+            if (r.Intentos < IntentosMaximos)
+            {
+                // Reintento pronto, no a los 10 minutos de la concesión.
+                var pronto = time.GetUtcNow().AddSeconds(30);
+                await db.AsociacionLoteDocumentos.Where(i => i.LoteId == r.LoteId && i.DocumentoId == r.DocumentoId && i.Resultado == ResultadoAsociacionLote.PorAsociar)
+                    .ExecuteUpdateAsync(u => u.SetProperty(i => i.ProximoIntentoEn, pronto), ct).ConfigureAwait(false);
+            }
+            else if (await db.DocumentosOcr.AsNoTracking().AnyAsync(d => d.Id == r.DocumentoId && d.Estado == EstadoDocumentoOcr.Asociado, ct).ConfigureAwait(false))
+            {
+                // Sí quedó asociado (lo que falló fue el correo): no se dice «no se asoció».
+                await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null,
+                    new ResultadoEvidencia(ResultadoEvidencia.Omitido, "No se pudo preparar el correo al conductor; el documento quedó asociado"), ct).ConfigureAwait(false);
+            }
+            else
+            {
                 await NoAsociadoAsync(db, servicio, lote.TenantId, lote.PaqueteId, r, MotivoErrorTecnico, ct).ConfigureAwait(false);
+            }
         }
 
         await TerminarSiCorrespondeAsync(db, r.LoteId, ct).ConfigureAwait(false);

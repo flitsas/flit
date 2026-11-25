@@ -599,9 +599,6 @@ public sealed partial class ServicioOcr(
     /// Por qué un documento no se puede asociar a un comparendo, o null si se puede. Solo el duplicado de un comparendo que
     /// ya existe se asocia: el mismo archivo ya cargado o el choque contra otro documento no.
     /// </summary>
-    /// <summary>Tope de documentos por petición de «Asociar los N» (§9): el front pide la siguiente tanda con <c>restantes</c>.</summary>
-    public const int TopeAsociarLote = 50;
-
     /// <summary>
     /// GDC-EVID §9: LA preselección de «Asociar los N», usada por la vista previa, por el endpoint y por el flag <c>revision</c>
     /// del listado. Solo duplicados asociables (<see cref="MotivoNoAsociable"/>) contra un comparendo de la misma empresa.
@@ -698,7 +695,7 @@ public sealed partial class ServicioOcr(
         // Como al registrar: el comparendo pudo cambiar desde que se leyó el documento.
         var campos = await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ToListAsync(ct).ConfigureAwait(false);
         await EvaluarAsync(doc, campos, ct).ConfigureAwait(false);
-        if (MotivoNoAsociable(doc) is { } cambio)
+        if (MotivoNoAsociable(doc, desdeLote) is { } cambio)
         {
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             throw ReglaException.Conflicto("NO_ASOCIABLE", cambio);

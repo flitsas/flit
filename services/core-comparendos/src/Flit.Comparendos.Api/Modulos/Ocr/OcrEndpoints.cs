@@ -77,7 +77,7 @@ public static class OcrEndpoints
         var globales = await q.GroupBy(_ => 1).Select(g => new
         {
             paquetes = g.Count(), documentos = g.Sum(p => p.CantidadDocumentos), pendientes = g.Sum(p => p.CantidadPendientes), completos = g.Sum(p => p.CantidadCompletos),
-            incompletos = g.Sum(p => p.CantidadIncompletos), fallidos = g.Sum(p => p.CantidadFallidos), duplicados = g.Sum(p => p.CantidadDuplicados),
+            incompletos = g.Sum(p => p.CantidadIncompletos), fallidos = g.Sum(p => p.CantidadFallidos), duplicados = g.Sum(p => p.CantidadDuplicados + p.CantidadPorAsociar),
             registrados = g.Sum(p => p.CantidadRegistrados), descartados = g.Sum(p => p.CantidadDescartados), asociados = g.Sum(p => p.CantidadAsociados),
         }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (Enum.TryParse<EstadoPaqueteOcr>(estado, true, out var e))

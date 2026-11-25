@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Comparendos.Api.Modulos.Ocr;
 
-public sealed record NoAsociadoEnLote(Guid DocumentoId, string NombreArchivo, string? Motivo);
+public sealed record NoAsociadoEnLote(Guid DocumentoId, string NombreArchivo, string Motivo);
 
 public sealed record SinCorreoEnLote(string Motivo, int Cantidad);
 
@@ -23,6 +23,9 @@ public sealed record LoteEnCurso(
 /// </summary>
 public sealed class AsociacionEnSegundoPlano(ComparendosDb db, ServicioOcr servicio, Reloj reloj)
 {
+    /// <summary>Respaldo del resumen si un correo omitido no guardó su motivo.</summary>
+    public const string MotivoCorreoSinDetalle = "No se pudo preparar el correo al conductor";
+
     /// <summary>
     /// Marca PorAsociar los elegibles de la MISMA preselección (<see cref="ServicioOcr.ClasificarLoteAsync"/>) y crea el lote.
     /// La condición estado = Duplicado deja cada documento en un solo lote: un doble clic, o dos personas, encola 0 la segunda vez.
@@ -89,9 +92,12 @@ public sealed class AsociacionEnSegundoPlano(ComparendosDb db, ServicioOcr servi
             items.Count(i => i.Resultado == ResultadoAsociacionLote.PorAsociar),
             items.Count,
             asociados.Count,
-            items.Where(i => i.Resultado == ResultadoAsociacionLote.NoAsociado).Select(i => new NoAsociadoEnLote(i.DocumentoId, i.NombreArchivo, i.Motivo)).ToList(),
+            // La pantalla muestra el motivo tal cual: nunca nulo ni vacío.
+            items.Where(i => i.Resultado == ResultadoAsociacionLote.NoAsociado)
+                .Select(i => new NoAsociadoEnLote(i.DocumentoId, i.NombreArchivo, string.IsNullOrWhiteSpace(i.Motivo) ? ProcesadorAsociacionLote.MotivoErrorTecnico : i.Motivo)).ToList(),
             asociados.Count(i => i.CorreoEstado is ResultadoEvidencia.Pendiente or ResultadoEvidencia.Enviado),
-            asociados.Where(i => i.CorreoEstado == ResultadoEvidencia.Omitido).GroupBy(i => i.CorreoMotivo ?? string.Empty)
+            asociados.Where(i => i.CorreoEstado == ResultadoEvidencia.Omitido)
+                .GroupBy(i => string.IsNullOrWhiteSpace(i.CorreoMotivo) ? MotivoCorreoSinDetalle : i.CorreoMotivo)
                 .Select(g => new SinCorreoEnLote(g.Key, g.Count())).OrderByDescending(x => x.Cantidad).ThenBy(x => x.Motivo, StringComparer.Ordinal).ToList(),
             lote.SolicitadoPorNombre,
             lote.SolicitadoEn,

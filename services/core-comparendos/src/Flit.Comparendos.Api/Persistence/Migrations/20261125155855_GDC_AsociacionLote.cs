@@ -114,6 +114,7 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
         {
             // GDC-EVID §10: el código anterior no conoce el estado PorAsociar (fallaría al leer el enum): vuelven a Duplicado.
             migrationBuilder.Sql("UPDATE comparendos.documento_ocr SET estado = 'Duplicado', proximo_intento_en = NULL WHERE estado = 'PorAsociar';");
+            migrationBuilder.Sql("UPDATE comparendos.paquete_ocr SET cantidad_duplicados = cantidad_duplicados + cantidad_por_asociar WHERE cantidad_por_asociar > 0;");
 
             migrationBuilder.DropTable(
                 name: "asociacion_lote_documento",

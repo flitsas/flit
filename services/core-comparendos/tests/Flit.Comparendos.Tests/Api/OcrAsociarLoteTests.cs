@@ -307,6 +307,129 @@ public sealed partial class OcrAsociarTests
         (await FilasDelLoteAsync(loteId)).Should().ContainSingle().Which.Should().Match<AsociacionLoteDocumento>(i => i.Resultado == ResultadoAsociacionLote.Asociado && i.CorreoEstado == "Pendiente");
     }
 
+    /// <summary>Si el cierre del lote falló al final, el trabajador lo repara cuando la cola está vacía (la franja no se queda «asociando»).</summary>
+    [Fact]
+    public async Task AsociarLote_LoteSinFechaDeTermino_SeReparaConLaColaVacia()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente, _) = await EmpresaConAsync("LOTEF1");
+        var (paquete, _) = await SubirVariosAsync(cliente, ("LOTEF1", "fin"));
+        var loteId = (await AsociarLoteAsync(cliente, paquete)).GetProperty("loteId").GetGuid();
+        await ProcesarLoteAsync();
+        await api.EnDbAsync(db => db.AsociacionesLote.Where(l => l.Id == loteId).ExecuteUpdateAsync(u => u.SetProperty(l => l.TerminadoEn, (DateTimeOffset?)null)));
+
+        await ProcesarLoteAsync();
+
+        (await api.EnDbAsync(db => db.AsociacionesLote.AsNoTracking().SingleAsync(l => l.Id == loteId, ct))).TerminadoEn.Should().NotBeNull();
+    }
+
+    /// <summary>Encola un documento y deja su fila con <paramref name="intentos"/> previos (el reclamo suma uno).</summary>
+    private async Task<(Guid Lote, Guid Documento, Guid Comparendo)> UnoEnColaAsync(string numero, short intentos)
+    {
+        var (_, cliente, ids) = await EmpresaConAsync(numero);
+        await ConConductorAsync(cliente, ids[numero]);
+        var (paquete, docs) = await SubirVariosAsync(cliente, (numero, $"tec-{numero}"));
+        var lote = (await AsociarLoteAsync(cliente, paquete)).GetProperty("loteId").GetGuid();
+        await api.EnDbAsync(db => db.AsociacionLoteDocumentos.Where(i => i.LoteId == lote).ExecuteUpdateAsync(u => u.SetProperty(i => i.Intentos, intentos)));
+        return (lote, docs[$"tec-{numero}"].Id, ids[numero]);
+    }
+
+    private async Task UnaVueltaConErrorTecnicoAsync()
+    {
+        var trabajador = api.App.Services.GetRequiredService<ProcesadorAsociacionLote>();
+        trabajador.AntesDeProcesar = _ => throw new InvalidOperationException("falla técnica simulada");
+        try
+        {
+            await trabajador.ProcesarSiguienteAsync(TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            trabajador.AntesDeProcesar = null;
+        }
+    }
+
+    /// <summary>Error técnico con intentos de sobra: la fila sigue pendiente y se reintenta pronto (30 s), no a los 10 minutos.</summary>
+    [Fact]
+    public async Task AsociarLote_ErrorTecnico_ReintentaEn30Segundos_YLuegoAsocia()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        await ProcesarLoteAsync();
+        var (lote, documento, comparendo) = await UnoEnColaAsync("LOTEG1", intentos: 0);
+
+        await UnaVueltaConErrorTecnicoAsync();
+
+        var fila = (await FilasDelLoteAsync(lote)).Single();
+        (fila.Resultado, fila.Intentos, fila.ProximoIntentoEn).Should().Be((ResultadoAsociacionLote.PorAsociar, (short)1, api.Reloj.GetUtcNow().AddSeconds(30)));
+        await api.EnDbAsync(db => db.AsociacionLoteDocumentos.Where(i => i.LoteId == lote).ExecuteUpdateAsync(u => u.SetProperty(i => i.ProximoIntentoEn, api.Reloj.GetUtcNow().AddSeconds(-1))));
+        await ProcesarLoteAsync();
+        (await FilasDelLoteAsync(lote)).Single().Resultado.Should().Be(ResultadoAsociacionLote.Asociado);
+        (await EvidenciasAsync(comparendo)).Should().ContainSingle();
+        _ = documento;
+    }
+
+    /// <summary>Tercer error técnico con el documento sin asociar: vuelve a Duplicado y el resumen lo dice con un motivo de negocio.</summary>
+    [Fact]
+    public async Task AsociarLote_TercerErrorTecnico_SinAsociar_VuelveADuplicado_ConMotivo()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await ProcesarLoteAsync();
+        var (lote, documento, comparendo) = await UnoEnColaAsync("LOTEH1", intentos: 2);
+
+        await UnaVueltaConErrorTecnicoAsync();
+
+        var fila = (await FilasDelLoteAsync(lote)).Single();
+        (fila.Resultado, fila.Motivo).Should().Be((ResultadoAsociacionLote.NoAsociado, ProcesadorAsociacionLote.MotivoErrorTecnico));
+        (await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.Id == documento, ct))).Estado.Should().Be(EstadoDocumentoOcr.Duplicado);
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty();
+    }
+
+    /// <summary>Tercer error técnico cuando el documento SÍ quedó asociado (lo que fallaba era el correo): no se dice «no se asoció».</summary>
+    [Fact]
+    public async Task AsociarLote_TercerErrorTecnico_YaAsociado_QuedaAsociado_ConCorreoOmitido()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await ProcesarLoteAsync();
+        var (lote, documento, _) = await UnoEnColaAsync("LOTEI1", intentos: 2);
+        await using (var scope = api.App.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
+            var doc = await db.DocumentosOcr.FirstAsync(d => d.Id == documento, ct);
+            await scope.ServiceProvider.GetRequiredService<ServicioOcr>().AsociarAsync(doc, false, null, Actor.Sistema, ct, desdeLote: true);
+        }
+
+        await UnaVueltaConErrorTecnicoAsync();
+
+        var fila = (await FilasDelLoteAsync(lote)).Single();
+        (fila.Resultado, fila.CorreoEstado, fila.CorreoMotivo).Should().Be((ResultadoAsociacionLote.Asociado, "Omitido", "No se pudo preparar el correo al conductor; el documento quedó asociado"));
+    }
+
+    /// <summary>El resumen nunca muestra un motivo nulo ni vacío (la pantalla lo pinta tal cual).</summary>
+    [Fact]
+    public async Task AsociarLote_Resumen_MotivosNuncaNulosNiVacios()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente, ids) = await EmpresaConAsync("LOTEK7", "LOTEK8");
+        await ConConductorAsync(cliente, ids["LOTEK7"]);
+        await ConConductorAsync(cliente, ids["LOTEK8"]);
+        var (paquete, docs) = await SubirVariosAsync(cliente, ("LOTEK7", "nulo-1"), ("LOTEK8", "nulo-2"));
+        var lote = (await AsociarLoteAsync(cliente, paquete)).GetProperty("loteId").GetGuid();
+        await ProcesarLoteAsync();
+        var (d1, d2) = (docs["nulo-1"].Id, docs["nulo-2"].Id);
+        await api.EnDbAsync(db => db.AsociacionLoteDocumentos.Where(i => i.LoteId == lote && i.DocumentoId == d1)
+            .ExecuteUpdateAsync(u => u.SetProperty(i => i.Resultado, ResultadoAsociacionLote.NoAsociado).SetProperty(i => i.Motivo, (string?)null)));
+        await api.EnDbAsync(db => db.AsociacionLoteDocumentos.Where(i => i.LoteId == lote && i.DocumentoId == d2)
+            .ExecuteUpdateAsync(u => u.SetProperty(i => i.CorreoEstado, "Omitido").SetProperty(i => i.CorreoMotivo, "  ")));
+
+        var fin = (await PreviaAsync(cliente, paquete)).GetProperty("enCurso");
+
+        fin.GetProperty("noAsociados").EnumerateArray().Select(n => n.GetProperty("motivo").GetString()).Should().Equal(ProcesadorAsociacionLote.MotivoErrorTecnico);
+        fin.GetProperty("sinCorreo").EnumerateArray().Select(n => n.GetProperty("motivo").GetString()).Should().Equal(AsociacionEnSegundoPlano.MotivoCorreoSinDetalle);
+    }
+
     [Fact]
     public async Task AsociarLote_DosEscaneadosDelMismoComparendo_ElSegundoVaALaColaDeReemplazos()
     {
@@ -420,7 +543,6 @@ public sealed partial class OcrAsociarTests
     }
 
     /// <summary>
-    /// LA tabla compartida con el front    /// <summary>
     /// LA tabla compartida con el front (lib/ocr.ts numeroBase/numerosDifieren): mismos valores en las dos pruebas para que
     /// las dos copias de la regla no se separen.
     /// </summary>
