@@ -5,7 +5,7 @@
 import { isReauthenticating, reauthenticate } from "@flit/auth/client";
 import { API_PREFIX, ApiError, apiFetch } from "@/lib/api";
 import { conEmpresa } from "@/lib/empresaSeleccionada";
-import { ERRORES_EMPRESA, conTope } from "@/lib/errores";
+import { ERRORES_EMPRESA, conTope, textoErrorComun } from "@/lib/errores";
 import type { Rango } from "@/lib/estadisticas/tipos";
 import { TOPE_EXPORTACION, reporteDe, type FiltroReporte, type FormatoExportacion, type TipoReporte } from "./catalogo";
 
@@ -141,8 +141,9 @@ export const ERRORES_REPORTES: Readonly<Record<string, string>> = {
 export const MENSAJE_EXPORTACION_FALLIDA = "No se pudo generar el archivo. Intenta de nuevo.";
 
 /**
- * Texto bajo los botones de un error de exportación: el literal del `code` o el genérico. En TOPE_EXPORTACION, `{tope}` sale
- * del cuerpo del error y, si no vino, del tope del formato (Excel 5000, PDF 1000): nunca queda «{tope}» a la vista.
+ * Texto bajo los botones de un error de exportación: el literal del `code` (de ERRORES_REPORTES o, si no, de ERRORES_COMUNES)
+ * o el genérico. En TOPE_EXPORTACION, `{tope}` sale del cuerpo del error y, si no vino, del tope del formato (Excel 5000,
+ * PDF 1000): nunca queda «{tope}» a la vista.
  */
 export function mensajeExportacion(error: unknown, formato?: FormatoExportacion): string {
   if (error instanceof ApiError) {
@@ -150,6 +151,8 @@ export function mensajeExportacion(error: unknown, formato?: FormatoExportacion)
       const tope = error.detalle?.tope ?? (error.code === "TOPE_EXPORTACION" && formato ? TOPE_EXPORTACION[formato] : undefined);
       return conTope(ERRORES_REPORTES[error.code], tope);
     }
+    const comun = textoErrorComun(error);
+    if (comun) return comun;
     if (error.status === 403) return "No tienes permiso para esta acción.";
   }
   return MENSAJE_EXPORTACION_FALLIDA;

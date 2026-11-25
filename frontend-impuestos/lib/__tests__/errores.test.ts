@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import { ERRORES_EMPRESA, TEXTO_SIN_PERMISO, esErrorDeEmpresa, esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
+import { ERRORES_COMUNES, ERRORES_EMPRESA, TEXTO_SIN_PERMISO, esErrorDeEmpresa, esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { ERRORES_BACKOFFICE, ETIQUETA_MODO_RESPALDO_FIRMA, ETIQUETA_MOTIVO_APROVISIONAMIENTO } from "@/lib/backoffice/api";
 import { ERRORES_CONFIGURACION } from "@/lib/configuracion/api";
 import { ERRORES_DASHBOARD } from "@/lib/estadisticas/api";
@@ -204,5 +204,42 @@ describe("Backoffice — etiquetas del aprovisionamiento según el contrato 1.2.
     const etiquetas = etiquetasDelEsquema("modoRespaldoFirma", detalle).true;
     expect(etiquetas).toBeTruthy();
     expect(ETIQUETA_MODO_RESPALDO_FIRMA).toBe(etiquetas);
+  });
+});
+
+// Uso de ejemplo: mensajeErrorFijo(new ApiError(409, "…", "CONFLICTO_CONCURRENCIA"), "respaldo", ERRORES_CONFIGURACION)
+// → «Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.» (contrato 1.2.2).
+const LITERALES_COMUNES = {
+  CONFLICTO_CONCURRENCIA: "Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.",
+  ESCRITURA_ENTRE_EMPRESAS: "No puedes modificar datos de otra compañía.",
+  SIN_USUARIO: "Tu sesión no identifica a un usuario. Vuelve a iniciar sesión.",
+  VALOR_INVALIDO: "Un valor enviado no es válido. Revisa los datos e inténtalo de nuevo.",
+} as const;
+
+describe("ERRORES_COMUNES — códigos transversales del contrato 1.2.2", () => {
+  it("trae los cuatro códigos con el literal exacto", () => {
+    expect(ERRORES_COMUNES).toEqual(LITERALES_COMUNES);
+  });
+
+  it.each([
+    [409, "CONFLICTO_CONCURRENCIA"],
+    [403, "ESCRITURA_ENTRE_EMPRESAS"],
+    [401, "SIN_USUARIO"],
+    [400, "VALOR_INVALIDO"],
+  ] as const)("un %i %s se traduce a su literal en todos los mapas de módulo y sin mapa, nunca al respaldo ni al texto de permiso", (status, code) => {
+    const e = new ApiError(status, "detalle interno", code);
+    for (const mapa of [ERRORES_CONFIGURACION, ERRORES_DASHBOARD, ERRORES_REPORTES, ERRORES_USUARIOS, estados.ERRORES_LIQUIDACIONES, ERRORES_BACKOFFICE, undefined]) {
+      expect(mensajeErrorFijo(e, "respaldo", mapa)).toBe(LITERALES_COMUNES[code]);
+    }
+  });
+
+  it("la exportación de un reporte con 400 VALOR_INVALIDO muestra el literal común", () => {
+    expect(mensajeExportacion(new ApiError(400, "x", "VALOR_INVALIDO"))).toBe(LITERALES_COMUNES.VALOR_INVALIDO);
+  });
+
+  it("el mapa del módulo manda sobre el común, y un código desconocido sigue cayendo al respaldo o al texto de permiso", () => {
+    expect(mensajeErrorFijo(new ApiError(409, "x", "CONFLICTO_CONCURRENCIA"), "respaldo", { CONFLICTO_CONCURRENCIA: "propio" })).toBe("propio");
+    expect(mensajeErrorFijo(new ApiError(400, "x", "OTRO_CODIGO"), "respaldo")).toBe("respaldo");
+    expect(mensajeErrorFijo(new ApiError(403, "x", "OTRO_CODIGO"), "respaldo")).toBe(TEXTO_SIN_PERMISO);
   });
 });

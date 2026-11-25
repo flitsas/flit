@@ -20,6 +20,24 @@ export const ERRORES_EMPRESA = {
 } as const satisfies Readonly<Record<string, string>>;
 
 /**
+ * x-flit-literales.errores transversales (contrato 1.2.2): los puede devolver cualquier ruta, así que no se repiten en
+ * los mapas de módulo. mensajeErrorFijo los consulta después del mapa de quien llama y antes del texto de permiso y del
+ * respaldo; un mapa de módulo que traiga el mismo código manda sobre este.
+ */
+export const ERRORES_COMUNES = {
+  CONFLICTO_CONCURRENCIA: "Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.",
+  ESCRITURA_ENTRE_EMPRESAS: "No puedes modificar datos de otra compañía.",
+  SIN_USUARIO: "Tu sesión no identifica a un usuario. Vuelve a iniciar sesión.",
+  VALOR_INVALIDO: "Un valor enviado no es válido. Revisa los datos e inténtalo de nuevo.",
+} as const satisfies Readonly<Record<string, string>>;
+
+/** Literal de ERRORES_COMUNES para el `code` del error, o null si no es uno de ellos. */
+export function textoErrorComun(error: unknown): string | null {
+  if (!(error instanceof ApiError) || !error.code || !Object.prototype.hasOwnProperty.call(ERRORES_COMUNES, error.code)) return null;
+  return ERRORES_COMUNES[error.code as keyof typeof ERRORES_COMUNES];
+}
+
+/**
  * ¿La API rechazó la `empresa` porque quien la envía no es Super Admin (EMPRESA_SOLO_SUPER_ADMIN o el alias
  * EMPRESA_NO_PERMITIDA)? Es un 403 de la petición, no de acceso a la página: se pinta en línea con su literal.
  */
@@ -37,7 +55,8 @@ export function esErrorDeEmpresa(error: unknown): boolean {
 }
 
 /**
- * Texto fijo de un error: el del `code` en `porCodigo`, el de permiso en un 403 o, si no, `respaldo`.
+ * Texto fijo de un error: el del `code` en `porCodigo`, si no el de ERRORES_COMUNES, el de permiso en un 403 o, si no,
+ * `respaldo`.
  *
  * @example
  * mensajeErrorFijo(new ApiError(409, "…", "PRODUCTO_SUSPENDIDO"), "No se pudo liquidar.", ERRORES_LIQUIDACION)
@@ -46,6 +65,8 @@ export function esErrorDeEmpresa(error: unknown): boolean {
 export function mensajeErrorFijo(error: unknown, respaldo: string, porCodigo: Readonly<Record<string, string>> = {}): string {
   if (error instanceof ApiError) {
     if (error.code && Object.prototype.hasOwnProperty.call(porCodigo, error.code)) return conTope(porCodigo[error.code], error.detalle?.tope);
+    const comun = textoErrorComun(error);
+    if (comun) return comun;
     if (error.status === 403) return TEXTO_SIN_PERMISO;
   }
   return respaldo;
