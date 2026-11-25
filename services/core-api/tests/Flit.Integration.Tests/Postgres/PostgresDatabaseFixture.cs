@@ -82,6 +82,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // Contrato ia-consumo v1 (ADR-0090, DDL 202): tarifas de Anthropic por modelo, sin tenant ni FK; el costo estimado
         // del registro de consumo de IA las lee.
         "admin.ia_tarifa_modelo",
+        // Configuración global de rondas de identidad (fila única sembrada por la migración 205).
+        "admin.identity_rounds_config",
     };
 
     /// <summary>

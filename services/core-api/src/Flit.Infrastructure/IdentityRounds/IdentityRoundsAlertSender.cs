@@ -66,7 +66,7 @@ internal sealed partial class IdentityRoundsAlertSender(
         IdentityRoundsAlertMessage m, string publicBaseUrl, EmailTheme theme, string assetsBaseUrl)
     {
         var subject = $"[FLIT] Identidad rechazada: ronda {m.RondasUsadas} de {m.RondasMaximas}";
-        var fecha = m.Fecha.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy HH:mm", Formato);
+        var fecha = m.Fecha.ToOffset(Flit.Queries.Domain.Time.ColombiaTime.Offset).ToString("dd/MM/yyyy HH:mm", Formato);
         var cuando = m.RondasUsadas >= m.RondasMaximas
             ? "Se alcanzó el máximo de rondas: ya no se puede reenviar la validación."
             : "La ronda cerró en rechazo; aún quedan rondas disponibles.";
