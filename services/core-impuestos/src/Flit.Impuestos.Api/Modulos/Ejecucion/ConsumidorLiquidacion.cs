@@ -1,11 +1,12 @@
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
-using Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 using Flit.Impuestos.Api.Modulos.Catalogos;
+using Flit.Impuestos.Api.Modulos.Conciliacion;
 using Flit.Impuestos.Api.Modulos.Configuracion;
 using Flit.Impuestos.Api.Modulos.Credenciales;
 using Flit.Impuestos.Api.Persistence;
+using Flit.Impuestos.Api.Modulos.Resultados;
 using Flit.Impuestos.Api.Plataforma;
-using Flit.Impuestos.Domain.Aprovisionamiento;
+using Flit.Impuestos.Domain;
 using Flit.Impuestos.Domain.Liquidaciones;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
@@ -49,8 +50,9 @@ public sealed record LiquidacionSolicitada(Guid LiquidacionId, Guid ItemId)
 ///   en el log; 401 ⇒ <c>ERROR</c> y el aprovisionamiento pasa a <c>REQUIERE_CREDENCIALES</c> con alerta; «no salió» ⇒ sigue
 ///   <c>ENVIANDO</c> y se reintenta a los <see cref="OpcionesEjecucion.EsperaNoSalio"/> con token nuevo (el token no se guarda);
 ///   timeout, corte o 5xx ⇒ <c>INCIERTO</c>, nunca se reenvía.</item>
-///   <item>Al cerrar el paso: contadores del lote recalculados y, si el ítem dejó de estar en vuelo, el
-///   <see cref="DespachadorCredito"/> libera el siguiente en la misma transacción.</item>
+///   <item>Al cerrar el paso: la transición va por <see cref="AplicadorResultado.TransicionarAsync"/> (contadores y estado del lote
+///   de M10) y, si el ítem dejó de estar en vuelo, el <see cref="DespachadorCredito"/> libera el siguiente en la transacción del SDK.
+///   El 401 lo aplica <see cref="CredencialRechazadaEnUso"/>; el primer GET de respaldo, <see cref="CalendarioConciliacion.Primero"/>.</item>
 /// </list>
 /// Logs: ids, estados y códigos; nunca placa, documento, nombre, payload ni credenciales.
 /// </summary>
@@ -61,6 +63,7 @@ public sealed record LiquidacionSolicitada(Guid LiquidacionId, Guid ItemId)
 /// </code>
 /// </example>
 public sealed partial class ConsumidorLiquidacion(
+    IServiceScopeFactory scopes,
     EmpresaDelTrabajo empresa,
     ImpuestosDb db,
     DespachadorCredito despachador,
@@ -72,13 +75,12 @@ public sealed partial class ConsumidorLiquidacion(
     GeneradorTokenAviso tokens,
     FrenoGlobal freno,
     IProteccionImpuestos proteccion,
+    CredencialRechazadaEnUso credencialRechazada,
+    OpcionesConciliacion conciliacion,
     IOptions<OpcionesEjecucion> opciones,
     TimeProvider reloj,
     ILogger<ConsumidorLiquidacion> log) : IEventConsumer<LiquidacionSolicitada>
 {
-    /// <summary>Motivo de la métrica de alertas cuando la api_key de una compañía lista responde 401 al liquidar.</summary>
-    public const string AlertaCredencialRechazada = "credencial_rechazada_en_uso";
-
     private const int LargoCodigoError = 48;
 
     private OpcionesEjecucion Opciones => opciones.Value;
@@ -156,31 +158,6 @@ public sealed partial class ConsumidorLiquidacion(
         item.ActualizadoEn = ahora;
     }
 
-    /// <summary>
-    /// Contadores de la cabecera recalculados desde sus ítems (categorías del plan §3.2; con deuda y paz y salvo por
-    /// <c>resultado_status</c>). Idempotente: se puede llamar tras cualquier cambio de ítem. No cambia el estado del lote.
-    /// </summary>
-    public static async Task RecalcularContadoresAsync(ImpuestosDb db, Guid liquidacionId, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-        var grupos = await db.Set<LiquidacionItem>().AsNoTracking().Where(i => i.LiquidacionId == liquidacionId)
-            .GroupBy(i => new { i.Estado, i.ResultadoStatus })
-            .Select(g => new { g.Key.Estado, g.Key.ResultadoStatus, Cantidad = g.Count() })
-            .ToListAsync(ct).ConfigureAwait(false);
-        var lote = await db.Set<Liquidacion>().SingleAsync(l => l.Id == liquidacionId, ct).ConfigureAwait(false);
-        int De(CategoriaDashboard c) => grupos.Where(g => EstadosItem.Categoria(g.Estado) == c).Sum(g => g.Cantidad);
-        lote.CExitosas = De(CategoriaDashboard.Exitosa);
-        lote.CConDeuda = grupos.Where(g => g.Estado == EstadoItem.Exitoso && g.ResultadoStatus == "con_deuda").Sum(g => g.Cantidad);
-        lote.CPazYSalvo = grupos.Where(g => g.Estado == EstadoItem.Exitoso && g.ResultadoStatus == "paz_y_salvo").Sum(g => g.Cantidad);
-        lote.CError = De(CategoriaDashboard.Error);
-        lote.CDatosIncompletos = De(CategoriaDashboard.DatosIncompletos);
-        lote.CDptoNoHabilitado = De(CategoriaDashboard.DepartamentoNoHabilitado);
-        lote.CIncierto = De(CategoriaDashboard.Incierto);
-        lote.CSinResultado = De(CategoriaDashboard.SinResultado);
-        lote.CPendientes = De(CategoriaDashboard.Pendiente);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
     private async Task ProcesarAsync(Guid tenant, LiquidacionItem item, bool reenvio, CancellationToken ct)
     {
         if (freno.PausaHasta is { } hasta)
@@ -251,7 +228,7 @@ public sealed partial class ConsumidorLiquidacion(
             resultado = await EnviarAsync(credenciales.ApiKey, solicitud, ct).ConfigureAwait(false);
         }
 
-        await AplicarEnvioAsync(tenant, item.Id, resultado, ct).ConfigureAwait(false);
+        await AplicarEnvioAsync(tenant, item.Id, resultado, aprovisionamiento?.ModoRespaldoFirma ?? false, ct).ConfigureAwait(false);
     }
 
     private async Task<ResultadoEnvio<ConsultaCreada>> EnviarAsync(string apiKey, SolicitudConsulta solicitud, CancellationToken ct)
@@ -268,7 +245,7 @@ public sealed partial class ConsumidorLiquidacion(
         }
     }
 
-    private Task AplicarEnvioAsync(Guid tenant, Guid itemId, ResultadoEnvio<ConsultaCreada> r, CancellationToken ct)
+    private Task AplicarEnvioAsync(Guid tenant, Guid itemId, ResultadoEnvio<ConsultaCreada> r, bool modoRespaldo, CancellationToken ct)
     {
         if (r.Exitoso)
         {
@@ -277,7 +254,8 @@ public sealed partial class ConsumidorLiquidacion(
             return AplicarAsync(tenant, itemId, new EventoItem.Aceptado(), i =>
             {
                 i.ConsultaApiId = r.Valor!.Id;
-                i.ProximoPollEn = (i.EnviadoEn ?? reloj.GetUtcNow()) + (i.ConCallback ? Opciones.PrimerPollConWebhook : Opciones.PrimerPollSinWebhook);
+                i.ProximoPollEn = CalendarioConciliacion.Primero(
+                    i.EnviadoEn ?? reloj.GetUtcNow(), CalendarioConciliacion.SinWebhook(i.ConCallback, modoRespaldo), conciliacion);
             }, ct);
         }
 
@@ -325,21 +303,48 @@ public sealed partial class ConsumidorLiquidacion(
         return true;
     }
 
-    /// <summary>Transición del dominio sobre la fila (en el contexto del SDK), contadores y liberación del crédito si salió de vuelo.</summary>
+    /// <summary>
+    /// Transición del dominio sobre la fila con <see cref="AplicadorResultado.TransicionarAsync"/> (M10: su propia transacción con la
+    /// cabecera bloqueada y el recálculo de contadores y estado del lote), en un scope propio que se confirma ya. Después, en la
+    /// transacción del SDK, la alerta de credencial si hubo 401 y, si el ítem salió de vuelo, la liberación del crédito. Si el ítem ya
+    /// admite <paramref name="evento"/> (otro proceso lo movió), no hace nada.
+    /// </summary>
     private async Task AplicarAsync(Guid tenant, Guid itemId, EventoItem evento, Action<LiquidacionItem>? ajustar, CancellationToken ct)
     {
-        var fila = await db.Set<LiquidacionItem>().SingleAsync(i => i.Id == itemId, ct).ConfigureAwait(false);
-        var resultado = TransicionesItem.Aplicar(Situacion(fila), evento);
-        var ahora = reloj.GetUtcNow();
-        AplicarReintento(fila, resultado, ahora, Opciones);
-        ajustar?.Invoke(fila);
+        ResultadoItem? resultado = null;
+        EstadoItem? final = null;
+        await using (var scope = scopes.CreateAsyncScope())
+        {
+            var aplicador = scope.ServiceProvider.GetRequiredService<AplicadorResultado>();
+            await aplicador.TransicionarAsync(tenant, itemId, (fila, ahora) =>
+            {
+                try
+                {
+                    resultado = TransicionesItem.Aplicar(Situacion(fila), evento);
+                }
+                catch (TransicionInvalida)
+                {
+                    return Aplicacion.NoAplicable;
+                }
+
+                AplicarReintento(fila, resultado, ahora, Opciones);
+                ajustar?.Invoke(fila);
+                final = fila.Estado;
+                return Aplicacion.Aplicado;
+            }, ct).ConfigureAwait(false);
+        }
+
+        if (resultado is null || final is not { } estado)
+        {
+            Descartado(log, itemId, "CAMBIO_CONCURRENTE");
+            return;
+        }
+
         if (resultado.AprovisionamientoRequiereCredenciales)
-            await CredencialRechazadaAsync(tenant, ahora, ct).ConfigureAwait(false);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        await RecalcularContadoresAsync(db, fila.LiquidacionId, ct).ConfigureAwait(false);
-        if (!DespachadorCredito.EnVuelo.Contains(fila.Estado))
+            await credencialRechazada.AplicarAsync(tenant, ct).ConfigureAwait(false);
+        if (!DespachadorCredito.EnVuelo.Contains(estado))
             await despachador.LiberarAsync(tenant, ct).ConfigureAwait(false);
-        Aplicado(log, itemId, fila.Estado, fila.ErrorCodigo ?? fila.CampoFaltante);
+        Aplicado(log, itemId, estado, resultado.ErrorCodigo ?? resultado.CampoFaltante);
     }
 
     /// <summary>El ítem sigue en vuelo y se vuelve a intentar desde <paramref name="desde"/> (lo republica el reconciliador).</summary>
@@ -349,35 +354,6 @@ public sealed partial class ConsumidorLiquidacion(
         fila.ProximoIntentoEn = desde;
         fila.ActualizadoEn = reloj.GetUtcNow();
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-    }
-
-    /// <summary>F1a-CF12: 401 con la api_key de una compañía lista ⇒ <c>REQUIERE_CREDENCIALES</c>, versión, historial y alerta.</summary>
-    private async Task CredencialRechazadaAsync(Guid tenant, DateTimeOffset ahora, CancellationToken ct)
-    {
-        var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == tenant, ct).ConfigureAwait(false);
-        if (fila is not { Estado: EstadoAprovisionamiento.Listo or EstadoAprovisionamiento.ListoSinWebhook })
-            return;
-        var desde = fila.Estado;
-        var nueva = TransicionesAprovisionamiento.Aplicar(Aprovisionador.Situacion(fila), EventoAprovisionamiento.NoAutorizadoEnUso).Nueva;
-        fila.Estado = nueva.Estado!.Value;
-        fila.EstadoPrevio = nueva.EstadoPrevio;
-        fila.ErrorTipo = nueva.TipoError;
-        fila.FirmaConfirmada = nueva.FirmaConfirmada;
-        fila.MotivoCodigo = MotivosAprovisionamiento.CredencialRechazada;
-        fila.MotivoDetalle = null;
-        fila.Version++;
-        fila.ActualizadoEn = ahora;
-        db.Add(new HistorialAprovisionamiento
-        {
-            TenantId = tenant,
-            Desde = desde,
-            Hacia = fila.Estado,
-            MotivoCodigo = MotivosAprovisionamiento.CredencialRechazada,
-            ActorTipo = Aprovisionador.ActorSistema,
-            En = ahora,
-        });
-        MetricasImpuestos.ContarAlerta(AlertaCredencialRechazada);
-        CredencialRechazadaLog(log, tenant);
     }
 
     /// <summary>Las fuentes vigentes (refresca la caché si venció); si el proveedor no responde, la caché tal como está.</summary>
@@ -431,7 +407,4 @@ public sealed partial class ConsumidorLiquidacion(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Liquidación: mensaje del ítem {ItemId} descartado (estado {Estado}, fuera de vuelo o en espera).")]
     private static partial void FueraDeVuelo(ILogger logger, Guid itemId, EstadoItem estado);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "El API rechazó (401) la api_key de la empresa {Empresa} al liquidar: el aprovisionamiento pasa a REQUIERE_CREDENCIALES.")]
-    private static partial void CredencialRechazadaLog(ILogger logger, Guid empresa);
 }

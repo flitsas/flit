@@ -90,6 +90,13 @@ public sealed class ConsumidorLiquidacionTests
         }
 
         (await EntornoEjecucion.LoteAsync(api, empresa, lote, ct)).CPendientes.Should().Be(1, "ENVIADO sigue pendiente en los contadores");
+
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: [Permisos.LiquidacionesVer]));
+        using var items2 = JsonDocument.Parse(await cliente.GetStringAsync($"{Flit.Impuestos.Api.Program.Prefijo}/liquidaciones/{lote}/items", ct));
+        var dto = items2.RootElement.GetProperty("items")[0];
+        dto.GetProperty("secretaria").GetProperty("ciudad").GetString().Should().Be("MEDELLIN", "delta 5: secretaría según el RUNT");
+        dto.GetProperty("secretaria").GetProperty("nombre").ValueKind.Should().Be(JsonValueKind.Null, "el modelo no tiene columna para el nombre");
+        dto.GetProperty("propietario").GetProperty("documentoNumero").GetString().Should().Be("71706228");
     }
 
     [Fact]
@@ -151,6 +158,8 @@ public sealed class ConsumidorLiquidacionTests
             var item = await EntornoEjecucion.ItemAsync(api, empresa, id, ct);
             item.Estado.Should().Be(EstadoItem.Incierto);
             item.EnviadoEn.Should().NotBeNull("la ventana de correlación del incierto parte de enviado_en");
+            item.ConsultaApiId.Should().BeNull("el incierto adopta el id cuando lo correlaciona M10");
+            item.TokenHash.Should().NotBeNull("la correlación del incierto busca el token");
         }
 
         (await EntornoEjecucion.LoteAsync(api, empresa, lote, ct)).CIncierto.Should().Be(3);

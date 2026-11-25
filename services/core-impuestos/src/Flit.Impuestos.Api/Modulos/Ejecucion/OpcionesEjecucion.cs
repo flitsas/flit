@@ -16,8 +16,7 @@ namespace Flit.Impuestos.Api.Modulos.Ejecucion;
 ///   <item>«No salió» (el POST no llegó al API): nuevo intento a los <see cref="EsperaNoSalio"/> (30 s), sin contar como intento.</item>
 ///   <item>Freno global: <see cref="TasaPorSegundo"/> POST por segundo y una pausa de <see cref="Pausa"/> tras
 ///   <see cref="TransitoriosParaPausa"/> fallos transitorios seguidos.</item>
-///   <item>Primer GET de respaldo tras el 202: <see cref="PrimerPollConWebhook"/> (2 min) o <see cref="PrimerPollSinWebhook"/>
-///   (10 s), según el calendario del plan §2.2; el resto del calendario es de la conciliación (M10).</item>
+///   <item>El primer GET de respaldo tras el 202 sale del calendario de la conciliación (M10, <c>OpcionesConciliacion</c>).</item>
 ///   <item><see cref="Reconciliador"/>: cada cuánto se revisan los reintentos vencidos, los mensajes perdidos y el crédito.</item>
 ///   <item><see cref="PlazoRunt"/>: plazo del rpc del RUNT.</item>
 /// </list>
@@ -45,10 +44,6 @@ public sealed class OpcionesEjecucion
     public int TransitoriosParaPausa { get; set; } = 5;
 
     public TimeSpan Pausa { get; set; } = TimeSpan.FromSeconds(60);
-
-    public TimeSpan PrimerPollConWebhook { get; set; } = TimeSpan.FromMinutes(2);
-
-    public TimeSpan PrimerPollSinWebhook { get; set; } = TimeSpan.FromSeconds(10);
 
     public TimeSpan PlazoRunt { get; set; } = TimeSpan.FromSeconds(30);
 
@@ -112,6 +107,7 @@ public static class EjecucionImpuestosExtensions
         services.AddSingleton<GeneradorTokenAviso>();
         services.AddSingleton<FrenoGlobal>();
         services.AddScoped<DespachadorCredito>();
+        services.AddScoped<CredencialRechazadaEnUso>();
         services.AddSingleton<ReconciliadorEjecucion>();
         if (opciones.Reconciliador.Activo)
             services.AddHostedService(sp => sp.GetRequiredService<ReconciliadorEjecucion>());

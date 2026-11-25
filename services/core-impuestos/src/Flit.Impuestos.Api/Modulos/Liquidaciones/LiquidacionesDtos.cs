@@ -45,11 +45,17 @@ public sealed record DepartamentoItemDto(string Codigo, string Nombre);
 /// <summary>Esquema <c>Propietario</c>: completo, sin enmascarar (DA-7=b); nunca dirección, correo ni teléfono.</summary>
 public sealed record PropietarioDto(string? Nombre, string? DocumentoTipo, string? DocumentoNumero);
 
+/// <summary>
+/// Esquema <c>Secretaria</c> (delta 5 de la 1.1.0): la secretaría de tránsito según el RUNT. <see cref="Nombre"/> va null: el modelo
+/// solo guarda <c>secretaria_ciudad</c> (no hay columna para el nombre y M09 no crea migraciones).
+/// </summary>
+public sealed record SecretariaDto(string? Nombre, string? Ciudad);
+
 /// <summary>Esquema <c>Item</c> (placa del lote). <see cref="TotalAPagar"/> null = «Sin dato», nunca 0.</summary>
 public sealed record ItemDto(
     Guid Id, Guid LiquidacionId, int? Fila, string Placa, string Estado, string? ErrorCodigo, string? ErrorClase, string? ErrorMensaje,
     string? CampoFaltante, DepartamentoItemDto? Departamento, PropietarioDto? Propietario, decimal? TotalAPagar, string? ResultadoStatus,
-    bool Parcial, bool PosibleDuplicado, bool ResultadoTardio, Guid? RelanzadoDesde);
+    bool Parcial, bool PosibleDuplicado, bool ResultadoTardio, Guid? RelanzadoDesde, SecretariaDto? Secretaria);
 
 /// <summary>Página del contrato: <c>{ items, total, page, pageSize }</c>.</summary>
 public sealed record PaginaDto<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);

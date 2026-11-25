@@ -92,7 +92,8 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         var departamento = i.DepartamentoCodigo is null ? null : new DepartamentoItemDto(i.DepartamentoCodigo, i.DepartamentoNombre ?? i.DepartamentoCodigo);
         return new ItemDto(i.Id, i.LiquidacionId, i.Fila, i.Placa, CodigosDeEnum.Codigo(i.Estado), i.ErrorCodigo,
             i.ErrorClase is { } c ? CodigosDeEnum.Codigo(c) : null, i.ErrorMensaje, i.CampoFaltante, departamento, propietario, i.TotalAPagar,
-            i.ResultadoStatus, i.Parcial, i.PosibleDuplicado, i.ResultadoTardio, i.RelanzadoDesde);
+            i.ResultadoStatus, i.Parcial, i.PosibleDuplicado, i.ResultadoTardio, i.RelanzadoDesde,
+            i.SecretariaCiudad is null ? null : new SecretariaDto(null, i.SecretariaCiudad));
     }
 
     private static async Task<Dictionary<Guid, (Guid Id, string Placa, EstadoItem Estado)>> ItemsIndividualesAsync(

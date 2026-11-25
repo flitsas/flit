@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 
 namespace Flit.Impuestos.Api.Modulos.Ejecucion;
 
@@ -11,7 +10,7 @@ public sealed record TokenAviso(string Token, byte[] Hash)
 
 /// <summary>
 /// Token del <c>callbackUrl</c> de cada envío (plan §1.5, DA-4): 32 bytes aleatorios en base64url sin relleno (43 caracteres, 256
-/// bits: no se puede enumerar). En la base solo se guarda <see cref="Hash"/> (<c>SHA-256</c> de los bytes UTF-8 del token, columna
+/// bits: no se puede enumerar). En la base solo se guarda <see cref="Hash"/> (<c>SHA-256</c> del token, columna
 /// <c>liquidacion_items.token_hash</c>); el receptor del webhook (M10) calcula el mismo hash con el token de la ruta.
 /// <see cref="CallbackUrl"/> = <c>{Impuestos:Avisos:UrlBase}/{token}</c> con las reglas del receptor de la guía §2.2: https, sin
 /// usuario ni contraseña, sin fragmento y de 2048 caracteres como máximo. Se registra la URL final exacta (sin barra al final ni
@@ -53,12 +52,11 @@ public sealed partial class GeneradorTokenAviso
         return new TokenAviso(token, Hash(token));
     }
 
-    /// <summary><c>SHA-256</c> del token (UTF-8): lo que se guarda y lo que busca el receptor.</summary>
-    public static byte[] Hash(string token)
-    {
-        ArgumentNullException.ThrowIfNull(token);
-        return SHA256.HashData(Encoding.UTF8.GetBytes(token));
-    }
+    /// <summary>
+    /// <c>SHA-256</c> del token: el mismo cálculo del receptor (<see cref="Avisos.ProcesadorAviso.HashDelToken"/>, M10), que es la única
+    /// fuente; lo que se guarda en <c>token_hash</c>.
+    /// </summary>
+    public static byte[] Hash(string token) => Avisos.ProcesadorAviso.HashDelToken(token);
 
     /// <summary>La URL del aviso para el token; null sin base o si pasa de <see cref="LargoMaximoUrl"/>.</summary>
     public string? CallbackUrl(string token)
