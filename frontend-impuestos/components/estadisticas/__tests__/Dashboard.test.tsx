@@ -316,3 +316,94 @@ describe("Dashboard — permisos", () => {
     expect(pedidos()).toHaveLength(0);
   });
 });
+
+describe("Dashboard — contrato 1.2.x, deltas 10 y 13 (M14)", () => {
+  const serieDoble = [
+    { fecha: "2026-11-23", total: 5, individuales: 3, masivas: 2 },
+    { fecha: "2026-11-24", total: 7, individuales: 1, masivas: 6 },
+  ];
+
+  it("delta 10: la serie por día pinta dos series con las etiquetas del contrato («Individuales» y «Masivas») y la tabla alternativa", async () => {
+    vi.stubGlobal("fetch", api(() => Response.json(dashboard({ serie: serieDoble }))));
+    render(<Dashboard />);
+    const figura = await screen.findByRole("figure", { name: "Liquidaciones por día" });
+    const leyenda = within(figura).getByRole("list", { name: "Leyenda" });
+    expect(within(leyenda).getByText("Individuales")).toBeInTheDocument();
+    expect(within(leyenda).getByText("Masivas")).toBeInTheDocument();
+    const tabla = within(figura).getByRole("table", { name: /Datos de Liquidaciones por día/ });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Periodo", "Individuales", "Masivas"]);
+    const fila = within(tabla).getByRole("rowheader", { name: "23/11" }).closest("tr") as HTMLElement;
+    expect(within(fila).getAllByRole("cell").map((c) => c.textContent)).toEqual(["3", "2"]);
+  });
+
+  it("delta 10: un back que no separa la serie (sin individuales/masivas) sigue con una sola serie «Liquidaciones»", async () => {
+    vi.stubGlobal("fetch", api());
+    render(<Dashboard />);
+    const figura = await screen.findByRole("figure", { name: "Liquidaciones por día" });
+    const tabla = within(figura).getByRole("table", { name: /Datos de Liquidaciones por día/ });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Periodo", "Liquidaciones"]);
+  });
+
+  it("delta 10: por departamento muestra el monto (etiqueta «Monto liquidado») y «Sin dato» si es null, nunca $ 0", async () => {
+    vi.stubGlobal(
+      "fetch",
+      api(() =>
+        Response.json(
+          dashboard({
+            porDepartamento: [
+              { codigo: "11", nombre: "Bogotá D.C.", total: 9, monto: 500000 },
+              { codigo: "25", nombre: "Cundinamarca", total: 3, monto: null },
+            ],
+          }),
+        ),
+      ),
+    );
+    render(<Dashboard />);
+    const dep = await screen.findByRole("figure", { name: "Por departamento" });
+    const tabla = within(dep).getByRole("table", { name: /Datos de Por departamento/ });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Departamento", "Liquidaciones", "Monto liquidado"]);
+    const bogota = within(tabla).getByRole("rowheader", { name: "Bogotá D.C." }).closest("tr") as HTMLElement;
+    expect(within(bogota).getAllByRole("cell")[1]).toHaveTextContent(/\$\s?500\.000/);
+    const cundinamarca = within(tabla).getByRole("rowheader", { name: "Cundinamarca" }).closest("tr") as HTMLElement;
+    expect(within(cundinamarca).getAllByRole("cell")[1]).toHaveTextContent("Sin dato");
+    expect(within(dep).getByText(/Monto liquidado: \$\s?500\.000/)).toBeInTheDocument();
+    expect(within(dep).getByText("Monto liquidado: Sin dato")).toBeInTheDocument();
+    expect(dep).not.toHaveTextContent(/\$\s?0(?![\d.])/);
+  });
+
+  it("delta 13: montoTotal null dice «Sin dato» (nunca $ 0) y con liquidaciones sin monto lleva el literal y la marca «Parcial»", async () => {
+    vi.stubGlobal("fetch", api(() => Response.json(dashboard({ montoTotal: null, liquidacionesSinMonto: 3 }))));
+    render(<Dashboard />);
+    const monto = await screen.findByRole("region", { name: "Monto total liquidado" });
+    expect(within(monto).getByText("Sin dato")).toBeInTheDocument();
+    expect(monto).not.toHaveTextContent(/\$\s?0/);
+    expect(within(monto).getByText("3 liquidaciones sin monto")).toBeInTheDocument();
+    expect(within(monto).getByText("Parcial")).toBeInTheDocument();
+  });
+
+  it("delta 13: un montoTotal 0 es un dato real ($ 0) y `parcial` pone la marca y su nota", async () => {
+    vi.stubGlobal("fetch", api(() => Response.json(dashboard({ montoTotal: 0, parcial: true }))));
+    render(<Dashboard />);
+    const monto = await screen.findByRole("region", { name: "Monto total liquidado" });
+    expect(monto).toHaveTextContent(/\$\s?0/);
+    expect(within(monto).queryByText("Sin dato")).not.toBeInTheDocument();
+    expect(within(monto).getByText("Parcial")).toBeInTheDocument();
+    expect(within(monto).getByText("Incluye resultados parciales del proveedor")).toBeInTheDocument();
+  });
+
+  it("el ranking solo se pinta al Super Admin en la vista global: ni un usuario de compañía ni el SA con ?empresa= lo ven", async () => {
+    const conRanking = () => Response.json(dashboard({ ranking: [{ empresa: { id: OTRA, nombre: "Compañía Uno" }, total: 40 }] }));
+    vi.stubGlobal("fetch", api(conRanking));
+    const { unmount } = render(<Dashboard />);
+    await screen.findByText("Liquidaciones por día");
+    expect(screen.queryByText("Compañías con más liquidaciones")).not.toBeInTheDocument();
+    unmount();
+
+    conSesion("superadmin");
+    busqueda = new URLSearchParams(`empresa=${OTRA}`);
+    vi.stubGlobal("fetch", api((url) => (url.pathname.endsWith("/dashboard") ? conRanking() : Response.json({ items: [], total: 0, page: 1, pageSize: 50 }))));
+    render(<Dashboard />);
+    await screen.findByText("Liquidaciones por día");
+    expect(screen.queryByText("Compañías con más liquidaciones")).not.toBeInTheDocument();
+  });
+});

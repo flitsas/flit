@@ -13,6 +13,8 @@ export interface ItemBarra {
   detalle?: string;
   /** Token de color de la barra; por defecto `var(--chart-1)`. */
   color?: string;
+  /** Celdas extra de la tabla alternativa, en el orden de `encabezadosExtra`. */
+  extra?: string[];
 }
 
 const PISTA_CLS = "h-2 w-full overflow-hidden rounded-full bg-[var(--di-surface-sunken)]";
@@ -29,6 +31,9 @@ export function ListaBarras({
   nivel = 3,
   onElegir,
   etiquetaAccion,
+  encabezadoCategoria = "Categoría",
+  encabezadoValor = "Cantidad",
+  encabezadosExtra = [],
 }: {
   titulo: string;
   subtitulo?: string;
@@ -36,6 +41,10 @@ export function ListaBarras({
   nivel?: 2 | 3;
   onElegir?: (clave: string) => void;
   etiquetaAccion?: (item: ItemBarra) => string;
+  /** Encabezados de la tabla alternativa (por defecto «Categoría» y «Cantidad»). */
+  encabezadoCategoria?: string;
+  encabezadoValor?: string;
+  encabezadosExtra?: string[];
 }) {
   const maximo = Math.max(0, ...items.map((i) => i.valor));
   const ancho = (v: number) => (maximo > 0 ? `${(v / maximo) * 100}%` : "0%");
@@ -83,8 +92,11 @@ export function ListaBarras({
           </ul>
           <TablaAlternativa
             titulo={titulo}
-            encabezados={["Categoría", "Cantidad"]}
-            filas={items.map((i) => ({ encabezado: i.nombre, celdas: [formatoEntero(i.valor)] }))}
+            encabezados={[encabezadoCategoria, encabezadoValor, ...encabezadosExtra]}
+            filas={items.map((i) => ({
+              encabezado: i.nombre,
+              celdas: [formatoEntero(i.valor), ...encabezadosExtra.map((_, k) => i.extra?.[k] ?? "—")],
+            }))}
           />
         </>
       )}

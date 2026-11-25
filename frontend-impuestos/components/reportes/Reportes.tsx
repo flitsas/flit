@@ -21,18 +21,17 @@ import {
   TAMANO_PAGINA_REPORTE,
   filtrosVacios,
   hayFiltros,
-  listarDepartamentos,
+  obtenerCatalogosReportes,
   obtenerReporte,
-  type Departamento,
+  type CatalogosReportes,
   type FiltrosReporte as Filtros,
   type PaginaReporte,
 } from "@/lib/reportes/api";
 import { REPORTES, reporteDe, type TipoReporte } from "@/lib/reportes/catalogo";
 import { useDescarga } from "@/lib/reportes/useDescarga";
 import { PERMISOS, tienePermiso, type SesionImpuestos } from "@/lib/sesion";
-import { listarUsuarios } from "@/lib/usuarios/api";
 import { BotonesExportar } from "./BotonesExportar";
-import { FiltrosReporte, type OpcionUsuario } from "./FiltrosReporte";
+import { FiltrosReporte } from "./FiltrosReporte";
 import { TablaReporte } from "./TablaReporte";
 
 const PARAM_REPORTE = "reporte";
@@ -46,7 +45,9 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: 
  * /reportes (spec-visual §3.7; D-REPORTES; impuestos.v1.yaml tag Reportes). Cuatro pestañas (?reporte=), filtros del
  * reporte activo, tabla paginada con las columnas de la API y exportación a Excel (≤ 5.000) y PDF (≤ 1.000) de TODO el
  * filtro, sin límite de exportaciones por usuario (DA-9b). La compañía sale del token; el Super Admin la elige en la barra
- * (?empresa=). Aviso de Ley 1581 persistente. Sin impuestos.reportes.ver, la 403; sin .exportar, no hay botones.
+ * (?empresa=); sin ella ve la vista global, con la columna «Compañía» (delta 11). Las opciones de «Departamento» y
+ * «Usuario» salen de GET /catalogos/reportes (delta 12). Los errores de regla y de la compañía se pintan en línea con su
+ * literal. Aviso de Ley 1581 persistente. Sin impuestos.reportes.ver, la 403; sin .exportar, no hay botones.
  */
 export function Reportes() {
   const router = useRouter();
@@ -66,9 +67,10 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
   const router = useRouter();
   const pathname = usePathname() || "/reportes";
   const params = useSearchParams();
-  const { empresa: empresaUrl } = useEmpresaSeleccionada();
+  const { empresa: empresaUrl, elegir } = useEmpresaSeleccionada();
   const superAdmin = sesion.esSuperAdmin === true;
   const empresa = superAdmin ? empresaUrl : null;
+  const vistaGlobal = superAdmin && !empresa;
   const puedeExportar = tienePermiso(sesion, PERMISOS.reportesExportar);
   const hoy = useMemo(() => hoyColombia(), []);
   const avisoId = useId();
@@ -104,8 +106,7 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
     return () => controller.abort();
   }, [tipo, filtros, page, empresa, clave]);
 
-  const departamentos = useDepartamentos(tienePermiso(sesion, PERMISOS.configuracionVer));
-  const usuarios = useUsuariosFiltro(tienePermiso(sesion, PERMISOS.usuariosGestionar) && (!superAdmin || Boolean(empresa)), empresa);
+  const catalogos = useCatalogosReportes(empresa);
   const elegida = useEmpresaBackoffice(empresa);
 
   const claveExportacion = JSON.stringify([tipo, filtros, empresa]);
@@ -118,6 +119,7 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
     if (codigo403) router.replace(`/403?code=${encodeURIComponent(codigo403)}`);
   }, [codigo403, router]);
   const errorRango = error instanceof ApiError && error.code === "RANGO_INVALIDO" ? mensajeRangoInvalido(filtros.rango, hoy) : null;
+  const empresaNoEncontrada = error instanceof ApiError && error.code === "EMPRESA_NO_ENCONTRADA";
 
   function cambiarFiltros(cambios: Partial<Filtros>) {
     setFiltros((f) => ({ ...f, ...cambios }));
@@ -149,9 +151,15 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
         <InlineAlert
           tone="error"
           action={
-            <Button variant="secondary" size="sm" onClick={() => setIntento((n) => n + 1)}>
-              Reintentar
-            </Button>
+            empresaNoEncontrada && superAdmin ? (
+              <Button variant="secondary" size="sm" onClick={() => elegir(null)}>
+                Ver todas las compañías
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => setIntento((n) => n + 1)}>
+                Reintentar
+              </Button>
+            )
           }
         >
           {mensajeErrorFijo(error, "No se pudo cargar el reporte", ERRORES_REPORTES)}
@@ -177,7 +185,7 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
         ]}
       />
     );
-  else if (datos) cuerpo = <TablaReporte reporte={reporte} pagina={datos} onPagina={setPage} />;
+  else if (datos) cuerpo = <TablaReporte reporte={reporte} pagina={datos} vistaGlobal={vistaGlobal} onPagina={setPage} />;
 
   const panel = (
     <div className="flex flex-col gap-4">
@@ -190,8 +198,8 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
           reporte={reporte}
           filtros={filtros}
           hoy={hoy}
-          departamentos={departamentos}
-          usuarios={usuarios}
+          departamentos={catalogos?.departamentos ?? null}
+          usuarios={catalogos?.usuarios ?? null}
           errorRango={errorRango}
           onCambiar={cambiarFiltros}
           onLimpiar={limpiar}
@@ -231,40 +239,24 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
   );
 }
 
-/** Departamentos del proveedor para el filtro (GET /fuentes); sin permiso o con error, null (el filtro no se pinta). */
-function useDepartamentos(habilitado: boolean): Departamento[] | null {
-  const [lista, setLista] = useState<Departamento[] | null>(null);
+/**
+ * Opciones de «Departamento» y «Usuario» (GET /catalogos/reportes, delta 12), de la compañía elegida o, para el Super Admin
+ * sin `empresa`, de todas. Con error, null: esos filtros no se pintan y el reporte sigue (la compañía rechazada ya la
+ * explica el reporte).
+ */
+function useCatalogosReportes(empresa: string | null): CatalogosReportes | null {
+  const [lista, setLista] = useState<{ empresa: string | null; catalogos: CatalogosReportes | null } | null>(null);
   useEffect(() => {
-    if (!habilitado) return;
     const controller = new AbortController();
-    listarDepartamentos(controller.signal).then(
-      (d) => {
-        if (!controller.signal.aborted) setLista(d);
+    obtenerCatalogosReportes(empresa, controller.signal).then(
+      (catalogos) => {
+        if (!controller.signal.aborted) setLista({ empresa, catalogos });
       },
       () => {
-        if (!controller.signal.aborted) setLista(null);
+        if (!controller.signal.aborted) setLista({ empresa, catalogos: null });
       },
     );
     return () => controller.abort();
-  }, [habilitado]);
-  return habilitado ? lista : null;
-}
-
-/** Usuarios de Impuestos de la compañía para el filtro (GET /usuarios, máx. 200); sin permiso o con error, null. */
-function useUsuariosFiltro(habilitado: boolean, empresa: string | null): OpcionUsuario[] | null {
-  const [lista, setLista] = useState<{ empresa: string | null; usuarios: OpcionUsuario[] } | null>(null);
-  useEffect(() => {
-    if (!habilitado) return;
-    const controller = new AbortController();
-    listarUsuarios({ q: "", page: 1, pageSize: 200 }, empresa, controller.signal).then(
-      (p) => {
-        if (!controller.signal.aborted) setLista({ empresa, usuarios: (p?.items ?? []).map((u) => ({ id: u.id, nombre: u.nombre || u.email })) });
-      },
-      () => {
-        if (!controller.signal.aborted) setLista(null);
-      },
-    );
-    return () => controller.abort();
-  }, [habilitado, empresa]);
-  return habilitado && lista?.empresa === empresa ? lista.usuarios : null;
+  }, [empresa]);
+  return lista?.empresa === empresa ? lista.catalogos : null;
 }

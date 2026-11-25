@@ -31,7 +31,7 @@ export function useDescarga(tipo: TipoReporte, filtros: FiltrosReporte, empresa:
       const extension = formato === "excel" ? "xlsx" : "pdf";
       descargarArchivo(urlExportacion(tipo, formato, filtros, empresa), `reporte-${tipo}.${extension}`)
         .catch((err: unknown) => {
-          if (montado.current) setError(mensajeExportacion(err));
+          if (montado.current) setError(mensajeExportacion(err, formato));
         })
         .finally(() => {
           if (montado.current) setEnVuelo((e) => ({ ...e, [formato]: false }));

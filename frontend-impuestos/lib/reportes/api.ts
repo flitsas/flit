@@ -1,12 +1,13 @@
-// Reportes de Impuestos (impuestos.v1.yaml 1.0.0, tag Reportes): GET /reportes/{tipo} paginado y GET /reportes/{tipo}/excel
-// y /pdf con los mismos filtros, sin paginación. Todas admiten `empresa` (solo Super Admin). La exportación baja por blob
+// Reportes de Impuestos (impuestos.v1.yaml 1.2.x, tag Reportes): GET /reportes/{tipo} paginado y GET /reportes/{tipo}/excel
+// y /pdf con los mismos filtros, sin paginación (delta 9: parámetros `Reporte*` compartidos). Las opciones de los filtros
+// salen de GET /catalogos/reportes (delta 12). Todas admiten `empresa` (solo Super Admin). La exportación baja por blob
 // para que un 422 TOPE_EXPORTACION se explique en pantalla en vez de guardarse como archivo.
 import { isReauthenticating, reauthenticate } from "@flit/auth/client";
 import { API_PREFIX, ApiError, apiFetch } from "@/lib/api";
 import { conEmpresa } from "@/lib/empresaSeleccionada";
 import { ERRORES_EMPRESA, conTope } from "@/lib/errores";
 import type { Rango } from "@/lib/estadisticas/tipos";
-import { reporteDe, type FiltroReporte, type FormatoExportacion, type TipoReporte } from "./catalogo";
+import { TOPE_EXPORTACION, reporteDe, type FiltroReporte, type FormatoExportacion, type TipoReporte } from "./catalogo";
 
 export interface FiltrosReporte {
   rango: Rango;
@@ -36,6 +37,32 @@ export interface PaginaReporte {
 export interface Departamento {
   codigo: string;
   nombre: string;
+  activa?: boolean;
+}
+
+/** Usuario del filtro «Usuario» (schema Referencia: solo id y nombre, sin correo). */
+export interface UsuarioReporte {
+  id: string;
+  nombre: string;
+}
+
+/** Schema CatalogosReportes (1.1.0, delta 12). */
+export interface CatalogosReportes {
+  departamentos: Departamento[];
+  usuarios: UsuarioReporte[];
+}
+
+/** Clave de la columna «Compañía» (delta 11) y su etiqueta (x-flit-etiquetas.empresa de las cuatro filas de reporte). */
+export const COLUMNA_EMPRESA: ColumnaReporte = { clave: "empresa", etiqueta: "Compañía" };
+
+/**
+ * Columnas que se pintan (delta 11): en la vista global del Super Admin, «Compañía» va primero (la traiga o no `columnas`);
+ * fuera de ella, nunca, aunque llegue.
+ */
+export function columnasVisibles(columnas: readonly ColumnaReporte[], vistaGlobal: boolean): ColumnaReporte[] {
+  const resto = columnas.filter((c) => c.clave !== COLUMNA_EMPRESA.clave);
+  if (!vistaGlobal) return resto;
+  return [columnas.find((c) => c.clave === COLUMNA_EMPRESA.clave) ?? COLUMNA_EMPRESA, ...resto];
 }
 
 export const TAMANO_PAGINA_REPORTE = 50;
@@ -79,18 +106,25 @@ export function obtenerReporte(
   return apiFetch<PaginaReporte>(`/reportes/${tipo}?${parametros(filtros, tipo, pagina).toString()}`, { signal, empresa });
 }
 
-/**
- * URL del BFF de la exportación. El contrato lista solo desde/hasta/placa/empresa en /excel y /pdf, pero su descripción
- * dice «mismos filtros que el reporte»: se envían todos los del reporte (hueco reportado en el informe de M17).
- */
+/** URL del BFF de la exportación: exactamente los filtros del GET, sin paginación (delta 9). */
 export function urlExportacion(tipo: TipoReporte, formato: FormatoExportacion, filtros: FiltrosReporte, empresa: string | null): string {
   return `${API_PREFIX}${conEmpresa(`/reportes/${tipo}/${formato}?${parametros(filtros, tipo).toString()}`, empresa)}`;
 }
 
-/** Departamentos del proveedor (GET /fuentes) para el filtro «Departamento». */
-export async function listarDepartamentos(signal?: AbortSignal): Promise<Departamento[]> {
-  const datos = await apiFetch<{ items: Departamento[] }>("/fuentes", { signal });
-  return datos?.items ?? [];
+export const RUTA_CATALOGOS_REPORTES = "/catalogos/reportes";
+
+/**
+ * Opciones de los filtros (GET /catalogos/reportes, permiso impuestos.reportes.ver, delta 12): departamentos de la caché de
+ * /fuentes y usuarios que crearon liquidaciones (solo id y nombre). El Super Admin sin `empresa` recibe las de todas las
+ * compañías. Listas ausentes se toman vacías; un usuario sin id o sin nombre no se ofrece.
+ */
+export async function obtenerCatalogosReportes(empresa: string | null, signal?: AbortSignal): Promise<CatalogosReportes> {
+  const datos = await apiFetch<Partial<Record<keyof CatalogosReportes, unknown>> | null>(RUTA_CATALOGOS_REPORTES, { signal, empresa });
+  const departamentos = Array.isArray(datos?.departamentos) ? (datos.departamentos as Departamento[]).filter((d) => d && d.codigo && d.nombre) : [];
+  const usuarios = Array.isArray(datos?.usuarios)
+    ? (datos.usuarios as UsuarioReporte[]).filter((u) => u && typeof u.id === "string" && u.id && typeof u.nombre === "string" && u.nombre.trim())
+    : [];
+  return { departamentos, usuarios };
 }
 
 /** x-flit-literales.errores de las rutas de reportes. */
@@ -106,10 +140,16 @@ export const ERRORES_REPORTES: Readonly<Record<string, string>> = {
 
 export const MENSAJE_EXPORTACION_FALLIDA = "No se pudo generar el archivo. Intenta de nuevo.";
 
-/** Texto bajo los botones de un error de exportación: el literal del `code` (con {tope}) o el genérico. */
-export function mensajeExportacion(error: unknown): string {
+/**
+ * Texto bajo los botones de un error de exportación: el literal del `code` o el genérico. En TOPE_EXPORTACION, `{tope}` sale
+ * del cuerpo del error y, si no vino, del tope del formato (Excel 5000, PDF 1000): nunca queda «{tope}» a la vista.
+ */
+export function mensajeExportacion(error: unknown, formato?: FormatoExportacion): string {
   if (error instanceof ApiError) {
-    if (error.code && Object.prototype.hasOwnProperty.call(ERRORES_REPORTES, error.code)) return conTope(ERRORES_REPORTES[error.code], error.detalle?.tope);
+    if (error.code && Object.prototype.hasOwnProperty.call(ERRORES_REPORTES, error.code)) {
+      const tope = error.detalle?.tope ?? (error.code === "TOPE_EXPORTACION" && formato ? TOPE_EXPORTACION[formato] : undefined);
+      return conTope(ERRORES_REPORTES[error.code], tope);
+    }
     if (error.status === 403) return "No tienes permiso para esta acción.";
   }
   return MENSAJE_EXPORTACION_FALLIDA;

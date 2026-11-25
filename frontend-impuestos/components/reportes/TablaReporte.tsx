@@ -5,13 +5,25 @@ import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 import { formatoEntero, formatoFechaHora, formatoMonto, MONTO_SIN_DATO } from "@/lib/estadisticas/formato";
 import { COLUMNAS_FECHA, COLUMNAS_MONTO, rotuloDeColumna, type ReporteCatalogo } from "@/lib/reportes/catalogo";
-import type { FilaReporte, PaginaReporte } from "@/lib/reportes/api";
+import { COLUMNA_EMPRESA, columnasVisibles, type FilaReporte, type PaginaReporte } from "@/lib/reportes/api";
 
 const NUMERICAS: ReadonlySet<string> = new Set(["totalItems", "exitosas", "conError", "pendientes", ...COLUMNAS_MONTO]);
 const TEXTO_LARGO_CLS = "block max-w-[16rem] truncate";
 
 /** Una celda según su columna (spec-visual §0.1): montos «Sin dato» si son null, fechas en hora de Bogotá, enums con su etiqueta. */
 function celda(reporte: ReporteCatalogo, clave: string, valor: unknown): ReactNode {
+  if (clave === COLUMNA_EMPRESA.clave) {
+    // row.empresa (Referencia, delta 11): el nombre; si llega vacío (compañía suspendida), el id.
+    const empresa = valor && typeof valor === "object" ? (valor as { id?: unknown; nombre?: unknown }) : null;
+    const texto = (typeof empresa?.nombre === "string" && empresa.nombre.trim()) || (typeof empresa?.id === "string" && empresa.id) || "";
+    return texto ? (
+      <span className={TEXTO_LARGO_CLS} title={texto}>
+        {texto}
+      </span>
+    ) : (
+      "—"
+    );
+  }
   if (COLUMNAS_MONTO.has(clave)) {
     return typeof valor === "number" ? (
       <span className="tabular-nums">{formatoMonto(valor)}</span>
@@ -49,19 +61,23 @@ function celda(reporte: ReporteCatalogo, clave: string, valor: unknown): ReactNo
 
 /**
  * Tabla de un reporte (spec-visual §3.7): `DataTable` del kit con las columnas en el orden y con la etiqueta que manda la
- * API (`columnas`), y `Pagination`. Las celdas largas se recortan con `title`.
+ * API (`columnas`), y `Pagination`. En la vista global del Super Admin la primera columna es «Compañía» (row.empresa.nombre,
+ * delta 11); con una compañía elegida o para un usuario de compañía no se pinta. Las celdas largas se recortan con `title`.
  */
 export function TablaReporte({
   reporte,
   pagina,
+  vistaGlobal = false,
   onPagina,
 }: {
   reporte: ReporteCatalogo;
   pagina: PaginaReporte;
+  /** Super Admin sin ?empresa=: lleva la columna «Compañía». */
+  vistaGlobal?: boolean;
   onPagina: (page: number) => void;
 }) {
   type Fila = { fila: FilaReporte; i: number };
-  const columnas: DataTableColumn<Fila>[] = pagina.columnas.map((c) => ({
+  const columnas: DataTableColumn<Fila>[] = columnasVisibles(pagina.columnas ?? [], vistaGlobal).map((c) => ({
     key: c.clave,
     header: c.etiqueta,
     align: NUMERICAS.has(c.clave) ? "right" : "left",
