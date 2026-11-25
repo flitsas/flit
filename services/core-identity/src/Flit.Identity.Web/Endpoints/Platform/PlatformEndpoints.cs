@@ -111,6 +111,18 @@ public static class PlatformEndpoints
                 UpdatedByEmail = p.UpdatedBy is { } by && emails.TryGetValue(by, out var email) ? email : null,
                 ComingSoon = hosts.IsComingSoon(p.ProductCode),
                 p.ImpuestoApiKeyConfigurada,
+                // HU #14694 (platform.v1 1.1.0): último estado reportado; null sin aprovisionamiento o sin reporte.
+                Provisioning = p.Provisioning is { } estado
+                    ? new
+                    {
+                        status = estado.Estado,
+                        reason = estado.MotivoCodigo,
+                        message = estado.Mensaje,
+                        action = estado.Accion,
+                        signatureConfirmed = estado.FirmaConfirmada,
+                        updatedAt = estado.ActualizadoEn,
+                    }
+                    : null,
             }));
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("ListTenantProducts");
 

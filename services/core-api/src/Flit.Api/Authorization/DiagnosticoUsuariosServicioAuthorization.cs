@@ -53,24 +53,13 @@ internal static class DiagnosticoUsuariosServicioAuthorization
         && identity.FindAll("scope").SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)).Contains(scope, StringComparer.Ordinal);
 
     /// <summary>
-    /// Segunda barrera, dentro de cada método: el llamante es Diagnóstico, el producto es el suyo y trae un actor.
-    /// <paramref name="exigeEmpresa"/> en false para el servicio global de conteos.
+    /// Segunda barrera, dentro de cada método. HU #14694: delega en
+    /// <see cref="UsuariosProductoServicioAuthorization.VerificarLlamante"/> (mapa cliente → producto); para
+    /// <c>svc-diagnostico</c> el resultado es el mismo de siempre.
     /// </summary>
     /// <returns>El id del actor de la metadata.</returns>
     /// <exception cref="RpcException"><c>PERMISSION_DENIED</c> si el llamante, el producto o el actor no sirven;
     /// <c>INVALID_ARGUMENT</c> sin empresa.</exception>
-    public static Guid VerificarLlamante(PlatformServiceCaller caller, string? producto, Metadata cabeceras, bool exigeEmpresa = true)
-    {
-        ArgumentNullException.ThrowIfNull(caller);
-        ArgumentNullException.ThrowIfNull(cabeceras);
-        if (!string.Equals(caller.ClientId, ClientId, StringComparison.Ordinal))
-            throw new RpcException(new Status(StatusCode.PermissionDenied, "Este servicio solo lo atiende Diagnóstico Vehicular."));
-        if (exigeEmpresa && caller.TenantId == Guid.Empty)
-            throw new RpcException(new Status(StatusCode.InvalidArgument, $"Falta la metadata {PlatformServiceCallInterceptor.TenantMetadata} con el id de la empresa."));
-        if (!string.Equals(producto, Producto, StringComparison.Ordinal))
-            throw new RpcException(new Status(StatusCode.PermissionDenied, "El producto no corresponde al cliente de servicio."));
-        if (!Guid.TryParse(cabeceras.GetValue(ActorMetadata), out var actor) || actor == Guid.Empty)
-            throw new RpcException(new Status(StatusCode.PermissionDenied, $"Falta la metadata {ActorMetadata} con el usuario que actúa."));
-        return actor;
-    }
+    public static Guid VerificarLlamante(PlatformServiceCaller caller, string? producto, Metadata cabeceras, bool exigeEmpresa = true) =>
+        UsuariosProductoServicioAuthorization.VerificarLlamante(caller, producto, cabeceras, exigeEmpresa);
 }

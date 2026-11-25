@@ -249,6 +249,8 @@ public static class IdentityInfrastructureExtensions
         services.AddScoped<IProductCatalog, ProductCatalogRepository>();
         services.AddScoped<ITenantProductRepository, TenantProductRepository>();
         services.AddScoped<ITenantProductCredentialRepository, TenantProductCredentialRepository>();
+        // HU #14694 (plan §1.2 R1): estado de aprovisionamiento que reporta el servicio del producto (DDL 205).
+        services.AddScoped<ITenantProductProvisioningStore, TenantProductProvisioningRepository>();
         services.AddScoped<ITenantProductSecretProtector, DataProtectionTenantProductSecretProtector>();
         services.AddScoped<IProductAccessStore, ProductAccessStore>();
         services.AddScoped<IProductManifestStore, ProductManifestStore>();

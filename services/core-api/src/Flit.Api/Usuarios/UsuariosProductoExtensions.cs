@@ -1,20 +1,19 @@
 using Flit.Api.Authorization;
 using Flit.Api.Grpc;
-using Flit.Api.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.UserRoles.ProductRoles;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.UserRoles.ProductRoles;
-using Flit.Platform.Sdk.Grpc;
 
 namespace Flit.Api.Usuarios;
 
 /// <summary>
 /// Composición de los rpc de usuarios por producto (ADR-0089, HU #14587): <c>UsuariosProductoService</c> (por empresa,
-/// scope <c>platform.usuarios.diagnostico</c>) y <c>UsuariosProductoConteoService</c> (global, scope <c>.conteos</c>). El
-/// interceptor del SDK exige token de servicio con <c>aud=tramites</c> y el scope; la policy, el cliente
-/// <c>svc-diagnostico</c>. Siempre mapeados: sin el scope en el cliente de Identidad nadie entra.
+/// scope <c>platform.usuarios.&lt;producto&gt;</c>) y <c>UsuariosProductoConteoService</c> (global, scope <c>.conteos</c>). El
+/// interceptor exige token de servicio con <c>aud=tramites</c> y el scope del producto del cliente; la policy, un cliente
+/// del mapa de <see cref="UsuariosProductoServicioAuthorization"/> (HU #14694: <c>svc-diagnostico</c> y
+/// <c>svc-impuestos</c>). Siempre mapeados: sin el scope en el cliente de Identidad nadie entra.
 /// </summary>
 internal static class UsuariosProductoExtensions
 {
@@ -30,17 +29,18 @@ internal static class UsuariosProductoExtensions
         services.AddScoped<SuspendProductRoleHandler>();
         services.AddScoped<ReactivateProductRoleHandler>();
 
+        // HU #14694: el scope que se exige es el del producto del cliente que llama (UsuariosProductoServicioAuthorization).
         services.AddGrpc()
-            .RequireServiceToken<UsuariosProductoGrpcService>(DiagnosticoUsuariosServicioAuthorization.Scope, ServiceAudiences.Tramites)
-            .RequireServiceTokenSinEmpresa<UsuariosProductoConteoGrpcService>(DiagnosticoUsuariosServicioAuthorization.ScopeConteos, ServiceAudiences.Tramites);
+            .AddServiceOptions<UsuariosProductoGrpcService>(o => o.Interceptors.Add<UsuariosProductoServiceTokenInterceptor>(false))
+            .AddServiceOptions<UsuariosProductoConteoGrpcService>(o => o.Interceptors.Add<UsuariosProductoServiceTokenInterceptor>(true));
         return services;
     }
 
     public static IEndpointRouteBuilder MapUsuariosProducto(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
-        app.MapGrpcService<UsuariosProductoGrpcService>().RequireAuthorization(DiagnosticoUsuariosServicioAuthorization.Policy);
-        app.MapGrpcService<UsuariosProductoConteoGrpcService>().RequireAuthorization(DiagnosticoUsuariosServicioAuthorization.PolicyConteos);
+        app.MapGrpcService<UsuariosProductoGrpcService>().RequireAuthorization(UsuariosProductoServicioAuthorization.Policy);
+        app.MapGrpcService<UsuariosProductoConteoGrpcService>().RequireAuthorization(UsuariosProductoServicioAuthorization.PolicyConteos);
         return app;
     }
 }
