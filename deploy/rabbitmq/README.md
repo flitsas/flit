@@ -50,7 +50,60 @@ en el exchange de ese otro. Se le da con un tercer argumento, sin tocar configur
 `tramites` y `plataforma` se les suma `impuestos` como destino (`... tramites "$CLAVE" notificaciones,impuestos` y
 `... plataforma "$CLAVE" notificaciones,impuestos`). Correr el script otra vez **cambia la clave**: hacerlo con la
 clave nueva en el `.env` del ambiente, o sumar `|flit\.impuestos` a mano con `set_permissions` leyendo antes
-`list_user_permissions`.
+`list_user_permissions` (runbook siguiente).
+
+### Runbook MEN-10: sumar `flit.impuestos` a `tramites` y `plataforma` sin cambiar la clave
+
+Es el paso de broker del gate **G-8** y va **antes** de desplegar core-api y core-identity con Impuestos: sin él, encender
+o reintentar Impuestos falla al publicar en `flit.impuestos` (`ACCESS_REFUSED`) y el trabajo queda pendiente en la outbox
+del host. Solo cambia el permiso de **escritura**; configurar y leer quedan como estaban.
+
+1. Leer los permisos actuales y anotar `configure`, `write` y `read` de cada usuario:
+
+   ```bash
+   C="docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl"
+   $C list_user_permissions tramites
+   $C list_user_permissions plataforma
+   ```
+
+   Creados con el script de este directorio, `write` vale `^(flit\.tramites|flit\.notificaciones|tramites\..*)$` y
+   `^(flit\.plataforma|flit\.notificaciones|plataforma\..*)$`.
+
+2. Sumar `|flit\.impuestos` a los exchanges de `write`, repitiendo `configure` y `read` tal cual salieron en el paso 1
+   (`set_permissions` reemplaza los tres). Con los valores del script:
+
+   ```bash
+   $C set_permissions -p flit tramites \
+     '^(flit\.tramites|tramites\..*)$' \
+     '^(flit\.tramites|flit\.notificaciones|flit\.impuestos|tramites\..*)$' \
+     '^(flit\..*|tramites\..*)$'
+   $C set_permissions -p flit plataforma \
+     '^(flit\.plataforma|plataforma\..*)$' \
+     '^(flit\.plataforma|flit\.notificaciones|flit\.impuestos|plataforma\..*)$' \
+     '^(flit\..*|plataforma\..*)$'
+   ```
+
+   Si el paso 1 mostró otros valores (otro destino de trabajos ya sumado), se conservan y solo se agrega
+   `|flit\.impuestos`.
+
+3. Verificar los permisos: `$C list_user_permissions tramites` y `$C list_user_permissions plataforma`;
+   el `write` de los dos incluye `flit\.impuestos`.
+
+4. Publicación de prueba con cada usuario. Los usuarios de servicio no tienen etiqueta de administración, así que se le
+   pone `management` solo mientras dura la prueba y se le quita al final. La clave es la de `RABBITMQ_URL_TRAMITES` /
+   `RABBITMQ_URL_PLATAFORMA` del `.env` del ambiente; la llave `impuestos.prueba.permiso` no está atada a ninguna cola,
+   así que el mensaje se descarta y no lo consume nadie.
+
+   ```bash
+   $C set_user_tags tramites management
+   curl -s -u "tramites:<clave>" -H 'content-type: application/json' \
+     -d '{"properties":{},"routing_key":"impuestos.prueba.permiso","payload":"prueba MEN-10","payload_encoding":"string"}' \
+     "http://127.0.0.1:${RABBITMQ_MGMT_PORT}/api/exchanges/flit/flit.impuestos/publish"
+   # Esperado: {"routed":false}. Un 401 o ACCESS_REFUSED indica que falta el permiso.
+   $C set_user_tags tramites
+   ```
+
+   Repetir con `plataforma`. Al terminar, `$C list_users` no debe mostrar `management` en ninguno de los dos.
 
 ## Un exchange nuevo
 
