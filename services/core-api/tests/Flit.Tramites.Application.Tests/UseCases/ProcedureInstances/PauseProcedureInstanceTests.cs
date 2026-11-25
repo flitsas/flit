@@ -46,14 +46,18 @@ public sealed class PauseProcedureInstanceTests
         var instance = Instance(id, tenantId);
         _repo.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var (ok, error, _) = await _sut.HandleAsync(id, tenantId, paused: true, "cliente pidió esperar", Guid.NewGuid(), Ct);
+        var changedBy = Guid.NewGuid();
+        var (ok, error, _) = await _sut.HandleAsync(id, tenantId, paused: true, "cliente pidió esperar", changedBy, Ct);
 
         ok.Should().BeTrue();
         error.Should().BeNull();
         instance.IsPaused.Should().BeTrue();
         instance.PausedObservation.Should().Be("cliente pidió esperar");
         await _repo.Received(1).AddEventAsync(
-            Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == "tramite_pausado" && e.ProcedureInstanceId == id),
+            Arg.Is<ProcedureInstanceEvent>(e =>
+                e.Tipo == "tramite_pausado"
+                && e.ProcedureInstanceId == id
+                && e.CreatedBy == changedBy),
             Arg.Any<CancellationToken>());
         await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
