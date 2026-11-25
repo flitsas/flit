@@ -138,6 +138,7 @@ public sealed class ConsumidorCambioProductoTests
     [InlineData(E.Error)]
     [InlineData(E.Incierto)]
     [InlineData(E.RequiereRevisionNit)]
+    [InlineData(E.ListoSinWebhook)]
     public async Task Reintentar_desde_un_estado_reintentable_pasa_a_PENDIENTE_con_el_Super_Admin_en_el_historial(E desde)
     {
         var ct = TestContext.Current.CancellationToken;

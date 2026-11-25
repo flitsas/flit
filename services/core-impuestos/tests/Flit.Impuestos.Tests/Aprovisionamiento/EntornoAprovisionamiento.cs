@@ -62,6 +62,63 @@ internal static class EntornoAprovisionamiento
 
     public static string ErrorApi(string codigo) => "{\"error\":{\"code\":\"" + codigo + "\",\"message\":\"x\"}}";
 
+    /// <summary>
+    /// Respuesta del alta idempotente (guía §3, 2026-11-25): la empresa con <c>tax_id_dv</c>, <c>active</c> y
+    /// <c>has_webhook_secret</c>, más <c>created</c>, <c>api_key</c>, <c>api_key_rotated</c> y <c>webhook_secret</c> (null = no viene).
+    /// </summary>
+    public static string Alta(bool created = true, string apiKey = ClienteApiLiquidacionTests.ApiKey, string? secreto = ClienteApiLiquidacionTests.WebhookSecret,
+        bool rotada = false, bool activa = true) =>
+        "{\"company\":{\"id\":\"" + EmpresaApiId + "\",\"legal_name\":\"Flota Andina SAS\",\"tax_id\":\"900123456\",\"tax_id_dv\":8," +
+        "\"contact_email\":\"ops@flota.example\",\"active\":" + (activa ? "true" : "false") + ",\"api_key_prefix\":\"" + apiKey[..8] + "\"," +
+        "\"has_webhook_secret\":" + (secreto is null ? "false" : "true") + "},\"created\":" + (created ? "true" : "false") +
+        ",\"api_key\":\"" + apiKey + "\",\"api_key_rotated\":" + (rotada ? "true" : "false") +
+        (secreto is null ? string.Empty : ",\"webhook_secret\":\"" + secreto + "\"") + "}";
+
+    public const string EmpresaApiId = "3f6c2a7e-6a0b-4c8e-9a51-2f3b5d7c9e10";
+
+    /// <summary>Proveedor cuyo alta responde lo que diga <paramref name="alta"/> (por número de llamada) y <c>GET /fuentes</c> 200.</summary>
+    public static ApiLiquidacionDePrueba ProveedorConAltas(Func<int, HttpResponseMessage> alta)
+    {
+        var n = 0;
+        return new ApiLiquidacionDePrueba
+        {
+            Responder = r => r.RequestUri!.AbsolutePath == RutaAlta
+                ? alta(Interlocked.Increment(ref n))
+                : ApiLiquidacionDePrueba.Json(HttpStatusCode.OK, ClienteApiLiquidacionTests.Fuentes200),
+        };
+    }
+
+    /// <summary>Mensajes de la outbox del servicio con el tipo dado (llave de ruteo), en orden.</summary>
+    public static async Task<List<OutboxMessage>> OutboxAsync(ApiDePrueba api, Guid empresa, string tipo, CancellationToken ct)
+    {
+        await using var db = api.Contexto(empresa);
+        return await db.Set<OutboxMessage>().AsNoTracking().Where(m => m.RoutingKey == tipo).OrderBy(m => m.OccurredAt).ToListAsync(ct);
+    }
+
+    /// <summary>Entrega un sobre a <see cref="ConsumidorCredenciales"/> como el SDK (bandeja en la misma transacción).</summary>
+    public static async Task<bool> EntregarInternoAsync(ApiDePrueba api, EventEnvelope sobre, CancellationToken ct)
+    {
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ImpuestosDb>();
+        var consumidor = scope.ServiceProvider.GetRequiredService<ConsumidorCredenciales>();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            if (await db.Set<InboxMessage>().AnyAsync(m => m.EventId == sobre.EventId && m.Consumer == ConsumidorCredenciales.Cola, ct))
+                return false;
+            await consumidor.HandleAsync(sobre, sobre.DataAs<JsonElement>(), ct);
+            db.Set<InboxMessage>().Add(new InboxMessage { EventId = sobre.EventId, Consumer = ConsumidorCredenciales.Cola, Type = sobre.Type, ProcessedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        });
+    }
+
+    /// <summary>El sobre que dejó en la outbox un mensaje interno, para entregarlo al consumidor.</summary>
+    public static EventEnvelope Sobre(OutboxMessage mensaje) =>
+        JsonSerializer.Deserialize<EventEnvelope>(mensaje.Payload, EventEnvelope.JsonOptions)!;
+
     public static async Task SembrarAsync(
         ApiDePrueba api, Guid empresa, EstadoAprovisionamiento estado, CancellationToken ct, Action<AprovisionamientoEmpresa>? ajustar = null)
     {
@@ -151,7 +208,16 @@ internal sealed class IdentidadDePrueba : IClienteIdentidadAlta
     private int _datos;
     private int _llaves;
 
+    private readonly ConcurrentQueue<(Guid Empresa, string ApiKey)> _actualizaciones = new();
+
     public DatosAltaProveedor Datos { get; set; } = new("Flota Andina SAS", "900123456", EstadoNitAlta.Valido, "ops@flota.example", true);
+
+    /// <summary>Respuesta de <c>ActualizarCredencialImpuestoDiagnostico</c>: true = había llave de Diagnóstico y se reemplazó.</summary>
+    public bool DiagnosticoTieneLlave { get; set; } = true;
+
+    public bool ActualizacionCaida { get; set; }
+
+    public IReadOnlyList<(Guid Empresa, string ApiKey)> Actualizaciones => [.. _actualizaciones];
 
     public LlaveDiagnostico Llave { get; set; } = new(false, null, 0);
 
@@ -181,6 +247,14 @@ internal sealed class IdentidadDePrueba : IClienteIdentidadAlta
     {
         Interlocked.Increment(ref _llaves);
         return LlaveCaida ? throw new IdentidadNoDisponibleException("caída de prueba") : Task.FromResult(Llave);
+    }
+
+    public Task<bool> ActualizarLlaveDiagnosticoAsync(Guid empresa, string apiKey, CancellationToken ct)
+    {
+        if (ActualizacionCaida)
+            throw new IdentidadNoDisponibleException("caída de prueba");
+        _actualizaciones.Enqueue((empresa, apiKey));
+        return Task.FromResult(DiagnosticoTieneLlave);
     }
 
     public Task<RespuestaReporte> ReportarAsync(Guid empresa, ReporteEstadoAprovisionamiento reporte, CancellationToken ct)

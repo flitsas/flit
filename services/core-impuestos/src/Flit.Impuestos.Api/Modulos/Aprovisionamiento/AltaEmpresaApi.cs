@@ -7,18 +7,26 @@ using Microsoft.Extensions.Options;
 namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 
 /// <summary>
-/// Paso 3 de D-CRED-DIAG: el alta de la compañía en el API (<c>POST /api/v1/integracion/empresas</c>, plan §2.1). Pide los datos
-/// a Identidad (<c>ObtenerDatosAltaProveedor</c>: razón social, NIT base de D-TAXID, correo de D-EMAIL) y decide sin llamar si no
-/// se puede: NIT que no es <c>VALIDO</c> ⇒ <c>REQUIERE_REVISION_NIT</c> (DA-8), razón social de más de
-/// <see cref="LargoMaximoRazonSocial"/> ⇒ <c>ERROR(DATOS)</c> <c>RAZON_SOCIAL_LARGA</c>, sin correo (sin AdminCompany activo) ⇒
-/// <c>ERROR(DATOS)</c>. Si se llama, <c>antesDelEnvio</c> registra el envío ANTES del POST. Cada respuesta según
-/// D-ALTA-REINTENTOS: 201 ⇒ credenciales (una sola vez) y <c>LISTO</c>; 409 ⇒ <c>REQUIERE_CREDENCIALES</c>; 400, 415 y otro 4xx
-/// de datos ⇒ <c>ERROR(DATOS)</c>; 401, 403 y 404 ⇒ <c>ERROR(AMBIENTE)</c>; no salió (o 429: el API no lo atendió) ⇒ reintento
-/// automático; timeout, 5xx o corte tras enviar ⇒ <c>INCIERTO</c>. Nunca registra la api_key, el secreto, el token ni el correo.
+/// El alta idempotente de la compañía en el API (<c>POST /api/v1/integracion/empresas</c>, guía del proveedor §3; plan §5.8,
+/// M07b y D-ALTA-IDEM). Pide los datos a Identidad (<c>ObtenerDatosAltaProveedor</c>: razón social, NIT base de D-TAXID, correo
+/// de D-EMAIL) y decide sin llamar si no se puede: NIT que no es <c>VALIDO</c> ⇒ <c>REQUIERE_REVISION_NIT</c> (DA-8), razón
+/// social de más de <see cref="LargoMaximoRazonSocial"/> ⇒ <c>ERROR(DATOS)</c> <c>RAZON_SOCIAL_LARGA</c>, sin correo (sin
+/// AdminCompany activo) ⇒ <c>ERROR(DATOS)</c>. Si se llama, cada respuesta:
+/// <list type="bullet">
+///   <item>200 o 201 con <c>api_key</c>: credenciales (las mismas en cada llamada con ese NIT). Con <c>company.active=false</c>
+///   se guardan y queda <c>ERROR(AMBIENTE)</c> <c>EMPRESA_INACTIVA_EN_PROVEEDOR</c>; si no, <c>LISTO</c> con secreto o
+///   <c>LISTO_SIN_WEBHOOK</c> sin él. <c>api_key_rotated</c> va en <see cref="ResultadoEvaluacion.ClaveRotada"/>.</item>
+///   <item>No salió, timeout, 5xx, 429 o un 2xx sin credenciales: reintento automático con el mismo cuerpo (el proveedor no
+///   duplica la empresa); ya no hay marca del envío ni <c>INCIERTO</c> desde el alta.</item>
+///   <item>409: contrato del proveedor inesperado ⇒ <c>ERROR(AMBIENTE)</c> con alerta y detalle
+///   <see cref="DetalleContratoInesperado"/>.</item>
+///   <item>401, 403 y 404 ⇒ <c>ERROR(AMBIENTE)</c>; 400, 415 y otro 4xx ⇒ <c>ERROR(DATOS)</c>.</item>
+/// </list>
+/// Nunca registra la api_key, el secreto, el token ni el correo.
 /// </summary>
 /// <example>
 /// <code>
-/// var resultado = await alta.EjecutarAsync(empresa, async t => await MarcarEnvioAsync(empresa, t), ct);
+/// var resultado = await alta.EjecutarAsync(empresa, ct);
 /// </code>
 /// </example>
 public sealed partial class AltaEmpresaApi(
@@ -30,9 +38,11 @@ public sealed partial class AltaEmpresaApi(
     /// <summary>Detalle técnico de un alta que no se intentó porque la compañía no tiene AdminCompany activo (D-EMAIL).</summary>
     public const string DetalleSinAdmin = "SIN_ADMIN";
 
-    public async Task<ResultadoEvaluacion> EjecutarAsync(Guid empresa, Func<CancellationToken, Task> antesDelEnvio, CancellationToken ct)
+    /// <summary>Detalle técnico de un 409 del alta: el contrato idempotente no lo emite (plan §5.8 punto 1).</summary>
+    public const string DetalleContratoInesperado = "ALTA_409_CONTRATO_INESPERADO";
+
+    public async Task<ResultadoEvaluacion> EjecutarAsync(Guid empresa, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(antesDelEnvio);
         DatosAltaProveedor datos;
         try
         {
@@ -41,7 +51,7 @@ public sealed partial class AltaEmpresaApi(
         catch (IdentidadNoDisponibleException ex)
         {
             IdentidadCaida(log, empresa, ex.Message);
-            return new ResultadoEvaluacion(EventoAprovisionamiento.NoSalio, MotivosAprovisionamiento.ReintentoProgramado);
+            return Reintento();
         }
 
         if (datos.EstadoNit != EstadoNitAlta.Valido)
@@ -64,7 +74,7 @@ public sealed partial class AltaEmpresaApi(
 
         try
         {
-            // Sin base ni token no se marca ni se llama: es configuración del ambiente.
+            // Sin base ni token no se llama: es configuración del ambiente.
             _ = opciones.Value.BaseValidada();
             _ = opciones.Value.TokenValidado();
         }
@@ -74,36 +84,50 @@ public sealed partial class AltaEmpresaApi(
             return new ResultadoEvaluacion(EventoAprovisionamiento.AltaAmbienteInvalido, MotivosAprovisionamiento.AmbienteNoConfigurado);
         }
 
-        await antesDelEnvio(ct).ConfigureAwait(false);
         var r = await api.CrearEmpresaAsync(new AltaEmpresaPeticion(datos.LegalName, datos.TaxIdBase, datos.ContactEmail), ct).ConfigureAwait(false);
         Respondio(log, empresa, r.Clase, r.Status, r.CodigoError);
         if (r.Exitoso)
         {
             var alta = r.Valor!;
             if (string.IsNullOrEmpty(alta.ApiKey))
-                return new ResultadoEvaluacion(EventoAprovisionamiento.Incierto, MotivosAprovisionamiento.AltaSinConfirmar);
+                return Reintento();
+            var rotada = alta.ApiKeyRotated == true;
+            Leida(log, empresa, alta.Created, rotada, alta.Company?.Active, alta.Company?.HasWebhookSecret, alta.Company?.TaxIdDv is not null);
             var credenciales = new CredencialesEnClaro(alta.ApiKey, string.IsNullOrEmpty(alta.WebhookSecret) ? null : alta.WebhookSecret, alta.Company?.Id);
+            if (alta.Company?.Active == false)
+            {
+                return new ResultadoEvaluacion(EventoAprovisionamiento.AltaAmbienteInvalido, MotivosAprovisionamiento.EmpresaInactivaEnProveedor, credenciales, OrigenCredencial.Alta)
+                {
+                    ClaveRotada = rotada,
+                };
+            }
+
             return credenciales.WebhookSecret is null
-                ? new ResultadoEvaluacion(EventoAprovisionamiento.CredencialPropiaValidaSinSecreto, MotivosAprovisionamiento.SinWebhookSecret, credenciales, OrigenCredencial.Alta)
-                : new ResultadoEvaluacion(EventoAprovisionamiento.Alta201, null, credenciales, OrigenCredencial.Alta);
+                ? new ResultadoEvaluacion(EventoAprovisionamiento.CredencialPropiaValidaSinSecreto, MotivosAprovisionamiento.SinWebhookSecret, credenciales, OrigenCredencial.Alta) { ClaveRotada = rotada }
+                : new ResultadoEvaluacion(EventoAprovisionamiento.Alta201, null, credenciales, OrigenCredencial.Alta) { ClaveRotada = rotada };
         }
 
         return r.Clase switch
         {
-            ClaseEnvio.NoSalio => new ResultadoEvaluacion(EventoAprovisionamiento.NoSalio, MotivosAprovisionamiento.ReintentoProgramado),
-            ClaseEnvio.Incierto => new ResultadoEvaluacion(EventoAprovisionamiento.Incierto, MotivosAprovisionamiento.AltaSinConfirmar),
+            // Guía §3: si se corta por timeout o falla con 5xx, se reintenta con el mismo cuerpo; no duplica la empresa.
+            ClaseEnvio.NoSalio or ClaseEnvio.Incierto => Reintento(),
             _ => r.Status switch
             {
-                StatusCodes.Status409Conflict => new ResultadoEvaluacion(EventoAprovisionamiento.Alta409, MotivosAprovisionamiento.EmpresaYaRegistrada),
+                StatusCodes.Status409Conflict => new ResultadoEvaluacion(EventoAprovisionamiento.Alta409, MotivosAprovisionamiento.AmbienteNoConfigurado)
+                {
+                    Detalle = DetalleContratoInesperado,
+                },
                 StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden or StatusCodes.Status404NotFound =>
                     new ResultadoEvaluacion(EventoAprovisionamiento.AltaAmbienteInvalido, MotivosAprovisionamiento.AmbienteNoConfigurado),
-                StatusCodes.Status429TooManyRequests => new ResultadoEvaluacion(EventoAprovisionamiento.NoSalio, MotivosAprovisionamiento.ReintentoProgramado),
+                StatusCodes.Status429TooManyRequests => Reintento(),
                 >= 400 and < 500 => new ResultadoEvaluacion(EventoAprovisionamiento.AltaDatosInvalidos, MotivosAprovisionamiento.AltaDatosRechazados),
-                // Un 2xx sin el cuerpo esperado o un 1xx/3xx: el alta pudo hacerse.
-                _ => new ResultadoEvaluacion(EventoAprovisionamiento.Incierto, MotivosAprovisionamiento.AltaSinConfirmar),
+                // Un 2xx sin el cuerpo esperado o un 1xx/3xx: repetir el alta es seguro.
+                _ => Reintento(),
             },
         };
     }
+
+    private static ResultadoEvaluacion Reintento() => new(EventoAprovisionamiento.NoSalio, MotivosAprovisionamiento.ReintentoProgramado);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudieron pedir a Identidad los datos del alta de la empresa {Empresa} ({Motivo}); se reintenta.")]
     private static partial void IdentidadCaida(ILogger logger, Guid empresa, string motivo);
@@ -116,4 +140,7 @@ public sealed partial class AltaEmpresaApi(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Alta en el API de la empresa {Empresa}: {Clase}, estado {Status}, código {Codigo}.")]
     private static partial void Respondio(ILogger logger, Guid empresa, ClaseEnvio clase, int? status, string? codigo);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Alta de la empresa {Empresa} con credenciales: created {Creada}, api_key_rotated {Rotada}, active {Activa}, has_webhook_secret {ConSecreto}, con tax_id_dv {ConDv}.")]
+    private static partial void Leida(ILogger logger, Guid empresa, bool? creada, bool rotada, bool? activa, bool? conSecreto, bool conDv);
 }

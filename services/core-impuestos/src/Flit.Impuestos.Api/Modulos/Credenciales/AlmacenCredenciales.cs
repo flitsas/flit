@@ -10,8 +10,19 @@ namespace Flit.Impuestos.Api.Modulos.Credenciales;
 /// </summary>
 public sealed record CredencialesEnClaro(string ApiKey, string? WebhookSecret, string? EmpresaApiId = null)
 {
+    /// <summary>
+    /// El secreto de webhook anterior, solo mientras dura su ventana (<see cref="AlmacenCredenciales.VentanaSecretoAnterior"/>);
+    /// null fuera de ella. Al escribir no se usa: lo decide el almacén al comparar el secreto nuevo con el guardado.
+    /// </summary>
+    public string? WebhookSecretAnterior { get; init; }
+
+    /// <summary>Secretos con los que se verifica un aviso, en orden: el vigente y, si está en su ventana, el anterior (M10).</summary>
+    public IReadOnlyList<string> SecretosDeVerificacion() =>
+        WebhookSecret is null ? [] : WebhookSecretAnterior is null ? [WebhookSecret] : [WebhookSecret, WebhookSecretAnterior];
+
     public override string ToString() =>
-        $"CredencialesEnClaro {{ ApiKey = [REDACTADO], WebhookSecret = {(WebhookSecret is null ? "null" : "[REDACTADO]")}, EmpresaApiId = {EmpresaApiId} }}";
+        $"CredencialesEnClaro {{ ApiKey = [REDACTADO], WebhookSecret = {(WebhookSecret is null ? "null" : "[REDACTADO]")}, " +
+        $"WebhookSecretAnterior = {(WebhookSecretAnterior is null ? "null" : "[REDACTADO]")}, EmpresaApiId = {EmpresaApiId} }}";
 }
 
 /// <summary>
@@ -38,6 +49,13 @@ public sealed class AlmacenCredenciales(DbContextOptions<ImpuestosDb> opciones, 
 
     /// <summary>Por debajo de este largo no se guarda prefijo: sería casi toda la llave.</summary>
     public const int LargoMinimoParaPrefijo = 16;
+
+    /// <summary>
+    /// Cuánto se sigue aceptando el secreto de webhook anterior tras recibir uno distinto (guía del proveedor §6: la rotación la
+    /// hace el proveedor y los avisos en reintento salen firmados con el nuevo, pero alguno puede venir ya firmado con el
+    /// anterior). Plan §5.8 punto 7.
+    /// </summary>
+    public static readonly TimeSpan VentanaSecretoAnterior = TimeSpan.FromHours(24);
 
     /// <summary>Contexto con <paramref name="empresa"/> fijada: filtra y valida la escritura como una petición de esa compañía.</summary>
     public ImpuestosDb ContextoDe(Guid empresa)
@@ -68,16 +86,31 @@ public sealed class AlmacenCredenciales(DbContextOptions<ImpuestosDb> opciones, 
         var fila = await db.Set<CredencialEmpresa>().AsNoTracking().FirstOrDefaultAsync(c => c.TenantId == empresa, ct).ConfigureAwait(false);
         if (fila is null)
             return null;
+        var anteriorVigente = fila.WebhookSecretAnteriorCifrado is not null && fila.WebhookSecretAnteriorHasta is { } hasta && hasta > reloj.GetUtcNow();
         return new CredencialesEnClaro(
             proteccion.DesprotegerCredencial(empresa, CodigosCredencial.ApiKey, fila.ApiKeyCifrada),
             fila.WebhookSecretCifrado is null ? null : proteccion.DesprotegerCredencial(empresa, CodigosCredencial.WebhookSecret, fila.WebhookSecretCifrado),
-            fila.EmpresaApiId);
+            fila.EmpresaApiId)
+        {
+            WebhookSecretAnterior = anteriorVigente
+                ? proteccion.DesprotegerCredencial(empresa, CodigosCredencial.WebhookSecret, fila.WebhookSecretAnteriorCifrado!)
+                : null,
+        };
+    }
+
+    /// <summary>¿El secreto <paramref name="nuevo"/> es distinto del guardado en <paramref name="actual"/>? (false si alguno falta)</summary>
+    public bool CambiaSecreto(CredencialEmpresa? actual, Guid empresa, string? nuevo)
+    {
+        if (actual?.WebhookSecretCifrado is not { } cifrado || nuevo is null)
+            return false;
+        return !string.Equals(proteccion.DesprotegerCredencial(empresa, CodigosCredencial.WebhookSecret, cifrado), nuevo, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Prepara (sin guardar) la fila de la compañía con las credenciales nuevas cifradas: crea la fila si <paramref name="actual"/>
     /// es null; si no, la reemplaza y sube su versión. Sin webhook_secret, el anterior se borra (la carga reemplaza el par). El id
-    /// de empresa del API se conserva si no viene uno nuevo.
+    /// de empresa del API se conserva si no viene uno nuevo. Si llega un secreto distinto del guardado, el guardado pasa (con su
+    /// mismo cifrado) a <c>webhook_secret_anterior_cifrado</c> durante <see cref="VentanaSecretoAnterior"/> (M07b, plan §5.8).
     /// </summary>
     public CredencialEmpresa Escribir(ImpuestosDb db, CredencialEmpresa? actual, Guid empresa, CredencialesEnClaro nuevas, OrigenCredencial origen, Guid? actor)
     {
@@ -90,6 +123,12 @@ public sealed class AlmacenCredenciales(DbContextOptions<ImpuestosDb> opciones, 
             throw new ArgumentException("La fila actual es de otra compañía.", nameof(actual));
 
         var fila = actual ?? new CredencialEmpresa { TenantId = empresa, Version = 0 };
+        if (CambiaSecreto(actual, empresa, nuevas.WebhookSecret))
+        {
+            fila.WebhookSecretAnteriorCifrado = actual!.WebhookSecretCifrado;
+            fila.WebhookSecretAnteriorHasta = reloj.GetUtcNow() + VentanaSecretoAnterior;
+        }
+
         fila.ApiKeyCifrada = proteccion.ProtegerCredencial(empresa, CodigosCredencial.ApiKey, nuevas.ApiKey);
         fila.ApiKeyPrefijo = Prefijo(nuevas.ApiKey);
         fila.WebhookSecretCifrado = nuevas.WebhookSecret is null

@@ -17,20 +17,25 @@ namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 public sealed record ResultadoEvaluacion(EventoAprovisionamiento Evento, string? Motivo, CredencialesEnClaro? Credenciales = null, OrigenCredencial? Origen = null)
 {
     public string? Detalle { get; init; }
+
+    /// <summary>El alta respondió <c>api_key_rotated=true</c>: la llave anterior dejó de servir (M07b, D-ALTA-IDEM).</summary>
+    public bool ClaveRotada { get; init; }
 }
 
 /// <summary>
-/// Evalúa el aprovisionamiento de una compañía en <c>PENDIENTE</c> (plan §2.1 y §3.1; D-CRED-DIAG, D-ALTA-REINTENTOS, DA-2=b):
+/// Evalúa el aprovisionamiento de una compañía en <c>PENDIENTE</c> (plan §2.1, §3.1 y §5.8; M07b, D-ALTA-IDEM, DA-2=b):
 /// <list type="number">
 ///   <item>Reserva la compañía con un <c>UPDATE</c> condicionado (estado <c>PENDIENTE</c> y espera vencida): entre réplicas o
 ///   rondas solo una la evalúa, y la reserva vence a los <see cref="Reserva"/> si el proceso cae antes de terminar.</item>
-///   <item>Si la marca <see cref="MarcaAltaEnviada"/> quedó de un intento anterior (el proceso cayó con el alta en el aire), pasa a
-///   <c>INCIERTO</c> sin volver a enviar: el alta pudo hacerse.</item>
-///   <item>Si no, <see cref="EvaluadorCredencialesExistentes"/> (credencial propia, luego copia de Diagnóstico) y, si no hay
-///   ninguna, <see cref="AltaEmpresaApi"/>, que registra la marca ANTES del POST.</item>
-///   <item>Aplica la transición en UNA transacción: estado, motivo, versión, historial y, si hay, la credencial cifrada (el 201
-///   del alta trae la api_key y el secreto una sola vez). «No salió» deja <c>PENDIENTE</c> con la espera de
-///   <see cref="EsperaReintento"/> (1, 5, 15 y 60 min) hasta el máximo del dominio; luego <c>ERROR(AMBIENTE)</c>.</item>
+///   <item>Llama SIEMPRE primero al alta idempotente (<see cref="AltaEmpresaApi"/>): repetirla es seguro y devuelve las mismas
+///   credenciales, así que ya no hay marca del envío ni <c>INCIERTO</c> desde el alta.</item>
+///   <item>Si el alta no deja credenciales, no es un 409 y no le quedan reintentos automáticos (o no se pudo hacer: NIT, datos,
+///   ambiente), usa de respaldo <see cref="EvaluadorCredencialesExistentes"/> (credencial propia, luego copia de Diagnóstico).
+///   Si tampoco hay, queda el resultado del alta.</item>
+///   <item>Aplica la transición en UNA transacción: estado, motivo, versión, historial y, si hay, la credencial cifrada con
+///   <see cref="GuardadoCredencialAlta"/> (llave rotada: historial <c>CLAVE_ROTADA</c> y propagación a Diagnóstico por la
+///   outbox). «No salió» deja <c>PENDIENTE</c> con la espera de <see cref="EsperaReintento"/> (1, 5, 15 y 60 min) hasta el máximo
+///   del dominio; luego <c>ERROR(AMBIENTE)</c>.</item>
 ///   <item>Reporta a la plataforma (<see cref="ReportadorEstado"/>); si no puede, la ronda siguiente lo reintenta.</item>
 /// </list>
 /// Si la plataforma suspendió la compañía mientras se evaluaba, no pisa <c>SUSPENDIDO</c>; una credencial nueva se guarda igual y
@@ -47,12 +52,10 @@ public sealed partial class Aprovisionador(
     EvaluadorCredencialesExistentes evaluador,
     AltaEmpresaApi alta,
     ReportadorEstado reportador,
+    GuardadoCredencialAlta guardado,
     TimeProvider reloj,
     ILogger<Aprovisionador> log)
 {
-    /// <summary>Marca en <c>motivo_detalle</c>: el alta salió y todavía no se guardó su respuesta.</summary>
-    public const string MarcaAltaEnviada = "ALTA_ENVIADA";
-
     public const string ActorSistema = "SISTEMA";
 
     /// <summary>Motivo de la métrica de alertas para un error de ambiente.</summary>
@@ -69,7 +72,7 @@ public sealed partial class Aprovisionador(
     public async Task<bool> EvaluarAsync(Guid empresa, CancellationToken ct)
     {
         var ahora = reloj.GetUtcNow();
-        bool altaEnElAire;
+        int intentos;
         await using (var db = almacen.ContextoDe(empresa))
         {
             var hasta = ahora + Reserva;
@@ -78,27 +81,34 @@ public sealed partial class Aprovisionador(
                 .ExecuteUpdateAsync(s => s.SetProperty(a => a.ProximoIntentoEn, hasta), ct).ConfigureAwait(false);
             if (reservadas == 0)
                 return false;
-            altaEnElAire = await db.Set<AprovisionamientoEmpresa>().AsNoTracking()
-                .Where(a => a.TenantId == empresa).Select(a => a.MotivoDetalle).SingleAsync(ct).ConfigureAwait(false) == MarcaAltaEnviada;
+            intentos = await db.Set<AprovisionamientoEmpresa>().AsNoTracking()
+                .Where(a => a.TenantId == empresa).Select(a => a.IntentosAutomaticos).SingleAsync(ct).ConfigureAwait(false);
         }
 
-        var resultado = altaEnElAire
-            ? new ResultadoEvaluacion(EventoAprovisionamiento.Incierto, MotivosAprovisionamiento.AltaSinConfirmar)
-            : await evaluador.EvaluarAsync(empresa, ct).ConfigureAwait(false)
-              ?? await alta.EjecutarAsync(empresa, t => MarcarEnvioAsync(empresa, t), ct).ConfigureAwait(false);
+        var resultado = await alta.EjecutarAsync(empresa, ct).ConfigureAwait(false);
+        if (UsaRespaldo(resultado, intentos))
+        {
+            var existente = await evaluador.EvaluarAsync(empresa, ct).ConfigureAwait(false);
+            if (existente is not null)
+            {
+                Respaldo(log, empresa, resultado.Evento, existente.Evento);
+                resultado = existente;
+            }
+        }
+
         await AplicarAsync(empresa, resultado, ct).ConfigureAwait(false);
         await reportador.ReportarAsync(empresa, ct).ConfigureAwait(false);
         return true;
     }
 
-    /// <summary>Registra (y guarda) que el alta va a salir, antes del POST.</summary>
-    private async Task MarcarEnvioAsync(Guid empresa, CancellationToken ct)
-    {
-        await using var db = almacen.ContextoDe(empresa);
-        await db.Set<AprovisionamientoEmpresa>()
-            .Where(a => a.TenantId == empresa && a.Estado == EstadoAprovisionamiento.Pendiente)
-            .ExecuteUpdateAsync(s => s.SetProperty(a => a.MotivoDetalle, MarcaAltaEnviada), ct).ConfigureAwait(false);
-    }
+    /// <summary>
+    /// D-ALTA-IDEM: las credenciales existentes (propia o copia de Diagnóstico) solo son respaldo de un alta que no las dio. No en
+    /// un 409 (contrato inesperado, tiene que verse) ni mientras el alta tenga reintentos automáticos.
+    /// </summary>
+    internal static bool UsaRespaldo(ResultadoEvaluacion alta, int intentos) =>
+        alta.Credenciales is null
+        && alta.Evento != EventoAprovisionamiento.Alta409
+        && (alta.Evento != EventoAprovisionamiento.NoSalio || intentos >= TransicionesAprovisionamiento.MaximoIntentosAutomaticos);
 
     private async Task AplicarAsync(Guid empresa, ResultadoEvaluacion resultado, CancellationToken ct)
     {
@@ -130,7 +140,7 @@ public sealed partial class Aprovisionador(
         fila.ActualizadoEn = ahora;
         if (resultado.Credenciales is not null)
         {
-            var credencial = almacen.Escribir(db, await almacen.FilaAsync(db, empresa, ct).ConfigureAwait(false), empresa, resultado.Credenciales, resultado.Origen!.Value, null);
+            var (credencial, _) = await guardado.EscribirAsync(db, empresa, resultado, ct).ConfigureAwait(false);
             fila.ActualizadoEn = credencial.ActualizadoEn;
             if (resultado.Credenciales.WebhookSecret is not null)
             {
@@ -148,6 +158,8 @@ public sealed partial class Aprovisionador(
             ActorTipo = ActorSistema,
             En = fila.ActualizadoEn,
         });
+        if (resultado.Credenciales is not null)
+            guardado.TrasEscribir(db, empresa, resultado, fila.Estado, fila.ActualizadoEn);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         Evaluada(log, empresa, desde, fila.Estado, fila.MotivoCodigo);
         if (transicion.Alerta || (fila.Estado == EstadoAprovisionamiento.Error && fila.ErrorTipo == TipoErrorAprovisionamiento.Ambiente))
@@ -166,7 +178,8 @@ public sealed partial class Aprovisionador(
         fila.MotivoDetalle = null;
         if (resultado.Credenciales is not null)
         {
-            almacen.Escribir(db, await almacen.FilaAsync(db, empresa, ct).ConfigureAwait(false), empresa, resultado.Credenciales, resultado.Origen!.Value, null);
+            var (credencial, _) = await guardado.EscribirAsync(db, empresa, resultado, ct).ConfigureAwait(false);
+            guardado.TrasEscribir(db, empresa, resultado, fila.Estado, credencial.ActualizadoEn);
             var listo = TransicionesAprovisionamiento.Aplicar(new SituacionAprovisionamiento(EstadoAprovisionamiento.Pendiente), resultado.Evento).Nueva.Estado!.Value;
             if (fila.Estado == EstadoAprovisionamiento.Suspendido && TransicionesAprovisionamiento.Liquida(listo))
                 fila.EstadoPrevio = listo;
@@ -185,6 +198,9 @@ public sealed partial class Aprovisionador(
     [LoggerMessage(Level = LogLevel.Error, Message = "ALERTA operativa: el aprovisionamiento de la empresa {Empresa} quedó en {Estado} (motivo {Motivo}); revise la integración del ambiente.")]
     private static partial void Alerta(ILogger logger, Guid empresa, EstadoAprovisionamiento estado, string? motivo);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "El alta de la empresa {Empresa} no dejó credenciales ({Alta}); se usan las existentes de respaldo ({Respaldo}).")]
+    private static partial void Respaldo(ILogger logger, Guid empresa, EventoAprovisionamiento alta, EventoAprovisionamiento respaldo);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "El aprovisionamiento de la empresa {Empresa} cambió a {Estado} mientras se evaluaba; no se pisa (credencial guardada: {ConCredencial}).")]
     private static partial void Concurrente(ILogger logger, Guid empresa, EstadoAprovisionamiento estado, bool conCredencial);
 }
@@ -194,6 +210,9 @@ public static class AprovisionamientoExtensions
 {
     /// <summary>Plazo de cada rpc de Identidad del aprovisionamiento.</summary>
     public static readonly TimeSpan PlazoIdentidad = TimeSpan.FromSeconds(10);
+
+    /// <summary>Scopes del cliente de <c>CredencialesProductoService</c> (separados por espacio; Identidad valida cada rpc por el suyo).</summary>
+    public const string ScopesCredencialesProducto = "platform.identidad.credenciales.impuesto.copia platform.identidad.credenciales.impuesto.actualizar";
 
     /// <summary>
     /// Servicios del aprovisionamiento, el consumidor de <see cref="ConsumidorCambioProducto.Cola"/> (los dos trabajos de la
@@ -210,8 +229,9 @@ public static class AprovisionamientoExtensions
             var direccion = new Uri(identidad);
             // EmpresasService: un solo registro compartido con el backoffice (M13), con los scopes de los dos módulos.
             Backoffice.BackofficeImpuestosExtensions.AddClienteEmpresasIdentidad(services, configuration);
+            // Un solo cliente para los dos rpc de Impuestos (copia y, M07b, reemplazo tras rotación): token con los dos scopes.
             services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.CredencialesProductoService.CredencialesProductoServiceClient>(
-                configuration, direccion, "platform.identidad.credenciales.impuesto.copia", o => o.Deadline = PlazoIdentidad);
+                configuration, direccion, ScopesCredencialesProducto, o => o.Deadline = PlazoIdentidad);
             services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.AprovisionamientoProductoService.AprovisionamientoProductoServiceClient>(
                 configuration, direccion, "platform.aprovisionamiento.reportar", o => o.Deadline = PlazoIdentidad);
             services.TryAddScoped<IClienteIdentidadAlta, ClienteIdentidadAltaGrpc>();
@@ -223,6 +243,7 @@ public static class AprovisionamientoExtensions
 
         services.AddScoped<EvaluadorCredencialesExistentes>();
         services.AddScoped<AltaEmpresaApi>();
+        services.AddScoped<GuardadoCredencialAlta>();
         services.AddScoped<ReportadorEstado>();
         services.AddScoped<Aprovisionador>();
         services.AddScoped<ConsumidorReintentoAprovisionamiento>();
@@ -236,6 +257,14 @@ public static class AprovisionamientoExtensions
                 foreach (var productor in ConsumidorCambioProducto.Productores)
                     o.ProductoresPermitidos.Add(productor);
             });
+        // M07b: trabajos internos de credenciales (propagar una llave rotada a Diagnóstico y refrescar el secreto del webhook),
+        // que el propio servicio deja en su outbox; solo los acepta de sí mismo.
+        services.AddFlitConsumer<ImpuestosDb, ConsumidorCredenciales, JsonElement>(
+            configuration,
+            ConsumidorCredenciales.Cola,
+            ConsumidorCambioProducto.Exchange,
+            [ConsumidorCredenciales.TipoPropagar, ConsumidorCredenciales.TipoRefrescarSecreto],
+            o => o.ProductoresPermitidos.Add(ConsumidorCredenciales.Productor));
         if (configuration.GetValue(TrabajadorReintentoAlta.ActivoKey, true))
             services.AddHostedService<TrabajadorReintentoAlta>();
         return services;

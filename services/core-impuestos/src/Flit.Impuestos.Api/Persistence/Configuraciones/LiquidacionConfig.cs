@@ -53,11 +53,20 @@ public sealed class Liquidacion : IEntidadDeEmpresa
 
     public Guid CreadaPor { get; set; }
 
+    /// <summary>Nombre de quien la creó tal como venía en su token al crearla (1.2.0; lo escribe M09). Solo para mostrar.</summary>
+    public string? CreadaPorNombre { get; set; }
+
     public DateTimeOffset CreadaEn { get; set; }
 
     public DateTimeOffset? TerminadaEn { get; set; }
 
     public Guid? CerradaPor { get; set; }
+
+    /// <summary>Nombre de quien la cerró tal como venía en su token al cerrarla (1.2.0; lo escribe M12). Solo para mostrar.</summary>
+    public string? CerradaPorNombre { get; set; }
+
+    /// <summary>Por qué se cerró (<c>Liquidacion.motivoCierre</c> de impuestos.v1.yaml 1.1.0; lo escribe M12). Texto, no un código.</summary>
+    public string? MotivoCierre { get; set; }
 
     public DateTimeOffset? CerradaEn { get; set; }
 
@@ -83,6 +92,9 @@ internal sealed class LiquidacionConfig : IEntityTypeConfiguration<Liquidacion>
         builder.Property(x => x.Tipo).HasConversion(CodigosDeEnum.Convertidor<TipoLiquidacion>()).HasMaxLength(12);
         builder.Property(x => x.Estado).HasConversion(CodigosDeEnum.Convertidor<EstadoLote>()).HasMaxLength(28);
         builder.Property(x => x.NombreArchivo).HasMaxLength(200);
+        builder.Property(x => x.CreadaPorNombre).HasMaxLength(200).HasComment("Nombre del actor según su token al crear (1.2.0).");
+        builder.Property(x => x.CerradaPorNombre).HasMaxLength(200).HasComment("Nombre del actor según su token al cerrar (1.2.0).");
+        builder.Property(x => x.MotivoCierre).HasMaxLength(300);
         foreach (var contador in new[]
                  {
                      nameof(Liquidacion.CExitosas), nameof(Liquidacion.CConDeuda), nameof(Liquidacion.CPazYSalvo), nameof(Liquidacion.CError),

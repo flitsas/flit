@@ -1,7 +1,7 @@
 asyncapi: '2.6.0'
 info:
   title: FLIT — trabajos y eventos de Impuestos
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Mensajes del exchange `flit.impuestos` (producto Impuestos, core-impuestos; ADR-0093, plan
     docs/impuestos/plan-implementacion.md §5.5). Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos
@@ -15,6 +15,9 @@ info:
       necesitan permiso de escritura en `flit.impuestos` (gate LT G-8). Los consume la cola `impuestos.plataforma`.
     - Eventos internos de core-impuestos (`impuestos.liquidacion.solicitada` e `impuestos.recibos.descargar`) que el
       propio servicio publica por su outbox y consume en sus colas `impuestos.liquidaciones` e `impuestos.recibos`.
+    - 1.1.0 (HU #14694 M07b, plan §5.8): trabajos internos de credenciales `impuestos.credencial.propagar` e
+      `impuestos.secreto.refrescar`, que el servicio deja en su outbox y consume en la cola `impuestos.credenciales` (solo
+      del productor `impuestos`). Solo llevan la empresa: la llave y el secreto nunca viajan por el bus.
 
     El correo «Lote terminado» no es de este exchange: core-impuestos deja el trabajo `notificaciones.email.send`
     (notificaciones-events.v1.yaml) en `flit.notificaciones`, con el correo ya armado y sin datos del propietario.
@@ -84,6 +87,35 @@ channels:
       message:
         $ref: '#/components/messages/RecibosDescargar'
 
+  impuestos.credencial.propagar:
+    description: |
+      Trabajo interno (1.1.0, D-ALTA-IDEM). El alta del proveedor respondió `api_key_rotated=true` y la llave anterior ya
+      no sirve: se lee la llave vigente cifrada y se reemplaza la de Diagnóstico con el rpc de Identidad
+      `CredencialesProductoService.ActualizarCredencialImpuestoDiagnostico` (solo si Diagnóstico tenía llave). Se encola
+      en la misma transacción que guarda la llave nueva. Reintentos del SDK si Identidad no responde.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: credencialPropagar
+      message:
+        $ref: '#/components/messages/CredencialPropagar'
+
+  impuestos.secreto.refrescar:
+    description: |
+      Trabajo interno (1.1.0, plan §5.8 punto 7). Se encendió `modo_respaldo_firma` (5 firmas inválidas seguidas): un alta
+      idempotente trae el `webhook_secret` vigente. Si cambió, el anterior se conserva 24 h para verificar avisos y se
+      apaga el modo respaldo. Reintentos del SDK si el alta no responde.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: secretoRefrescar
+      message:
+        $ref: '#/components/messages/SecretoRefrescar'
+
 components:
   messages:
     ProductoCambiado:
@@ -147,3 +179,31 @@ components:
                 required: [itemId]
                 properties:
                   itemId: { type: string, format: uuid, description: "Ítem con resultado aplicado (impuestos.liquidacion_items)." }
+    CredencialPropagar:
+      name: impuestos.credencial.propagar
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [impuestos] }
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId]
+                properties:
+                  tenantId: { type: string, format: uuid, description: "La empresa del sobre; nunca la llave." }
+    SecretoRefrescar:
+      name: impuestos.secreto.refrescar
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [impuestos] }
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId]
+                properties:
+                  tenantId: { type: string, format: uuid, description: "La empresa del sobre; nunca el secreto." }

@@ -6,13 +6,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 
 /// <summary>
-/// Motivos del estado del aprovisionamiento (<c>MotivoAprovisionamiento</c> de <c>impuestos.v1.yaml</c> 1.1.0) con su literal,
+/// Motivos del estado del aprovisionamiento (<c>MotivoAprovisionamiento</c> de <c>impuestos.v1.yaml</c> 1.2.0) con su literal,
 /// que es el <c>mensaje</c> que se reporta a la plataforma (el admin de compañías y el backoffice muestran el mismo texto), y la
 /// acción del Super Admin que corresponde a cada estado (<c>AccionAprovisionamiento</c>).
 /// </summary>
 /// <example>
 /// <code>
-/// var texto = MotivosAprovisionamiento.Literales[MotivosAprovisionamiento.EmpresaYaRegistrada];
+/// var texto = MotivosAprovisionamiento.Literales[MotivosAprovisionamiento.EmpresaInactivaEnProveedor];
 /// var accion = MotivosAprovisionamiento.Accion(EstadoAprovisionamiento.RequiereCredenciales); // "CARGAR_CREDENCIALES"
 /// </code>
 /// </example>
@@ -32,6 +32,12 @@ public static class MotivosAprovisionamiento
     public const string NitIgualACabeza = "NIT_IGUAL_A_CABEZA";
     public const string ProductoDesactivado = "PRODUCTO_DESACTIVADO";
 
+    /// <summary>1.2.0 (M07b): el alta trajo las credenciales con <c>company.active=false</c>.</summary>
+    public const string EmpresaInactivaEnProveedor = "EMPRESA_INACTIVA_EN_PROVEEDOR";
+
+    /// <summary>1.2.0 (M07b): el alta respondió <c>api_key_rotated=true</c> y se reemplazó la llave (historial).</summary>
+    public const string ClaveRotada = "CLAVE_ROTADA";
+
     /// <summary>Literales exactos de <c>x-flit-etiquetas</c> (≤ 300 caracteres, sin datos de la compañía).</summary>
     public static IReadOnlyDictionary<string, string> Literales { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -48,7 +54,15 @@ public static class MotivosAprovisionamiento
         [NitAmbiguo] = "No se puede separar el dígito de verificación del NIT.",
         [NitIgualACabeza] = "El NIT es el mismo de su compañía cabeza.",
         [ProductoDesactivado] = "Impuestos está desactivado para la compañía.",
+        [EmpresaInactivaEnProveedor] = "El proveedor tiene la compañía desactivada: pide su reactivación y luego reintenta.",
+        [ClaveRotada] = "El proveedor reemplazó la API key de la compañía; la nueva quedó guardada.",
     };
+
+    /// <summary>
+    /// Retirados en 1.2.0 (alta idempotente, plan §5.8): ningún flujo los emite, pero el literal se conserva porque el historial
+    /// puede traerlos.
+    /// </summary>
+    public static IReadOnlyList<string> Retirados { get; } = [EmpresaYaRegistrada, AltaSinConfirmar];
 
     /// <summary>¿Es un código del contrato? (el historial puede tener códigos internos, p. ej. <c>CARGA_MANUAL</c> de M06).</summary>
     public static bool EsDelContrato(string? codigo) => codigo is not null && Literales.ContainsKey(codigo);

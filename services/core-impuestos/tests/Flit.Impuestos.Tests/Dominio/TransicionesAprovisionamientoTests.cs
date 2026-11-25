@@ -80,7 +80,6 @@ public sealed class TransicionesAprovisionamientoTests
     [InlineData(V.CredencialRechazada, E.RequiereCredenciales)]
     [InlineData(V.NitNoValido, E.RequiereRevisionNit)]
     [InlineData(V.Alta201, E.Listo)]
-    [InlineData(V.Alta409, E.RequiereCredenciales)]
     [InlineData(V.Incierto, E.Incierto)]
     public void Desde_pendiente(V evento, E hacia)
     {
@@ -99,6 +98,16 @@ public sealed class TransicionesAprovisionamientoTests
         r.Nueva.Estado.Should().Be(E.Error);
         r.Nueva.TipoError.Should().Be(TipoErrorAprovisionamiento.Datos);
         r.Alerta.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Alta_409_es_un_contrato_inesperado_error_de_ambiente_con_alerta()
+    {
+        var r = TransicionesAprovisionamiento.Aplicar(En(E.Pendiente), V.Alta409);
+
+        r.Nueva.Estado.Should().Be(E.Error, "M07b: el alta idempotente no da 409; si aparece es del ambiente");
+        r.Nueva.TipoError.Should().Be(TipoErrorAprovisionamiento.Ambiente);
+        r.Alerta.Should().BeTrue();
     }
 
     [Fact]
@@ -134,6 +143,7 @@ public sealed class TransicionesAprovisionamientoTests
     [InlineData(E.Error)]
     [InlineData(E.Incierto)]
     [InlineData(E.RequiereRevisionNit)]
+    [InlineData(E.ListoSinWebhook)]
     public void Reintentar_vuelve_a_pendiente_y_reinicia_los_intentos(E desde)
     {
         var r = TransicionesAprovisionamiento.Aplicar(new SituacionAprovisionamiento(desde, null, 5, false, TipoErrorAprovisionamiento.Ambiente), V.Reintentar);

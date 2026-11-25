@@ -259,6 +259,16 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasDefaultValue(1L)
                         .HasColumnName("version");
 
+                    b.Property<byte[]>("WebhookSecretAnteriorCifrado")
+                        .HasColumnType("bytea")
+                        .HasColumnName("webhook_secret_anterior_cifrado")
+                        .HasComment("@secret Data Protection, purpose impuestos.credenciales.v1.{tenant}.webhook_secret. Secreto anterior durante la ventana de rotación.");
+
+                    b.Property<DateTimeOffset?>("WebhookSecretAnteriorHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("webhook_secret_anterior_hasta")
+                        .HasComment("Fin de la ventana en la que se acepta el secreto anterior (24 h).");
+
                     b.Property<byte[]>("WebhookSecretCifrado")
                         .HasColumnType("bytea")
                         .HasColumnName("webhook_secret_cifrado")
@@ -464,6 +474,12 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("cerrada_por");
 
+                    b.Property<string>("CerradaPorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cerrada_por_nombre")
+                        .HasComment("Nombre del actor según su token al cerrar (1.2.0).");
+
                     b.Property<string>("ConfigCopia")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -478,11 +494,22 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("creada_por");
 
+                    b.Property<string>("CreadaPorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("creada_por_nombre")
+                        .HasComment("Nombre del actor según su token al crear (1.2.0).");
+
                     b.Property<string>("Estado")
                         .IsRequired()
                         .HasMaxLength(28)
                         .HasColumnType("character varying(28)")
                         .HasColumnName("estado");
+
+                    b.Property<string>("MotivoCierre")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("motivo_cierre");
 
                     b.Property<string>("NombreArchivo")
                         .HasMaxLength(200)
@@ -681,6 +708,11 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
                         .HasColumnName("secretaria_ciudad");
+
+                    b.Property<string>("SecretariaNombre")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("secretaria_nombre");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

@@ -85,8 +85,8 @@ internal static class EmpresasBackofficeEndpoints
     /// <summary>La acción del Super Admin para el estado (plan §3.1); null si no hay ninguna.</summary>
     internal static string? Accion(EstadoAprovisionamiento estado) => estado switch
     {
-        EstadoAprovisionamiento.ListoSinWebhook => "CARGAR_SECRETO",
-        EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto => "REINTENTAR",
+        // M07b (1.2.0): el alta idempotente trae el secreto, así que LISTO_SIN_WEBHOOK también se reintenta.
+        EstadoAprovisionamiento.ListoSinWebhook or EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto => "REINTENTAR",
         EstadoAprovisionamiento.RequiereCredenciales => "CARGAR_CREDENCIALES",
         EstadoAprovisionamiento.RequiereRevisionNit => "CORREGIR_NIT",
         _ => null,

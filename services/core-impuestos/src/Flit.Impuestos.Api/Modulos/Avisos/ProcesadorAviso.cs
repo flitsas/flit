@@ -14,9 +14,10 @@ namespace Flit.Impuestos.Api.Modulos.Avisos;
 /// <see cref="ColaAvisos"/> en segundo plano, para responder en menos de 10 s):
 /// <list type="number">
 ///   <item>Token sin la forma (43 caracteres base64url) o cuyo hash no es de ningún ítem: <c>410</c>.</item>
-///   <item>Compañía sin secreto, o firma/timestamp inválidos (<see cref="VerificadorFirma"/>, con el secreto vigente): <c>401</c>.
-///   Con firma inválida cuenta para el modo respaldo: <see cref="FirmasInvalidasParaRespaldo"/> seguidas en
-///   <see cref="VentanaFirmasInvalidas"/> lo encienden.</item>
+///   <item>Compañía sin secreto, o firma/timestamp inválidos (<see cref="VerificadorFirma"/>, con el secreto vigente y, en su
+///   ventana de 24 h, el anterior; M07b): <c>401</c>. Con firma inválida cuenta para el modo respaldo:
+///   <see cref="FirmasInvalidasParaRespaldo"/> seguidas en <see cref="VentanaFirmasInvalidas"/> lo encienden y encolan un alta
+///   para refrescar el secreto.</item>
 ///   <item>Firma válida: otro evento que <c>consulta.finalizada</c> se confirma con <c>200</c> y se ignora, sin cambiar nada. Si
 ///   es el evento, apaga el modo respaldo, confirma la firma (<c>LISTO</c>, F1a-CF11), deduplica por <c>X-Flit-Delivery</c>
 ///   (duplicado ⇒ 200 sin repetir), descarta con alerta un <c>consulta.id</c> distinto del ítem y encola el resto. Siempre 200,
@@ -31,7 +32,13 @@ namespace Flit.Impuestos.Api.Modulos.Avisos;
 /// </code>
 /// </example>
 public sealed partial class ProcesadorAviso(
-    ImpuestosDb db, EmpresaDelTrabajo empresaDelTrabajo, AlmacenCredenciales almacen, ColaAvisos cola, TimeProvider reloj, ILogger<ProcesadorAviso> log)
+    ImpuestosDb db,
+    EmpresaDelTrabajo empresaDelTrabajo,
+    AlmacenCredenciales almacen,
+    ColaAvisos cola,
+    Aprovisionamiento.GuardadoCredencialAlta guardado,
+    TimeProvider reloj,
+    ILogger<ProcesadorAviso> log)
 {
     public const int LargoToken = 43;
     public const int FirmasInvalidasParaRespaldo = 5;
@@ -70,15 +77,15 @@ public sealed partial class ProcesadorAviso(
             return StatusCodes.Status410Gone;
 
         var credenciales = await almacen.LeerAsync(empresa, ct).ConfigureAwait(false);
-        if (credenciales?.WebhookSecret is not { } secreto)
+        if (credenciales?.WebhookSecret is null)
         {
             SinSecreto(log, item.Id);
             return StatusCodes.Status401Unauthorized;
         }
 
         var ahora = reloj.GetUtcNow();
-        // Ventana de rotación: hoy el modelo solo guarda el secreto vigente; el anterior iría detrás en esta lista.
-        var firma = VerificadorFirma.Verificar([secreto], cabeceras.Timestamp, cabeceras.Firma, cuerpo.Span, ahora);
+        // Ventana de rotación (M07b): el vigente y, si no pasaron 24 h desde que cambió, el anterior (guía §6).
+        var firma = VerificadorFirma.Verificar(credenciales.SecretosDeVerificacion(), cabeceras.Timestamp, cabeceras.Firma, cuerpo.Span, ahora);
         if (firma != ResultadoFirma.Valida)
         {
             await FirmaInvalidaAsync(empresa, ahora, ct).ConfigureAwait(false);
@@ -158,6 +165,9 @@ public sealed partial class ProcesadorAviso(
         {
             MetricasImpuestos.ContarAlerta("modo_respaldo_firma");
             RespaldoEncendido(log, empresa);
+            // M07b (plan §5.8 punto 7): el proveedor pudo rotar el secreto; un alta lo trae. Solo al encenderse.
+            guardado.Encolar(db, Aprovisionamiento.ConsumidorCredenciales.TipoRefrescarSecreto, empresa);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
     }
 

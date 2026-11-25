@@ -14,9 +14,9 @@ namespace Flit.Impuestos.Tests.Aprovisionamiento;
 /// <summary>
 /// HU #14694 (M07; F1a-CF5, DA-2=b) — el 201 del alta trae la api_key y el webhook_secret UNA sola vez: la credencial cifrada
 /// (origen <c>ALTA</c>, con el id de la empresa en el API), el paso a <c>LISTO</c>, la versión y el historial se guardan en la
-/// MISMA transacción. Si algo de eso falla no queda nada a medias (ni credencial sin estado ni estado sin credencial) y la marca
-/// del envío, que se registró ANTES del POST, hace que la siguiente evaluación quede en <c>INCIERTO</c> en lugar de repetir el
-/// alta.
+/// MISMA transacción. Si algo de eso falla no queda nada a medias (ni credencial sin estado ni estado sin credencial). Desde M07b
+/// (alta idempotente, plan §5.8) no hay marca del envío: la evaluación siguiente repite el alta y recibe las mismas
+/// credenciales.
 /// </summary>
 /// <example>
 /// <code>
@@ -55,7 +55,7 @@ public sealed class AltaPersisteCredencialesAtomicoTests
     }
 
     [Fact]
-    public async Task El_envio_se_registra_antes_del_POST()
+    public async Task No_se_registra_ninguna_marca_antes_del_POST()
     {
         var ct = TestContext.Current.CancellationToken;
         var empresa = Guid.NewGuid();
@@ -76,12 +76,12 @@ public sealed class AltaPersisteCredencialesAtomicoTests
 
         await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct);
 
-        marcaDuranteElPost.Should().Be(Aprovisionador.MarcaAltaEnviada, "ya guardada (otra conexión la ve) cuando sale el POST");
+        marcaDuranteElPost.Should().BeNull("M07b retiró la marca ALTA_ENVIADA: el alta es idempotente");
         (await EntornoAprovisionamiento.FilaAsync(api, empresa, ct))!.MotivoDetalle.Should().BeNull();
     }
 
     [Fact]
-    public async Task Si_falla_el_guardado_no_queda_credencial_ni_estado_a_medias_y_la_siguiente_evaluacion_es_INCIERTO()
+    public async Task Si_falla_el_guardado_no_queda_credencial_ni_estado_a_medias_y_la_siguiente_evaluacion_repite_el_alta()
     {
         var ct = TestContext.Current.CancellationToken;
         var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.Created, ClienteApiLiquidacionTests.Alta201);
@@ -100,16 +100,26 @@ public sealed class AltaPersisteCredencialesAtomicoTests
             var aprov = await db.Set<AprovisionamientoEmpresa>().AsNoTracking().SingleAsync(ct);
             aprov.Estado.Should().Be(E.Pendiente, "el estado no se guarda sin su credencial");
             aprov.Version.Should().Be(1);
-            aprov.MotivoDetalle.Should().Be(Aprovisionador.MarcaAltaEnviada);
+            aprov.MotivoDetalle.Should().BeNull();
             aprov.ProximoIntentoEn = DateTimeOffset.UtcNow.AddSeconds(-1);
             db.Update(aprov);
             await db.SaveChangesAsync(ct);
         }
 
+        await QuitarRupturaAsync(api, ct);
         await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct);
 
-        (await EntornoAprovisionamiento.FilaAsync(api, empresa, ct))!.Estado.Should().Be(E.Incierto);
-        EntornoAprovisionamiento.Altas(proveedor).Should().Be(1, "el alta no se repite: pudo haberse hecho");
+        (await EntornoAprovisionamiento.FilaAsync(api, empresa, ct))!.Estado.Should().Be(E.Listo);
+        EntornoAprovisionamiento.Altas(proveedor).Should().Be(2, "repetir el alta es seguro: devuelve las mismas credenciales");
+        (await EntornoAprovisionamiento.LeerCredencialAsync(api, empresa, ct))!.ApiKey.Should().Be(ClienteApiLiquidacionTests.ApiKey);
+    }
+
+    private static async Task QuitarRupturaAsync(ApiDePrueba api, CancellationToken ct)
+    {
+        await using var conexion = new NpgsqlConnection(api.BaseDeDatos);
+        await conexion.OpenAsync(ct);
+        await using var comando = new NpgsqlCommand("DROP TRIGGER prueba_rompe_historial ON impuestos.historial_aprovisionamiento", conexion);
+        await comando.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Un trigger de prueba que rechaza el historial hacia LISTO: el guardado del 201 falla en su último paso.</summary>

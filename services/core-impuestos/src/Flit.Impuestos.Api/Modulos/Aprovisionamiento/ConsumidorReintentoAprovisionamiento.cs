@@ -11,7 +11,8 @@ namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 public sealed record AprovisionamientoReintentar(Guid TenantId, Guid SolicitadoPor);
 
 /// <summary>
-/// «Reintentar» del Super Admin (plan §3.1): desde <c>ERROR</c>, <c>INCIERTO</c> o <c>REQUIERE_REVISION_NIT</c> pasa a
+/// «Reintentar» del Super Admin (plan §3.1): desde <c>ERROR</c>, <c>INCIERTO</c>, <c>REQUIERE_REVISION_NIT</c> o (M07b)
+/// <c>LISTO_SIN_WEBHOOK</c>, donde el alta idempotente trae el secreto, pasa a
 /// <c>PENDIENTE</c> sin intentos ni espera (la ronda siguiente lo evalúa), sube la versión y deja historial con actor
 /// <c>SUPER_ADMIN</c> y su id. Llega por dos caminos con la misma regla (<see cref="Reintentar"/>): el trabajo de la plataforma
 /// (admin de compañías, en la transacción del consumidor de <see cref="ConsumidorCambioProducto.Cola"/>; en otro estado o sin fila
@@ -42,7 +43,8 @@ public sealed partial class ConsumidorReintentoAprovisionamiento(
 
     /// <summary>¿Admite «Reintentar» el estado?</summary>
     public static bool Reintentable(EstadoAprovisionamiento estado) =>
-        estado is EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto or EstadoAprovisionamiento.RequiereRevisionNit;
+        estado is EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto or EstadoAprovisionamiento.RequiereRevisionNit
+            or EstadoAprovisionamiento.ListoSinWebhook;
 
     /// <summary>Aplica «Reintentar» a la fila (con seguimiento en <paramref name="db"/>, sin guardar); false si el estado no lo admite.</summary>
     internal static bool Reintentar(ImpuestosDb db, AprovisionamientoEmpresa fila, Guid? actor, DateTimeOffset ahora)
@@ -60,7 +62,6 @@ public sealed partial class ConsumidorReintentoAprovisionamiento(
         fila.IntentosAutomaticos = nueva.IntentosAutomaticos;
         fila.FirmaConfirmada = nueva.FirmaConfirmada;
         fila.MotivoCodigo = null;
-        // El Super Admin decidió reintentar: una marca de alta en el aire ya se resolvió como INCIERTO y no se vuelve a leer.
         fila.MotivoDetalle = null;
         fila.ProximoIntentoEn = null;
         fila.Version++;
