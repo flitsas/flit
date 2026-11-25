@@ -79,6 +79,8 @@ public static class Program
         // M09: solicitud de liquidación (RUNT por core-consultas, crédito 2/6, consumidor de impuestos.liquidaciones y reconciliador).
         builder.Services.AddEjecucionImpuestos(builder.Configuration);
         builder.Services.AddLiquidacionesImpuestos();
+        // IMP-3 / M-1: IP real del cliente detrás del proxy de confianza para el límite por IP del webhook.
+        builder.Services.AddProxiesConfiables(builder.Configuration);
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         Modulos.Reportes.ReportesEndpoints.AddEstadisticasYReportes(builder.Services); // M14: dashboard y reportes
         // M10: webhook del proveedor (anónimo con firma), aplicación del resultado y conciliación (respaldo GET e «Incierto»).
@@ -112,6 +114,7 @@ public static class Program
         });
 
         var app = builder.Build();
+        app.UseProxiesConfiables(); // primero: todo lo que sigue (límites, log) ve la IP del cliente
         app.UseExceptionHandler();
         app.UseFlitCorrelationId();
         app.UseAuthentication();
