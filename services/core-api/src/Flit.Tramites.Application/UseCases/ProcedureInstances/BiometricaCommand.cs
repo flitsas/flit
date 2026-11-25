@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Biometrics;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -337,11 +338,25 @@ public sealed class IniciarBiometriaHandler(
     /// rechazado; en cualquier otro estado es null. NUNCA incluye PII cruda: los JSON de origen
     /// (Detalle del scorer mock, ProviderPayload de Kyverum) ya están sanitizados. Para mock se toma
     /// `motivo`; para Kyverum se deriva un texto amigable de las coincidencias reportadas.
+    /// <para>
+    /// Bug #14634 — para <c>manual</c> se homologa PRIMERO con <see cref="ManualRejectionReasons"/> (lista
+    /// cerrada, HU #13299): sin esto, caía siempre al texto genérico del final (ni <c>Detail.motivo</c> ni
+    /// <c>ProviderPayload.subject_motivo</c> existen en el flujo manual), en TODAS las pantallas que leen este
+    /// campo (wizard del trámite, listado de Validaciones, panel de identidad), no solo en el tracking. La
+    /// etiqueta ya es texto seguro (no delata el mecanismo), así que se expone igual que el resto.
+    /// </para>
     /// </summary>
     internal static string? ExtractMotivoRechazo(ProcedureInstanceBiometricValidation v)
     {
         if (v.Status != BiometricEstados.Rechazado)
             return null;
+
+        if (string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+        {
+            var etiquetaManual = ManualRejectionReasons.LabelFor(v.RejectionReasonCode);
+            if (etiquetaManual is not null)
+                return etiquetaManual;
+        }
 
         // Mock: Detail = { score, aprobado, motivo, ... } — el scorer ya produce texto sin PII.
         var motivo = TryReadString(v.Detail, "motivo");

@@ -24,11 +24,14 @@ describe('lo manual solo lo ve el Super Admin', () => {
     });
   });
 
-  it('aprobada manual se muestra como aprobada normal y el motivo del Super Admin no sale', () => {
+  it('aprobada manual se muestra como aprobada normal', () => {
     const a = ocultarManualAlCliente(manual({ status: 'aprobado', approvalOrigin: 'manual' }), false);
     expect(a).toMatchObject({ provider: 'kyverum', status: 'aprobado', approvalOrigin: 'automatica' });
+  });
+
+  it('Bug #14634 — el motivo del rechazo sí se ve (ya es texto seguro, sin palabras que delaten el mecanismo)', () => {
     const r = ocultarManualAlCliente(manual({ status: 'rechazado', rejectionReasonCode: 'imagen_borrosa' }), false);
-    expect(r).toMatchObject({ status: 'rechazado', rejectionReasonCode: null });
+    expect(r).toMatchObject({ status: 'rechazado', rejectionReasonCode: 'imagen_borrosa' });
   });
 
   it('recorre listas y objetos anidados sin tocar lo demás', () => {

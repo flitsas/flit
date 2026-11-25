@@ -87,7 +87,11 @@ public sealed record ProcedureInstanceEventDto(
     string? DocumentoTipo = null,
     string? DocumentoFilename = null,
     string? EstadoAlMomento = null,
-    string? Observacion = null);
+    string? Observacion = null,
+    // identidad_manual_rechazada (Bug #14634) — motivo YA homologado a texto (lista cerrada, HU #13299): no revela
+    // el mecanismo, así que se expone a todos (a diferencia de `rejectionReasonCode` en BiometricValidationDto, que
+    // `ocultar-manual.ts` sí sigue disfrazando de cara al provider/estado). Reutiliza `PartyRole` de arriba.
+    string? RejectionReasonLabel = null);
 
 /// <summary>
 /// HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite
@@ -252,6 +256,9 @@ public sealed class GetProcedureInstanceHandler(
         "revocatoria_rechazada",
         // Bug #14604 — carga administrativa de un documento en cualquier estado (AdminCargarDocumentoHandler.EventoTipo).
         "documento_cargado_admin",
+        // Bug #14634 — rechazo de una revisión de identidad (RechazarValidacionManualHandler.EventoTipo): deja
+        // rastro del motivo de ESE intento aunque la validación ya se haya repetido o aprobado después.
+        "identidad_manual_rechazada",
     };
 
     public async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
@@ -561,6 +568,18 @@ public sealed class GetProcedureInstanceHandler(
                     DocumentoFilename: Str(payload, "filename"),
                     EstadoAlMomento: Str(payload, "estado"),
                     Observacion: Str(payload, "observacion"));
+            }
+
+            // identidad_manual_rechazada (Bug #14634) — payload: { party_role, rejection_reason_code,
+            // rejection_reason_label }. El ejecutor (CreatedBy) es quien revisó y rechazó.
+            if (e.Tipo == "identidad_manual_rechazada")
+            {
+                static string? Str(JsonElement o, string name) =>
+                    o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+                return new ProcedureInstanceEventDto(
+                    e.Tipo, e.CreatedAt, createdByName,
+                    PartyRole: Str(payload, "party_role"),
+                    RejectionReasonLabel: Str(payload, "rejection_reason_label"));
             }
 
             // reenvio_validacion_admin
