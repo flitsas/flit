@@ -13,7 +13,7 @@ namespace Flit.Platform.Sdk.Messaging;
 /// destinos siguen (un exchange sin permiso o sin declarar no detiene al resto), aunque los pendientes más viejos sean todos del
 /// destino detenido: el ciclo lee en ventanas que excluyen los destinos ya detenidos. Si el broker no se alcanza
 /// (<see cref="BrokerUnreachableException"/>), el lote se corta entero: sale en el siguiente ciclo, en orden, cuando el
-/// broker vuelva (AC3). Con el broker (o la base) caído, la espera entre ciclos se duplica en cada
+/// broker vuelva (AC3). Con el broker (o la base) caído, o sin nada publicado por un destino caído, la espera entre ciclos se duplica en cada
 /// fallo seguido hasta <see cref="PlatformMessagingOptions.MaxRetryDelay"/>, y vuelve a <c>PollInterval</c> al primer
 /// ciclo sano: una caída larga no llena la base ni el log con un intento por segundo.
 /// </summary>
@@ -45,7 +45,7 @@ internal sealed class OutboxPublisherService<TContext>(
                 ciclo = new CicloOutbox(0, Fallo: true);
             }
 
-            fallosSeguidos = ciclo.Fallo ? fallosSeguidos + 1 : 0;
+            fallosSeguidos = FallosSeguidos(fallosSeguidos, ciclo);
 
             // Lote lleno y sano: puede haber más, se sigue sin esperar.
             if (!ciclo.Fallo && ciclo.Publicados >= options.BatchSize)
@@ -60,6 +60,15 @@ internal sealed class OutboxPublisherService<TContext>(
             }
         }
     }
+
+    /// <summary>
+    /// Fallos seguidos tras <paramref name="ciclo"/>: cuentan para el backoff de <see cref="Espera"/>. Un ciclo que publicó
+    /// algo con el broker respondiendo vuelve a cero aunque un destino haya fallado: ese destino ya espera por su cuenta y no
+    /// debe frenar a los demás. Si no salió nada, o el broker no se alcanzó, la espera crece (sin ciclo caliente cuando el
+    /// único pendiente es el destino caído).
+    /// </summary>
+    internal static int FallosSeguidos(int previos, CicloOutbox ciclo) =>
+        !ciclo.Fallo || (ciclo.Publicados > 0 && !ciclo.BrokerInalcanzable) ? 0 : previos + 1;
 
     /// <summary>
     /// Espera antes del siguiente ciclo: <paramref name="poll"/> si el último salió bien; con fallos seguidos,
@@ -145,7 +154,7 @@ internal sealed class OutboxPublisherService<TContext>(
             }
 
             await tx.CommitAsync(ct).ConfigureAwait(false);
-            return new CicloOutbox(published, fallo);
+            return new CicloOutbox(published, fallo, brokerCaido);
         }).ConfigureAwait(false);
     }
 
@@ -178,8 +187,8 @@ internal sealed class OutboxPublisherService<TContext>(
     }
 }
 
-/// <summary>Resultado de un ciclo del publicador.</summary>
-internal readonly record struct CicloOutbox(int Publicados, bool Fallo);
+/// <summary>Resultado de un ciclo del publicador; <c>BrokerInalcanzable</c>: el ciclo se cortó por <see cref="BrokerUnreachableException"/>.</summary>
+internal readonly record struct CicloOutbox(int Publicados, bool Fallo, bool BrokerInalcanzable = false);
 
 internal static partial class OutboxLog
 {

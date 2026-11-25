@@ -104,7 +104,7 @@ public sealed class OutboxDestinosTests(MessagingFixture fixture) : IClassFixtur
 
         var ciclo = await Publisher(caido).PublicarAsync(ct);
 
-        ciclo.Should().Be(new CicloOutbox(0, Fallo: true));
+        ciclo.Should().Be(new CicloOutbox(0, Fallo: true, BrokerInalcanzable: true));
         caido.Intentos.Should().Equal([x1], "sin broker no tiene sentido intentar cada destino");
     }
 
@@ -159,6 +159,52 @@ public sealed class OutboxDestinosTests(MessagingFixture fixture) : IClassFixtur
 
         log.Entradas.Should().NotContain(e => e.EventId == 7303);
     }
+
+    [Fact]
+    public async Task Si_el_ciclo_publico_algo_pese_a_un_destino_caido_el_siguiente_va_con_el_intervalo_normal()
+    {
+        fixture.SkipIfUnavailable();
+        var ct = TestContext.Current.CancellationToken;
+        await EncolarAsync(X, 0, ct);
+        await EncolarAsync(Y, 1, ct);
+
+        var ciclo = await Publisher(new PublicadorDePrueba { DestinoQueFalla = X }).PublicarAsync(ct);
+
+        ciclo.Should().Be(new CicloOutbox(1, Fallo: true));
+        var fallos = OutboxPublisherService<PruebaDb>.FallosSeguidos(5, ciclo);
+        fallos.Should().Be(0, "Y salió y el broker respondió: un destino caído no frena a los demás con backoff");
+        OutboxPublisherService<PruebaDb>.Espera(fallos, Poll, Max).Should().Be(Poll);
+    }
+
+    [Fact]
+    public async Task Si_el_unico_destino_pendiente_es_el_caido_el_backoff_sigue_creciendo()
+    {
+        fixture.SkipIfUnavailable();
+        var ct = TestContext.Current.CancellationToken;
+        await EncolarAsync(X, 0, ct);
+        await EncolarAsync(X, 1, ct);
+
+        var ciclo = await Publisher(new PublicadorDePrueba { DestinoQueFalla = X }).PublicarAsync(ct);
+
+        ciclo.Should().Be(new CicloOutbox(0, Fallo: true));
+        var fallos = OutboxPublisherService<PruebaDb>.FallosSeguidos(5, ciclo);
+        fallos.Should().Be(6, "sin nada publicado no hay ciclo caliente: la espera se duplica");
+        OutboxPublisherService<PruebaDb>.Espera(fallos, Poll, Max).Should().Be(TimeSpan.FromSeconds(32));
+    }
+
+    [Theory]
+    [InlineData(0, false, false, 3, 0)] // nada pendiente, sano: intervalo normal
+    [InlineData(7, false, false, 3, 0)] // lote sano: vuelve a cero
+    [InlineData(2, true, true, 3, 4)]   // publicó algo y luego el broker cayó: backoff
+    [InlineData(0, true, true, 3, 4)]   // broker inalcanzable: backoff
+    [InlineData(4, true, false, 3, 0)]  // destino caído, otros salieron: intervalo normal
+    [InlineData(0, true, false, 3, 4)]  // destino caído y nada más salió: backoff
+    public void Los_fallos_seguidos_solo_crecen_si_no_se_publico_nada_o_el_broker_no_respondio(
+        int publicados, bool fallo, bool brokerInalcanzable, int previos, int esperado) =>
+        OutboxPublisherService<PruebaDb>.FallosSeguidos(previos, new CicloOutbox(publicados, fallo, brokerInalcanzable)).Should().Be(esperado);
+
+    private static readonly TimeSpan Poll = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan Max = TimeSpan.FromMinutes(1);
 
     private async Task<Guid> EncolarAsync((string Exchange, string RoutingKey) destino, int segundo, CancellationToken ct,
         int intentosPrevios = 0, string payload = "{}")
