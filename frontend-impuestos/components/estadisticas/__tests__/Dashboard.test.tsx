@@ -120,7 +120,7 @@ describe("Dashboard — compañía del token (F4a-CF1)", () => {
     const kpi = (clave: string) => screen.getByTestId(`kpi-${clave}`);
     expect(within(kpi("liquidaciones")).getByText("Liquidaciones")).toBeInTheDocument();
     expect(within(kpi("liquidaciones")).getByText("12")).toBeInTheDocument();
-    expect(within(kpi("liquidaciones")).getByText("7 por placa · 5 masivas")).toBeInTheDocument();
+    expect(within(kpi("liquidaciones")).getByText("7 individuales · 5 masivas")).toBeInTheDocument();
     expect(within(kpi("lotes")).getByText("1")).toBeInTheDocument();
     expect(within(kpi("exitosas")).getByText("8")).toBeInTheDocument();
     expect(within(kpi("errores")).getByText("2")).toBeInTheDocument();
@@ -180,6 +180,15 @@ describe("Dashboard — cuatro estados", () => {
     render(<Dashboard />);
     expect(await screen.findByText("Cargando el resumen…")).toBeInTheDocument();
     expect(within(screen.getByTestId("kpi-liquidaciones")).getByText("—")).toBeInTheDocument();
+  });
+
+  it("M21 A-3: el skeleton de carga cubre también la segunda fila (cuatro bloques en dos filas, ocultos al lector)", async () => {
+    vi.stubGlobal("fetch", api(() => new Promise<Response>(() => {})));
+    render(<Dashboard />);
+    const region = (await screen.findByText("Cargando el resumen…")).closest('[role="status"]') as HTMLElement;
+    const filas = region.querySelectorAll(":scope > div");
+    expect(filas).toHaveLength(2);
+    for (const fila of filas) expect(fila.querySelectorAll(':scope > div[aria-hidden="true"]')).toHaveLength(2);
   });
 
   it("vacío: «Aún no hay liquidaciones en este periodo», «Liquidar por placa» y «Ver los últimos 90 días» vuelve a pedir", async () => {

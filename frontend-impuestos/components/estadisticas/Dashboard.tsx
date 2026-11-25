@@ -131,10 +131,16 @@ export function Dashboard() {
   let contenido: ReactNode = null;
   if (carga.tipo === "cargando") {
     contenido = (
-      <div role="status" aria-busy="true" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div role="status" aria-busy="true" className="flex flex-col gap-4">
         <span className="sr-only">Cargando el resumen…</span>
-        <div aria-hidden="true" className={`${SKELETON_CLS} lg:col-span-2`} />
-        <div aria-hidden="true" className={SKELETON_CLS} />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div aria-hidden="true" className={`${SKELETON_CLS} lg:col-span-2`} />
+          <div aria-hidden="true" className={SKELETON_CLS} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div aria-hidden="true" className={`${SKELETON_CLS} lg:col-span-2`} />
+          <div aria-hidden="true" className={SKELETON_CLS} />
+        </div>
       </div>
     );
   } else if (carga.tipo === "error") {

@@ -207,7 +207,7 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
       </div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p aria-live="polite" className="m-0 text-sm font-semibold text-flit-primary">
-          {total === null ? "—" : formatoEntero(total)} registros
+          {total === null ? "—" : formatoEntero(total)} {total === 1 ? "registro" : "registros"}
         </p>
         {puedeExportar ? (
           <BotonesExportar
