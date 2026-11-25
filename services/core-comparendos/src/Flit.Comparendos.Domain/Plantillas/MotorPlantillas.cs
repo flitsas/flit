@@ -30,6 +30,7 @@ public static class VariablesPlantilla
         new("comparendo.estado_legal", "Comparendo", "Estado legal a hoy", "En tiempo"),
         new("adjuntos.autorizacion", "Adjuntos", "«sí» si el aviso lleva la autorización de cambio de infractor; vacío si no", "sí"),
         new("adjuntos.poder", "Adjuntos", "«sí» si el aviso lleva el poder de la empresa; vacío si no", "sí"),
+        new("evidencia.reemplazo", "Adjuntos", "«sí» si el documento reemplaza a uno anterior del comparendo; vacío si es el primero", "sí"),
         new("descuento.ventana", "Descuento", "Ventana de descuento vigente", "50% de descuento"),
         new("descuento.porcentaje", "Descuento", "Porcentaje vigente (50, 25 o 0)", "50"),
         new("descuento.fecha_fin_50", "Descuento", "Último día del 50%", "21 de octubre de 2026"),

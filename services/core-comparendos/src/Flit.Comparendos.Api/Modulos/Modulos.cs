@@ -42,6 +42,10 @@ public static class Modulos
         services.AddScoped<Avisos.ServicioAvisos>();
         services.AddScoped<Avisos.FotoFotomulta>();
         services.AddScoped<Avisos.AdjuntosAviso>();
+        services.AddScoped<Avisos.ServicioEvidencia>();
+        services.AddScoped<Ocr.AsociacionDocumentos>();
+        services.AddScoped<Ocr.AsociacionEnSegundoPlano>();
+        services.AddSingleton<Ocr.ProcesadorAsociacionLote>();
         services.AddSingleton<Avisos.IDescargaFoto, Avisos.DescargaFotoHttp>();
         services.AddHttpClient(Avisos.DescargaFotoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(Avisos.DescargaFotoHttp.Manejador);
@@ -166,6 +170,7 @@ public static class Modulos
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
             services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorOcr>());
+            services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorAsociacionLote>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.EvaluadorPromptOcr>());
         }
         return services;

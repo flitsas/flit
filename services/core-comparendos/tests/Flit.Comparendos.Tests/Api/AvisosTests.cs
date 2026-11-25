@@ -43,7 +43,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     }
 
     private Task<List<AvisoDto>> AvisosAsync(Guid id) =>
-        api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id).OrderBy(a => a.RegistradoEn).Select(a => new AvisoDto(a.TipoAviso, a.VentanaAlEnvio, a.PorcentajeDescuento)).ToListAsync());
+        api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id).OrderBy(a => a.RegistradoEn).ThenBy(a => a.Id).Select(a => new AvisoDto(a.TipoAviso, a.VentanaAlEnvio, a.PorcentajeDescuento)).ToListAsync());
 
     private sealed record AvisoDto(TipoAviso Tipo, VentanaDescuento Ventana, short Porcentaje);
 
@@ -138,7 +138,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         api.Reloj.Hoy(new DateOnly(2026, 11, 13));
         (await PermitidosAsync()).Should().Equal("Aviso3");
         (await EnviarAsync("Aviso3")).Item1.Should().Be(HttpStatusCode.OK);
-        (await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id).OrderBy(a => a.RegistradoEn).Select(a => a.TipoAviso).ToListAsync(ct)))
+        (await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id).OrderBy(a => a.RegistradoEn).ThenBy(a => a.Id).Select(a => a.TipoAviso).ToListAsync(ct)))
             .Should().Equal(TipoAviso.Aviso1, TipoAviso.Aviso2, TipoAviso.Aviso3);
     }
 

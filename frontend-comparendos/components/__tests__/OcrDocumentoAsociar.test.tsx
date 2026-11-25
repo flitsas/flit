@@ -11,7 +11,7 @@ vi.mock("@/lib/api", async (original) => ({
   ...(await original<typeof import("@/lib/api")>()),
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "d1" }) }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ id: "d1" }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/detalle/useAbrirDetalle", () => ({ useAbrirDetalle: () => vi.fn() }));
 vi.mock("@/components/ComparendosShell", () => ({
   useSesion: () => ({
@@ -55,9 +55,9 @@ function documento(dup: Record<string, unknown> = {}) {
   };
 }
 
-function abrir(dup: Record<string, unknown> = {}, falloAsociar?: ApiError, doc: Record<string, unknown> = {}) {
+function abrir(dup: Record<string, unknown> = {}, falloAsociar?: ApiError, doc: Record<string, unknown> = {}, respuestaAsociar: Record<string, unknown> = {}) {
   apiFetch.mockImplementation((ruta: string) => {
-    return ruta === "/ocr/documentos/d1" ? Promise.resolve({ ...documento(dup), ...doc }) : falloAsociar ? Promise.reject(falloAsociar) : Promise.resolve({ numero: "11001000000012345678" });
+    return ruta === "/ocr/documentos/d1" ? Promise.resolve({ ...documento(dup), ...doc }) : falloAsociar ? Promise.reject(falloAsociar) : Promise.resolve({ numero: "11001000000012345678", ...respuestaAsociar });
   });
   render(
     <ToastProvider>
@@ -92,6 +92,36 @@ describe("asociar documento escaneado a comparendo existente", () => {
     fireEvent.click(within(modal).getByRole("button", { name: "Reemplazar" }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(posts()[0][1]).toMatchObject({ body: { reemplazar: true, evidenciaActualId: "ev1" } });
+  });
+
+  it("asociar con correo enviado: un solo aviso combinado", async () => {
+    abrir({}, undefined, {}, { correo: { estado: "Enviado", motivo: null } });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText("Documento asociado al comparendo 11001000000012345678 y enviado al conductor.")).toBeTruthy();
+    expect(screen.queryByText(/No se envió correo/)).toBeNull();
+  });
+
+  it("reemplazar con correo omitido: éxito y aviso aparte con el motivo literal", async () => {
+    abrir({ evidenciaActual: EVIDENCIA }, undefined, {}, { correo: { estado: "Omitido", motivo: "El comparendo ya está pagado" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Comparar documentos" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Reemplazar" }));
+    expect(await screen.findByText("Documento reemplazado en el comparendo 11001000000012345678.")).toBeTruthy();
+    expect(await screen.findByText("No se envió correo al conductor. Motivo: El comparendo ya está pagado.")).toBeTruthy();
+  });
+
+  it("respuesta sin correo (servidor sin el campo) o con un estado desconocido no rompe la pantalla", async () => {
+    abrir();
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText("Documento asociado al comparendo 11001000000012345678.")).toBeTruthy();
+    expect(screen.queryByText(/correo/i)).toBeNull();
+    cleanup();
+
+    abrir({}, undefined, {}, { correo: { estado: "Reintentando", motivo: null } });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText("No se envió correo al conductor.")).toBeTruthy();
   });
 
   it("Descartar este abre el descarte y Escape cierra la comparación", async () => {
@@ -133,8 +163,30 @@ describe("asociar documento escaneado a comparendo existente", () => {
     const campos = ["valor", "placa", "direccion", "fecha_infraccion"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
     abrir({}, undefined, { estado: "Asociado", comparendoId: "c1", campos, camposFaltantes: ["valor"] });
     expect(await screen.findByText("Documento asociado al comparendo")).toBeTruthy();
+    expect(screen.getByText("El documento quedó guardado en el comparendo.")).toBeTruthy();
+    expect(screen.queryByText(/sale adjunto en los avisos/)).toBeNull();
+    // Final y de solo lectura: ni «falta o no es válido» ni campos en rojo.
+    expect(screen.queryByText(/falta o no es válido/)).toBeNull();
+    expect(document.querySelector(".ring-destructive")).toBeNull();
     expect(screen.queryByText(/Este comparendo ya existe/)).toBeNull();
     expect(screen.queryByText(/Revisa \d+ campos? marcados?/)).toBeNull();
+  });
+
+  it("Registrado y Descartado: tampoco pintan campos en rojo aunque falten datos", async () => {
+    const campos = ["valor", "placa"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    for (const estado of ["Registrado", "Descartado"]) {
+      abrir({}, undefined, { estado, duplicado: null, comparendoId: "c1", campos, camposFaltantes: ["valor"] });
+      await screen.findAllByText(/Valor|Placa/i);
+      expect(screen.queryByText(/falta o no es válido/)).toBeNull();
+      expect(document.querySelector(".ring-destructive")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("revisión (Duplicado con faltantes): sigue marcando en rojo lo que falta", async () => {
+    const campos = ["valor", "placa"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    abrir({}, undefined, { campos, camposFaltantes: ["valor"] });
+    expect((await screen.findAllByText(/falta o no es válido/)).length).toBeGreaterThan(0);
   });
 
   it("mismo archivo ya cargado: pinta el motivo que manda el servidor", async () => {
@@ -203,5 +255,39 @@ describe("asociar documento escaneado a comparendo existente", () => {
     const modal = await screen.findByRole("dialog");
     expect(within(modal).getByText("D-11001000000012345678")).toBeTruthy();
     expect(within(modal).queryByText(/Los números no coinciden exactamente/)).toBeNull();
+  });
+});
+
+describe("documento en un lote en segundo plano (GDC-EVID §10)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+  });
+  afterEach(cleanup);
+  const EN_ASOCIACION = "Este documento se está asociando en segundo plano; espera a que termine.";
+
+  it("PorAsociar: «Se está asociando…», solo lectura, sin recuadro de duplicado ni campos en rojo ni acciones", async () => {
+    const campos = ["valor", "placa"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    abrir({}, undefined, { estado: "PorAsociar", campos, camposFaltantes: ["valor"] });
+    expect(await screen.findByText("Se está asociando…")).toBeTruthy();
+    expect(screen.queryByText(/Este comparendo ya existe/)).toBeNull();
+    expect(screen.queryByText(/falta o no es válido/)).toBeNull();
+    expect(document.querySelector(".ring-destructive")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Asociar al comparendo|Comparar documentos|Descartar|Guardar/ })).toBeNull();
+  });
+
+  it("409 EN_ASOCIACION al asociar: muestra el motivo del servidor tal cual", async () => {
+    abrir({}, new ApiError(409, EN_ASOCIACION, "EN_ASOCIACION"));
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText(EN_ASOCIACION)).toBeTruthy();
+  });
+
+  it("409 EN_ASOCIACION al descartar: también tal cual", async () => {
+    abrir({}, new ApiError(409, EN_ASOCIACION, "EN_ASOCIACION"));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Descartar" }))[0]);
+    const m = await screen.findByRole("dialog");
+    fireEvent.change(within(m).getByRole("textbox"), { target: { value: "No sirve" } });
+    fireEvent.click(within(m).getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByText(EN_ASOCIACION)).toBeTruthy();
   });
 });

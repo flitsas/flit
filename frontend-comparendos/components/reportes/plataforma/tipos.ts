@@ -36,6 +36,7 @@ export const TIPOS_ERROR: Record<string, string> = {
 
 /** Plantillas de correo en términos de negocio (la clave técnica solo como último recurso). */
 const PLANTILLAS: Record<string, string> = {
+  "comparendos.evidencia": "Documento del comparendo al conductor",
   "comparendos.dp_ot": "Derecho de petición al organismo",
   "comparendos.cambio_contraventor_ot": "Cambio de contraventor al organismo",
   "comparendos.reporte_semanal": "Reporte semanal",
