@@ -273,6 +273,25 @@ Lo que sí hay que configurar para que la entrega funcione:
 | Scope del cliente | `appsettings.json` de core-api/core-identity | `svc-consultas` ya trae `platform.identidad.credenciales.impuesto` y, desde HU #14711, `platform.identidad.credenciales.impuesto.webhook`. No es variable |
 | Producto Diagnóstico encendido | Admin › Compañías › Productos | Dato de la base, no variable |
 
+Desde la HU #14711 la llave ya **no** hace falta capturarla a mano. Se obtiene del proveedor con el alta idempotente: el botón «Obtener del proveedor» o el alta automática al encender Diagnóstico. El alta también guarda el `webhook_secret` con los códigos `impuesto_webhook_secret` e `impuesto_webhook_secret_anterior`, este último vigente 24 h. La captura manual queda como respaldo.
+
+### 3.3.1 Alta de la credencial y aviso firmado (HU #14711)
+
+| Variable (clave .NET) | Servicio | Default | Obligatoria | Secreta | Uso |
+|---|---|---|---|---|---|
+| `Platform__ImpuestoProveedor__BaseUrl` | core-identity y core-api (respaldo) | vacío | condicional | no | URL base del proveedor, sin `/` final. En local, `http://127.0.0.1:8898` (stub) |
+| `Platform__ImpuestoProveedor__IntegrationToken` | core-identity y core-api | vacío | condicional | **sí** | Token de integración del ambiente, el mismo valor que `IMPUESTOS_SVC_INTEGRATION_TOKEN` de core-impuestos. Si está vacío, el botón responde `503 PROVEEDOR_NO_CONFIGURADO` y el alta automática reintenta y termina en `ERROR` |
+| `Platform__ImpuestoProveedor__TimeoutSeconds` | core-identity y core-api | `30` | no | no | Timeout de la llamada del alta |
+| `Consultas__Impuesto__AvisoBaseUrl` | core-consultas | vacío | no | no | Base **pública** https del receptor; core-consultas agrega `/api/v1/impuesto/avisos/{token}`. Solo admite http en loopback. Si está vacía, no se manda `callbackUrl` y el resultado sigue llegando por polling |
+| `Consultas__Impuesto__AvisoTokenKey` | core-consultas | vacío | condicional | **sí** | Llave HMAC del token opaco por empresa, de al menos 32 bytes. Si se rota, se invalidan los `callbackUrl` de las consultas en curso, que se cierran por polling |
+
+Para encender el aviso hay que hacer tres cosas:
+1. Publicar la ruta `/api/v1/impuesto/avisos/*` de core-consultas en el gateway o nginx.
+2. Enmascarar ese path en los access logs, porque lleva el token.
+3. Resolver la IP real detrás de YARP (G-6), de la que dependen los límites de 60 por minuto por IP y 600 por minuto globales.
+
+El usuario del broker `plataforma` ya puede publicar en `flit.impuestos`, porque es el mismo permiso de `impuestos.producto.cambiado`. El trabajo `impuestos.credencial_diagnostico.actualizada` usa ese mismo permiso.
+
 ### 3.4 Lado Diagnóstico
 
 | Variable | Default | Uso |
