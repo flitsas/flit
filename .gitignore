@@ -60,6 +60,7 @@ services/core-notificaciones/**/appsettings.Development.json
 services/core-comparendos/**/appsettings.Development.json
 services/core-diagnostico/**/appsettings.Development.json
 services/core-personanatural/**/appsettings.Development.json
+services/core-impuestos/**/appsettings.Development.json
 
 # Logs
 *.log
