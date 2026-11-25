@@ -61,6 +61,9 @@ internal static class OtQueryReportColumns
         ["transformaciones"] = new("Transformaciones", 26, r => TextOrEmpty(r.Transformaciones.Count == 0
             ? null
             : string.Join(" · ", r.Transformaciones.Select(t => Label(TransformacionLabel, t))))),
+        ["firmado_por_todas"] = new("Firmado por todas las partes", 16, r =>
+            TextOrEmpty(r.FirmadoPorTodas is bool f ? SiNo(f) : null)),
+        ["falta_firmar"] = new("Falta firmar", 40, r => TextOrEmpty(r.FaltaFirmar)),
         ["radicado_en"] = new("Radicado", 14, r => DateCellOrEmpty(r.RadicadoEn)),
         ["decidido_en"] = new("Decidido", 14, r => DateCellOrEmpty(r.DecididoEn)),
         ["aprobado_en"] = new("Aprobado", 14, r => DateCellOrEmpty(r.AprobadoEn)),

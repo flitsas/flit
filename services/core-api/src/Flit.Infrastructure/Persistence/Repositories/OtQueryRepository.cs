@@ -3,6 +3,7 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Queries.Domain;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
@@ -44,13 +45,16 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
     private readonly FlitDbContext _context;
     private readonly OtTenantScope _scope;
+    private readonly ITramiteFirmaEvaluator _firma;
 
     public OtQueryRepository(
         FlitDbContext context,
         IEffectiveTransitOfficeListResolver? effectiveOffices = null,
-        IOtUserClientScopeResolver? clientScope = null)
+        IOtUserClientScopeResolver? clientScope = null,
+        ITramiteFirmaEvaluator? firma = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _firma = firma ?? new TramiteFirmaEvaluator(new ProcedureInstanceRepository(_context));
         _scope = new OtTenantScope(_context, effectiveOffices, clientScope);
     }
 
@@ -75,6 +79,16 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
                 var rows = await LoadRowsAsync(
                     transitOfficeId, tenantIds, definition, cancellationToken).ConfigureAwait(false);
+
+                // HU #14700 — «Firmado por todas»: la regla vive en ITramiteFirmaEvaluator (en memoria,
+                // ADR-0092) y se calcula UNA vez por fila del universo, así filtro, contador, periodo
+                // anterior y export coinciden (y coinciden con la consulta del gestor).
+                var filtraFirma = definition.Condiciones.Any(c => c.FieldId == OtQueryFieldCatalog.FirmadoPorTodas);
+                if (filtraFirma)
+                {
+                    rows = await ConFirmaAsync(rows, transitOfficeId, tenantIds, cancellationToken)
+                        .ConfigureAwait(false);
+                }
 
                 var condiciones = definition.Condiciones
                     .Select(c => (Condition: c, Predicate: Engine.BuildPredicate(c)))
@@ -102,6 +116,14 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .ToList();
+
+                // Sin filtro de firma, la columna se calcula solo para la página visible y solo si se pidió.
+                if (!filtraFirma && PideColumnaFirma(definition) && ordered.Count > 0)
+                {
+                    var conFirma = (await ConFirmaAsync(ordered, transitOfficeId, tenantIds, cancellationToken)
+                        .ConfigureAwait(false)).ToDictionary(r => r.Instance.Id);
+                    ordered = ordered.Select(r => conFirma[r.Instance.Id]).ToList();
+                }
 
                 // Nombres y causales solo para la página visible: son consultas extra por fila y
                 // resolverlas para el universo entero para mostrar cincuenta es trabajo tirado.
@@ -131,6 +153,50 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                     Cobertura: cobertura);
             },
             cancellationToken);
+    }
+
+    private static bool PideColumnaFirma(QueryDefinition definition) =>
+        definition.Columnas.Any(c =>
+            c == OtQueryFieldCatalog.FaltaFirmar || c == OtQueryFieldCatalog.FirmadoPorTodas);
+
+    /// <summary>
+    /// Carga el grafo de los trámites (tipo, actores, validaciones; siempre acotado al organismo y a sus
+    /// empresas) y evalúa la firma con el criterio único de <see cref="ITramiteFirmaEvaluator"/>.
+    /// </summary>
+    private async Task<List<QueryRow>> ConFirmaAsync(
+        IReadOnlyList<QueryRow> filas,
+        Guid transitOfficeId,
+        IReadOnlyList<Guid> tenantIds,
+        CancellationToken cancellationToken)
+    {
+        if (filas.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = filas.Select(f => f.Instance.Id).ToList();
+        var tramites = await _context.ProcedureInstances
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(p => p.ProcedureType)
+            .Include(p => p.Actors)
+            .Include(p => p.BiometricValidations)
+            .Where(p => p.DeletedAt == null
+                && p.TransitOfficeId == transitOfficeId
+                && tenantIds.Contains(p.TenantId)
+                && ids.Contains(p.Id))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var ahora = DateTimeOffset.UtcNow;
+        var contexto = await _firma.CargarContextoAsync(tramites, ahora, cancellationToken).ConfigureAwait(false);
+        var porId = tramites.ToDictionary(t => t.Id);
+
+        return filas
+            .Select(f => porId.TryGetValue(f.Instance.Id, out var t)
+                ? f with { Firma = _firma.Evaluar(t, contexto, ahora) }
+                : f)
+            .ToList();
     }
 
     // ── Carga ─────────────────────────────────────────────────────────────────────────────────
@@ -383,6 +449,8 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         OtQueryFieldCatalog.Prenda => r => [Bool(r.TienePrenda)],
         OtQueryFieldCatalog.LicenciaTransito => r => [Bool(r.TieneLicencia)],
         OtQueryFieldCatalog.Transformaciones => r => r.Transformaciones,
+        // Sin evaluación (no debería llegar aquí sin filtro) cuenta como «No»: nunca como firmado.
+        OtQueryFieldCatalog.FirmadoPorTodas => r => [Bool(r.Firma?.FirmadoPorTodas ?? false)],
         _ => _ => [],
     };
 
@@ -474,7 +542,9 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             Devoluciones: row.Devoluciones,
             CausalesUltimoRechazo: row.UltimoRechazoEventId is Guid ev
                 ? causales.GetValueOrDefault(ev, [])
-                : []);
+                : [],
+            FirmadoPorTodas: row.Firma?.FirmadoPorTodas,
+            FaltaFirmar: row.Firma?.TextoPendientes);
 
     // ── Catálogo de campos ────────────────────────────────────────────────────────────────────
 
@@ -869,5 +939,6 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         bool TieneLicencia,
         IReadOnlyList<string> Transformaciones,
         IReadOnlyList<string> Comprador,
-        IReadOnlyList<string> Vendedor);
+        IReadOnlyList<string> Vendedor,
+        TramiteFirmaResultado? Firma = null);
 }
