@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: FLIT Core ICT API
-  version: 2.0.0
+  version: 2.1.0
   description: |-
     API de Integración con Terceros (ICT) de FLIT. El gestor se autentica con su propio token ICT (independiente del inicio de sesión de la plataforma FLIT), registra trámites en lote, consulta su estado y los reprocesa cuando tienen novedades, adjunta los documentos del trámite, consulta las secretarías de tránsito, pausa, reanuda o anula trámites en borrador y recibe en su webhook los cambios de estado.
 
@@ -35,6 +35,12 @@ info:
     generador: python -m atlas_docs.ict (ATLAS-ADR-0037); no se edita a mano
     visibilidad: las operaciones con `x-public` se comparten con clientes; las `x-internal` las quita la poda de Atlas
   x-flit-changelog:
+  - version: 2.1.0
+    fecha: '2026-11-24'
+    hoja: null
+    colaborador: Equipo de integraciones de FLIT
+    cambio: 'MINOR: GET /api/v1/documents-transaction/{id} acepta preliminar=true (carpeta antes de la aprobación,
+      con estado y definitivo) y responde 409 anulado para un trámite anulado. Sin el parámetro, igual que antes.'
   - version: 2.0.0
     fecha: '2026-11-23'
     hoja: null
