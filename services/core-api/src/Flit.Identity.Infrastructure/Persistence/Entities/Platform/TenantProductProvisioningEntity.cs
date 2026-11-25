@@ -34,6 +34,12 @@ public sealed class TenantProductProvisioningEntity
     /// <summary>Momento del estado. Columna <c>reported_at</c>.</summary>
     public DateTimeOffset ReportedAt { get; set; }
 
+    /// <summary>HU #14711 (DDL 206) — intentos automáticos fallidos del alta que escribe la plataforma. Columna <c>attempts</c>.</summary>
+    public int Attempts { get; set; }
+
+    /// <summary>HU #14711 (DDL 206) — próximo intento (o fin de la reserva) del alta automática. Columna <c>next_attempt_at</c>.</summary>
+    public DateTimeOffset? NextAttemptAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public long RowVersion { get; set; }

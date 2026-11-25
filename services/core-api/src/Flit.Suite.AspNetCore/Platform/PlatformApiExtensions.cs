@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Platform;
 using Flit.Modules.Platform.Application.Hosts;
 
 namespace Flit.Api.Platform;
@@ -14,6 +15,10 @@ public static class PlatformApiExtensions
         services.Configure<ProductAccessOptions>(configuration.GetSection(ProductAccessOptions.SectionName));
         services.AddMemoryCache();
         services.AddSingleton<IProductHosts, ConfiguredProductHosts>();
+        // HU #14711: alta de la credencial del impuesto de Diagnóstico (cliente del proveedor y límite por empresa), en los dos
+        // hosts de /api/v1/platform (core-identity y el respaldo de core-api).
+        services.AddClienteAltaProveedorImpuesto(configuration);
+        services.AddAltaCredencialImpuestoRateLimiter();
         return services;
     }
 }

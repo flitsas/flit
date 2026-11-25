@@ -34,6 +34,9 @@ internal sealed class TenantProductProvisioningConfiguration : IEntityTypeConfig
         builder.Property(x => x.SignatureConfirmed).HasColumnName("signature_confirmed");
         builder.Property(x => x.ReportedVersion).HasColumnName("reported_version").IsRequired();
         builder.Property(x => x.ReportedAt).HasColumnName("reported_at").IsRequired();
+        // HU #14711 (DDL 206): intentos y próximo intento del alta automática de la credencial de diagnostico.
+        builder.Property(x => x.Attempts).HasColumnName("attempts").HasDefaultValue(0).IsRequired();
+        builder.Property(x => x.NextAttemptAt).HasColumnName("next_attempt_at");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()").IsRequired();
         builder.Property(x => x.RowVersion).HasColumnName("row_version").HasDefaultValue(0L).IsConcurrencyToken();
 

@@ -43,10 +43,33 @@ public interface ITenantProductCredentialRepository
         string servicio,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// HU #14711 — guarda en UN solo <c>SaveChanges</c> las credenciales que trajo el alta del proveedor: crea o reemplaza cada
+    /// fila de <paramref name="escrituras"/>, deja una auditoría por fila (operación create/update, sin valor ni huella) y una
+    /// fila resumen con <paramref name="motivo"/> (<c>CREDENCIAL_OBTENIDA</c> o <c>CLAVE_ROTADA</c>). Lo que
+    /// <paramref name="antesDeGuardar"/> encole en el mismo contexto (la outbox) se confirma o se revierte con las filas; recibe el
+    /// instante del guardado.
+    /// </summary>
+    /// <returns>El instante del guardado (<c>updated_at</c> de las filas escritas).</returns>
+    Task<DateTimeOffset> GuardarAltaProveedorAsync(
+        Guid tenantId,
+        string productCode,
+        IReadOnlyList<EscrituraCredencialAlta> escrituras,
+        string motivo,
+        Guid? changedBy,
+        Action<DateTimeOffset>? antesDeGuardar,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteAsync(
         Guid tenantId,
         string productCode,
         string credentialCode,
         Guid? changedBy,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>HU #14711 — una credencial ya cifrada para <see cref="ITenantProductCredentialRepository.GuardarAltaProveedorAsync"/>.</summary>
+public sealed record EscrituraCredencialAlta(string CredentialCode, string SecretProtected)
+{
+    public override string ToString() => $"EscrituraCredencialAlta {{ CredentialCode = {CredentialCode} }}";
 }

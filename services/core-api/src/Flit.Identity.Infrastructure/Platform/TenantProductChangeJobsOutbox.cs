@@ -22,6 +22,9 @@ internal sealed class TenantProductChangeJobsOutbox(IPlatformOutbox? outbox, IId
     private readonly IPlatformOutbox? _outbox = outbox;
     private readonly IIdentityDb _db = db;
 
+    /// <summary>HU #14711 — Impuestos recopia la llave del impuesto que cambió en Diagnóstico.</summary>
+    public const string TipoCredencialDiagnostico = "impuestos.credencial_diagnostico.actualizada";
+
     /// <summary><c>&lt;producto&gt;.producto.cambiado</c>.</summary>
     public static string TipoCambio(string productCode) => $"{productCode}.producto.cambiado";
 
@@ -38,6 +41,17 @@ internal sealed class TenantProductChangeJobsOutbox(IPlatformOutbox? outbox, IId
             new ProductoCambiado(actual.TenantId, actual.ProductCode, actual.Enabled, actual.UpdatedAt));
     }
 
+    /// <summary>
+    /// HU #14711 — trabajo <see cref="TipoCredencialDiagnostico"/> v1 al exchange <c>flit.impuestos</c> (productor del host:
+    /// <c>plataforma</c> o <c>tramites</c>), sin guardar: viaja en el guardado de las credenciales. Solo ids y la versión.
+    /// </summary>
+    public void EncolarCredencialDiagnosticoActualizada(Guid tenantId, long version, DateTimeOffset occurredAt) =>
+        Outbox().EnqueueJob(
+            TipoCredencialDiagnostico,
+            Version,
+            tenantId,
+            new CredencialDiagnosticoActualizada(tenantId, "diagnostico", version, occurredAt));
+
     public async Task EncolarReintentoAsync(Guid tenantId, string productCode, Guid solicitadoPor, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
@@ -51,6 +65,9 @@ internal sealed class TenantProductChangeJobsOutbox(IPlatformOutbox? outbox, IId
 
     /// <summary><c>data</c> de <c>impuestos.producto.cambiado</c>.</summary>
     internal sealed record ProductoCambiado(Guid TenantId, string ProductCode, bool Enabled, DateTimeOffset ChangedAt);
+
+    /// <summary><c>data</c> de <c>impuestos.credencial_diagnostico.actualizada</c> (HU #14711).</summary>
+    internal sealed record CredencialDiagnosticoActualizada(Guid TenantId, string ProductCode, long Version, DateTimeOffset OccurredAt);
 
     /// <summary><c>data</c> de <c>impuestos.aprovisionamiento.reintentar</c>.</summary>
     internal sealed record AprovisionamientoReintentar(Guid TenantId, Guid SolicitadoPor);

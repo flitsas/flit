@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de plataforma
-  version: "1.1.1"
+  version: "1.2.0"
   description: >
     Endpoints de plataforma de la FLIT Suite (contrato de plataforma v1, §6), servidos por core-api
     bajo /api/v1/platform. Productos de la suite, su habilitación por empresa y el manifiesto que
@@ -22,6 +22,13 @@ info:
     Versión 1.1.1 (solo descripciones, alineada con impuestos.v1.yaml 1.2.0): LISTO_SIN_WEBHOOK lleva la acción
     REINTENTAR y CARGAR_SECRETO queda retirada (valor del enum conservado para reportes anteriores); el reintento
     describe los estados que admite el servicio del producto; el ejemplo de `reason` usa un motivo vigente.
+
+
+    Versión 1.2.0 (HU #14711, plan docs/diagnosticos/plan-alta-credencial-impuesto-diagnostico.md §3.1): cambio aditivo.
+    Ruta nueva POST .../products/diagnostico/credentials/impuesto/obtener (alta idempotente en el proveedor del impuesto,
+    solo metadatos en la respuesta). GET .../products suma `impuestoWebhookSecretConfigurada` y `provisioning` también en
+    `diagnostico` (estado del alta de la credencial, que escribe la plataforma). El PUT/DELETE de credenciales sigue
+    admitiendo solo (diagnostico, impuesto_api_key): los secretos del webhook solo los escribe el alta.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -327,6 +334,64 @@ paths:
         "404":
           $ref: "#/components/responses/Problem"
 
+  /api/v1/platform/admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener:
+    post:
+      tags: [Platform]
+      operationId: obtenerCredencialImpuestoDiagnostico
+      summary: Obtener del proveedor la credencial del impuesto de Diagnóstico (SuperAdmin)
+      description: >
+        HU #14711. Sin cuerpo: el servidor arma el alta (razón social, NIT base sin DV y correo del AdminCompany activo más
+        antiguo) y llama al alta idempotente del proveedor (guía de integración §3). Guarda en una sola transacción la
+        impuesto_api_key y el impuesto_webhook_secret (el secreto anterior queda 24 h como impuesto_webhook_secret_anterior).
+        Si los valores son los mismos no cambia nada (`changed=false`). Si la llave cambió, deja el trabajo
+        impuestos.credencial_diagnostico.actualizada (impuestos-events.v1 1.2.0). Nunca devuelve la llave ni el secreto.
+        Límite: 5 llamadas por minuto por empresa (429 sin cuerpo).
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: Credencial obtenida (o confirmada sin cambios).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredencialImpuestoObtenida"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          description: TENANT_NOT_FOUND — la empresa no existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: PRODUCTO_NO_HABILITADO — Diagnóstico no está encendido para la empresa.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: NIT_AUSENTE, NIT_AMBIGUO, NIT_IGUAL_A_CABEZA o SIN_ADMIN (no se llama al proveedor).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Límite por empresa superado.
+        "502":
+          description: PROVEEDOR_TOKEN_INVALIDO, PROVEEDOR_INTEGRACION_DESHABILITADA, PROVEEDOR_SOLICITUD_INVALIDA o PROVEEDOR_NO_DISPONIBLE.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: PROVEEDOR_NO_CONFIGURADO — falta el token de integración en el ambiente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/v1/platform/issuers:
     get:
       tags: [Platform]
@@ -455,15 +520,57 @@ components:
               description: >
                 ADR-0092. true/false solo en diagnostico (si hay fila de impuesto_api_key).
                 null en los demás productos. Nunca el valor.
+            impuestoWebhookSecretConfigurada:
+              type: boolean
+              nullable: true
+              description: >
+                HU #14711. true/false solo en diagnostico (si hay fila de impuesto_webhook_secret). null en los demás
+                productos. Nunca el valor.
             provisioning:
               type: object
               allOf:
                 - $ref: "#/components/schemas/TenantProductProvisioning"
               nullable: true
               description: >
+                HU #14711: en diagnostico es el estado del alta de la credencial del impuesto (lo escribe la plataforma; motivos
+                NIT_*, SIN_ADMIN, PRODUCTO_NO_HABILITADO, PROVEEDOR_* o SIN_WEBHOOK_SECRET).
                 HU #14694. Estado de aprovisionamiento que reporta el servicio del producto
                 (platform.tenant_product_provisioning, DDL 205). null en los productos sin aprovisionamiento y en un
                 producto con aprovisionamiento del que la plataforma aún no recibe reporte.
+
+    CredencialImpuestoObtenida:
+      type: object
+      description: HU #14711. Solo metadatos; nunca la llave ni el secreto.
+      required: [apiKeyPrefix, created, rotated, hasWebhookSecret, changed, updatedAt]
+      properties:
+        apiKeyPrefix:
+          type: string
+          nullable: true
+          description: Primeros 8 caracteres de la llave (los mismos de api_key_prefix del proveedor).
+          example: AbCdEfGh
+        created:
+          type: boolean
+          description: El proveedor creó la empresa en esta llamada (201).
+        rotated:
+          type: boolean
+          description: La llave guardada era otra y se reemplazó (auditoría CLAVE_ROTADA).
+        hasWebhookSecret:
+          type: boolean
+          description: Queda un secreto de webhook guardado.
+        changed:
+          type: boolean
+          description: Se escribió algo. false = los valores eran los mismos (no sube versión ni audita).
+        updatedAt:
+          type: string
+          format: date-time
+          description: Último cambio de la llave.
+      example:
+        apiKeyPrefix: AbCdEfGh
+        created: true
+        rotated: false
+        hasWebhookSecret: true
+        changed: true
+        updatedAt: "2026-11-25T15:00:00Z"
 
     TenantProductProvisioning:
       type: object

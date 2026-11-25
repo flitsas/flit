@@ -17,6 +17,8 @@ namespace Flit.Modules.Platform.Application.TenantProducts;
 /// encender exige un AdminCompany activo (409 <see cref="TenantProductException.ProvisioningPrerequisiteMissing"/>) y todo
 /// cambio deja el trabajo <c>&lt;producto&gt;.producto.cambiado</c> en la outbox del host, en el mismo guardado. El canal
 /// <c>platform.tenant_product.changed</c> sigue sin emitirse (deuda R-10 del plan).
+/// HU #14711 (AC-DC-03): encender <c>diagnostico</c> deja, en el mismo guardado, el alta de la credencial del impuesto en
+/// <c>PENDIENTE</c> (<see cref="ITenantProductProvisioningStore.PrepararPendienteAltaDiagnosticoAsync"/>).
 /// </remarks>
 public sealed class SetTenantProductEnabledHandler
 {
@@ -31,19 +33,22 @@ public sealed class SetTenantProductEnabledHandler
     private readonly IProductAccessStore _access;
     private readonly ITenantProductChangeJobs _jobs;
     private readonly IPrecondicionActivacion _precondicion;
+    private readonly ITenantProductProvisioningStore _provisioning;
 
     public SetTenantProductEnabledHandler(
         IProductCatalog catalog,
         ITenantProductRepository repository,
         IProductAccessStore access,
         ITenantProductChangeJobs jobs,
-        IPrecondicionActivacion precondicion)
+        IPrecondicionActivacion precondicion,
+        ITenantProductProvisioningStore provisioning)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _access = access ?? throw new ArgumentNullException(nameof(access));
         _jobs = jobs ?? throw new ArgumentNullException(nameof(jobs));
         _precondicion = precondicion ?? throw new ArgumentNullException(nameof(precondicion));
+        _provisioning = provisioning ?? throw new ArgumentNullException(nameof(provisioning));
     }
 
     public async Task<TenantProductChange> HandleAsync(
@@ -95,6 +100,20 @@ public sealed class SetTenantProductEnabledHandler
             throw new TenantProductException(
                 TenantProductException.NotesTooLong,
                 $"Las notas no pueden pasar de {NotesMaxLength} caracteres.");
+        }
+
+        // HU #14711 (AC-DC-03): encender diagnostico deja el alta de la credencial del impuesto en PENDIENTE en el mismo
+        // guardado; la atiende el trabajador de core-identity. No pasa por la precondición ni por la outbox de aprovisionamiento.
+        if (command.Enabled && string.Equals(code, TenantProductCredentialCodes.Diagnostico, StringComparison.Ordinal))
+        {
+            var marcarPendiente = await _provisioning.PrepararPendienteAltaDiagnosticoAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+            return await _repository
+                .SetAsync(command.TenantId, code, command.Enabled, notes, changedBy, change =>
+                {
+                    if (change.Current.Enabled)
+                        marcarPendiente(change.Current.UpdatedAt);
+                }, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (!ProductosConAprovisionamiento.Tiene(code))
