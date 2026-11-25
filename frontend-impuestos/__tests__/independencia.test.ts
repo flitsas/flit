@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 // declara @flit/frontend-diagnostico, esta prueba falla (EP-CF1 / AC-FE-43: los productos solo comparten @flit/*).
 
 const RAIZ = path.resolve(__dirname, "..");
-const IGNORAR = new Set(["node_modules", ".next", "out", "build", "coverage", "public"]);
+// Carpetas que no son código fuente: dependencias, salidas de build y artefactos generados por las pruebas
+// (playwright-report y test-results los escribe Playwright al correr los E2E; pueden traer JS empaquetado).
+const IGNORAR = new Set(["node_modules", ".next", "out", "build", "coverage", "public", "playwright-report", "test-results"]);
 const ESTE_ARCHIVO = path.resolve(__filename);
 
 function archivos(dir: string): string[] {
@@ -73,8 +75,11 @@ describe("independencia de frontend-impuestos (EP-CF1)", () => {
   });
 
   it("AC-FE-43: el código de la app no escribe en el almacenamiento del navegador (ni tokens ni credenciales)", () => {
+    // Se excluye el arnés de pruebas, que no se empaqueta en la app: los tests unitarios (__tests__/, *.test.ts[x]),
+    // la configuración de Vitest y el E2E de Playwright (e2e/: comun.ts fija el tema con localStorage en el navegador de prueba).
+    // e2e/ sigue dentro de los demás chequeos (p. ej. no importar de frontend-diagnostico).
     const usos = fuentes
-      .filter((r) => !relativa(r).startsWith("__tests__/") && !/\.test\.tsx?$/.test(r) && !relativa(r).startsWith("vitest."))
+      .filter((r) => !relativa(r).startsWith("__tests__/") && !relativa(r).startsWith("e2e/") && !/\.test\.tsx?$/.test(r) && !relativa(r).startsWith("vitest."))
       .filter((r) => /\b(localStorage|sessionStorage|indexedDB)\b|document\.cookie\s*=/.test(readFileSync(r, "utf8")))
       .map(relativa);
     expect(usos).toEqual([]);
