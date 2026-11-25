@@ -1,5 +1,6 @@
 using Flit.Api.Telemetry;
 using Flit.Impuestos.Api;
+using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
 using Flit.Platform.Sdk.Authentication;
@@ -52,6 +53,10 @@ public static class Program
         builder.Services.AddProteccionDatos(builder.Configuration);
         // EP-CF3a: ningún HttpClient del servicio registra el valor de X-API-Key, Authorization ni X-Flit-Signature.
         builder.Services.AddRedaccionCabeceras();
+        // Plan §5.6 y D-409 (M06): cliente propio del API de liquidación y credenciales cifradas por compañía.
+        builder.Services.AddClienteApiLiquidacion(builder.Configuration);
+        builder.Services.AddScoped<Modulos.Credenciales.AlmacenCredenciales>();
+        builder.Services.AddScoped<Modulos.Credenciales.CredencialesEmpresa>();
         builder.Services.AddSuscripcionImpuestos(builder.Configuration);
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
@@ -100,6 +105,7 @@ public static class Program
         // aquí su Map; lo que no existe responde 404 a quien sí está autenticado (el fallback nunca tapa una ruta mapeada).
         var api = app.MapGroup(Prefijo).RequireAuthorization();
         Modulos.Sesion.SesionEndpoints.Map(api);
+        Modulos.Credenciales.CredencialesBackofficeEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).
