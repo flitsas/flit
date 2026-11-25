@@ -10,6 +10,7 @@ sale de FLIT por REST (`contracts/openapi`).
 | [`tramites-events.v1.yaml`](tramites-events.v1.yaml) | `flit.tramites` | Cambio de estado del trámite y validaciones de identidad; además el aviso de radicación (solo ids; los datos van por pull gRPC) que le deja el portal de persona natural |
 | [`consultas-events.v1.yaml`](consultas-events.v1.yaml) | `flit.consultas` | Medición de cada consulta a proveedores; trabajos de consulta del Diagnóstico y su resultado (ADR-0075) |
 | [`diagnostico-events.v1.yaml`](diagnostico-events.v1.yaml) | `flit.diagnostico` | Cierre de un diagnóstico (`diagnostico.lote.terminado`, totales sin datos personales) |
+| [`impuestos-events.v1.yaml`](impuestos-events.v1.yaml) | `flit.impuestos` | Trabajos que la plataforma deja a Impuestos (producto encendido o apagado, reintentar el aprovisionamiento) y eventos internos de core-impuestos (liquidación solicitada, descarga de recibos); solo ids (ADR-0093) |
 | [`notificaciones-events.v1.yaml`](notificaciones-events.v1.yaml) | `flit.notificaciones` | Trabajos en cola que recibe Notificaciones (correo y webhooks salientes) |
 | [`domain-events.v1.yaml`](domain-events.v1.yaml) | — | Webhooks HTTP salientes al Organismo de Tránsito y a FLITO (no son del bus) |
 

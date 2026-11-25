@@ -1,0 +1,149 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — trabajos y eventos de Impuestos
+  version: 1.0.0
+  description: |
+    Mensajes del exchange `flit.impuestos` (producto Impuestos, core-impuestos; ADR-0093, plan
+    docs/impuestos/plan-implementacion.md §5.5). Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos
+    personales: solo ids, el código de producto y el cambio (A-H10).
+
+    Hay dos clases de mensaje:
+    - Trabajos que la plataforma le deja a core-impuestos (`impuestos.producto.cambiado` e
+      `impuestos.aprovisionamiento.reintentar`). Los publican core-api (productor `tramites`) y core-identity (productor
+      `plataforma`) por su outbox con EnqueueJob, en la misma transacción del cambio, porque el PUT de productos lo
+      atienden los dos hosts según FLIT_IDENTITY_CLUSTER_ENABLED (plan §1.1, decisión E2). Sus usuarios del broker
+      necesitan permiso de escritura en `flit.impuestos` (gate LT G-8). Los consume la cola `impuestos.plataforma`.
+    - Eventos internos de core-impuestos (`impuestos.liquidacion.solicitada` e `impuestos.recibos.descargar`) que el
+      propio servicio publica por su outbox y consume en sus colas `impuestos.liquidaciones` e `impuestos.recibos`.
+
+    El correo «Lote terminado» no es de este exchange: core-impuestos deja el trabajo `notificaciones.email.send`
+    (notificaciones-events.v1.yaml) en `flit.notificaciones`, con el correo ya armado y sin datos del propietario.
+
+    Consumo idempotente por `eventId` con bandeja de entrada. El canal `platform.tenant_product.changed` de
+    plataforma-events.v1.yaml queda como deuda declarada (plan R-10): no se emite desde core-api y no lo usa Impuestos.
+defaultContentType: application/json
+
+channels:
+  impuestos.producto.cambiado:
+    description: |
+      Trabajo. Se encendió o apagó el producto `impuestos` para una empresa (PUT
+      /api/v1/platform/admin/tenants/{tenantId}/products/impuestos). Solo se encola si hubo cambio (`changed=true`): un
+      PUT que deja el mismo valor no produce trabajo, y un rollback del cambio lo quita. core-impuestos aprovisiona al
+      encender (PENDIENTE y evaluación) y suspende al apagar (SUSPENDIDO, guarda el estado previo). La empresa va en el
+      sobre y también en `data.tenantId`.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: productoCambiado
+      message:
+        $ref: '#/components/messages/ProductoCambiado'
+
+  impuestos.aprovisionamiento.reintentar:
+    description: |
+      Trabajo. El Super Admin pulsó «Reintentar» en el admin de compañías (POST
+      /api/v1/platform/admin/tenants/{tenantId}/products/impuestos/aprovisionamiento/reintentar). core-impuestos lo
+      aplica solo desde ERROR, INCIERTO o REQUIERE_REVISION_NIT (pasa a PENDIENTE); en otro estado lo confirma sin
+      efecto. Se encola por la outbox en la transacción de la petición.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: aprovisionamientoReintentar
+      message:
+        $ref: '#/components/messages/AprovisionamientoReintentar'
+
+  impuestos.liquidacion.solicitada:
+    description: |
+      Evento interno. Un ítem de liquidación recibió el crédito de su compañía (DespachadorCredito: 2 en vuelo por
+      compañía y 6 en total, configurables) y espera que el consumidor `impuestos.liquidaciones` consulte el RUNT y
+      envíe la solicitud al proveedor. Lo publica el despachador por la outbox al crear la liquidación, al liberar un
+      crédito o al vencer un reintento programado. Solo ids: ni placa, ni documento, ni nombre.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: liquidacionSolicitada
+      message:
+        $ref: '#/components/messages/LiquidacionSolicitada'
+
+  impuestos.recibos.descargar:
+    description: |
+      Evento interno. Se aplicó un resultado `succeeded` o `partial` con `fileId` y hay que descargar sus recibos PDF del
+      proveedor y guardarlos en el file-manager (categoría `impuestos`, ADR-0057). Lo consume la cola `impuestos.recibos`.
+      Un fileId repetido entre vigencias se descarga una sola vez.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: recibosDescargar
+      message:
+        $ref: '#/components/messages/RecibosDescargar'
+
+components:
+  messages:
+    ProductoCambiado:
+      name: impuestos.producto.cambiado
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [tramites, plataforma], description: "core-api (tramites) o core-identity (plataforma)." }
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId, productCode, enabled, changedAt]
+                properties:
+                  tenantId: { type: string, format: uuid, description: "Empresa del cambio (la misma del sobre)." }
+                  productCode: { type: string, enum: [impuestos] }
+                  enabled: { type: boolean, description: "true = encendido; false = apagado (suspensión reversible, D-DESACT)." }
+                  changedAt: { type: string, format: date-time, description: "updated_at de platform.tenant_products tras el cambio." }
+    AprovisionamientoReintentar:
+      name: impuestos.aprovisionamiento.reintentar
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [tramites, plataforma] }
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId, solicitadoPor]
+                properties:
+                  tenantId: { type: string, format: uuid }
+                  solicitadoPor: { type: string, format: uuid, description: "Id del Super Admin que pulsó Reintentar (va al historial)." }
+    LiquidacionSolicitada:
+      name: impuestos.liquidacion.solicitada
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [impuestos] }
+              data:
+                type: object
+                additionalProperties: false
+                required: [liquidacionId, itemId]
+                properties:
+                  liquidacionId: { type: string, format: uuid, description: "Cabecera (impuestos.liquidaciones)." }
+                  itemId: { type: string, format: uuid, description: "Ítem (impuestos.liquidacion_items)." }
+    RecibosDescargar:
+      name: impuestos.recibos.descargar
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [impuestos] }
+              data:
+                type: object
+                additionalProperties: false
+                required: [itemId]
+                properties:
+                  itemId: { type: string, format: uuid, description: "Ítem con resultado aplicado (impuestos.liquidacion_items)." }
