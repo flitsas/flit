@@ -1,8 +1,11 @@
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Platform.Domain.Access;
 using Flit.Modules.Platform.Domain.TenantProducts;
+using System.Security.Cryptography;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Flit.Modules.Platform.Tests.TenantProducts;
@@ -35,7 +38,9 @@ public sealed class GetTenantProductWebhookSecretHandlerTests
         _protector.Unprotect(TenantId, "impuesto_webhook_secret_anterior", "cifrado-anterior").Returns(Anterior);
     }
 
-    private GetTenantProductWebhookSecretHandler Handler() => new(_access, _credentials, _protector, new Reloj(Ahora));
+    private readonly Capturador _log = new();
+
+    private GetTenantProductWebhookSecretHandler Handler() => new(_access, _credentials, _protector, new Reloj(Ahora), _log);
 
     private void Encendidas(params Guid[] empresas) =>
         _access.GetTenantsWithProductEnabledAsync(Arg.Any<IReadOnlyList<Guid>>(), "diagnostico", Arg.Any<CancellationToken>())
@@ -154,8 +159,52 @@ public sealed class GetTenantProductWebhookSecretHandlerTests
         await _credentials.DidNotReceiveWithAnyArgs().DeleteAsync(default, default!, default!, default, Ct);
     }
 
+    [Fact]
+    public async Task L3_AnteriorQueNoSeDescifra_SeIgnora_SeEntregaElActual_YWarningSinValores()
+    {
+        ConActual(version: 9);
+        ConAnterior(Ahora.AddHours(-1));
+        _protector.Unprotect(TenantId, "impuesto_webhook_secret_anterior", "cifrado-anterior")
+            .Throws(new CryptographicException("detalle-de-la-llave-que-no-va-al-log"));
+
+        var entrega = await Handler().HandleAsync(TenantId, Ct);
+
+        entrega.Configurado.Should().BeTrue();
+        entrega.Actual.Should().Be(Actual);
+        entrega.Anterior.Should().BeNull();
+        entrega.AnteriorVenceEn.Should().BeNull();
+        entrega.Version.Should().Be(9);
+        _log.Entradas.Should().ContainSingle(e => e.Nivel == LogLevel.Warning && e.Id == 7424);
+        var todo = string.Join("|", _log.Entradas.Select(e => e.Texto));
+        todo.Should().NotContain(Actual).And.NotContain(Anterior).And.NotContain("cifrado-anterior")
+            .And.NotContain("detalle-de-la-llave-que-no-va-al-log");
+    }
+
+    [Fact]
+    public async Task L3_ActualQueNoSeDescifra_SiguePropagando()
+    {
+        ConActual();
+        _protector.Unprotect(TenantId, "impuesto_webhook_secret", "cifrado-actual").Throws(new CryptographicException("x"));
+
+        var act = () => Handler().HandleAsync(TenantId, Ct);
+
+        await act.Should().ThrowAsync<CryptographicException>("sin el actual no hay con qué verificar; lo traduce el rpc");
+    }
+
     private sealed class Reloj(DateTimeOffset ahora) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
+    private sealed class Capturador : ILogger<GetTenantProductWebhookSecretHandler>
+    {
+        public List<(LogLevel Nivel, int Id, string Texto)> Entradas { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entradas.Add((logLevel, eventId.Id, formatter(state, exception) + (exception?.ToString() ?? string.Empty)));
     }
 }
