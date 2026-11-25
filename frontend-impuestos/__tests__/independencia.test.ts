@@ -65,6 +65,13 @@ describe("independencia de frontend-impuestos (EP-CF1)", () => {
     }
   });
 
+  it("D-UI-GRAFICAS: las gráficas del dashboard son copias locales en components/estadisticas (no de Diagnóstico ni de packages/ui)", () => {
+    const rel = fuentes.map(relativa);
+    const graficas = ["Figura.tsx", "BarrasSerie.tsx", "ListaBarras.tsx", "TablaAlternativa.tsx"].map((f) => `components/estadisticas/${f}`);
+    expect(rel).toEqual(expect.arrayContaining([...graficas, "app/(app)/page.tsx", "app/(app)/reportes/page.tsx"]));
+    for (const g of graficas) expect(especificadores(readFileSync(path.join(RAIZ, g), "utf8")).filter((e) => /graficas|frontend-diagnostico/.test(e)), g).toEqual([]);
+  });
+
   it("AC-FE-43: el código de la app no escribe en el almacenamiento del navegador (ni tokens ni credenciales)", () => {
     const usos = fuentes
       .filter((r) => !relativa(r).startsWith("__tests__/") && !/\.test\.tsx?$/.test(r) && !relativa(r).startsWith("vitest."))
