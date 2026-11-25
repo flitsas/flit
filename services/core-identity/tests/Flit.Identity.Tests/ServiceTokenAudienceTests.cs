@@ -30,6 +30,8 @@ public sealed class ServiceTokenAudienceTests
     [InlineData("platform.identidad.empresas.alta", "plataforma")]
     [InlineData("platform.identidad.credenciales.impuesto.copia", "plataforma")]
     [InlineData("platform.identidad.credenciales.impuesto.actualizar", "plataforma")]
+    // HU #14711: secreto del webhook del impuesto para svc-consultas (lo atiende core-identity).
+    [InlineData("platform.identidad.credenciales.impuesto.webhook", "plataforma")]
     [InlineData("platform.aprovisionamiento.reportar", "plataforma")]
     [InlineData("platform.usuarios.impuestos", "tramites")]
     [InlineData("platform.usuarios.impuestos.conteos", "tramites")]
@@ -48,7 +50,7 @@ public sealed class ServiceTokenAudienceTests
     [Fact]
     public void LosScopesRegistradosSonExactamenteLosDelMapa() =>
         OidcDefaults.ServiceScopes.Should().BeEquivalentTo(
-            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.identidad.empresas", "platform.identidad.credenciales.impuesto", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.notificaciones.admin", "platform.tramites.ict", "platform.tramites.catalogos", "platform.tramites.persona_natural", "platform.tramites.derivacion", "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos", "platform.ia.diagnostico", "platform.personanatural.leer", "platform.personanatural.caja", "platform.identidad.empresas.alta", "platform.identidad.credenciales.impuesto.copia", "platform.identidad.credenciales.impuesto.actualizar", "platform.aprovisionamiento.reportar", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos"]);
+            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.identidad.empresas", "platform.identidad.credenciales.impuesto", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.notificaciones.admin", "platform.tramites.ict", "platform.tramites.catalogos", "platform.tramites.persona_natural", "platform.tramites.derivacion", "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos", "platform.ia.diagnostico", "platform.personanatural.leer", "platform.personanatural.caja", "platform.identidad.empresas.alta", "platform.identidad.credenciales.impuesto.copia", "platform.identidad.credenciales.impuesto.actualizar", "platform.aprovisionamiento.reportar", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos", "platform.identidad.credenciales.impuesto.webhook"]);
 
     /// <summary>
     /// HU #14694 (plan §5.3): el cliente de servicio svc-impuestos de core-api tiene exactamente sus scopes. Lo lee del
@@ -67,6 +69,21 @@ public sealed class ServiceTokenAudienceTests
             ["platform.manifest", "platform.identidad.read", "platform.identidad.empresas", "platform.identidad.empresas.alta",
              "platform.identidad.credenciales.impuesto.copia", "platform.identidad.credenciales.impuesto.actualizar", "platform.aprovisionamiento.reportar", "platform.consultas",
              "platform.tramites.catalogos", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos"]);
+        svc.GetProperty("Scopes").EnumerateArray().Select(s => s.GetString())
+            .Should().OnlyContain(s => OidcDefaults.ServiceScopes.Contains(s!), "todo scope del cliente debe existir en el mapa de audiencias");
+    }
+
+    /// <summary>HU #14711 (plan §3.2): svc-consultas lee la llave y, con su scope propio, el secreto del webhook del impuesto.</summary>
+    [Fact]
+    public void SvcConsultas_TieneLosScopesDeLlaveYSecretoDelWebhook()
+    {
+        var archivo = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(archivo));
+        var svc = json.RootElement.GetProperty("Suite").GetProperty("Oidc").GetProperty("ServiceClients").GetProperty("svc-consultas");
+
+        svc.GetProperty("Secret").GetString().Should().BeEmpty("el secreto llega por variable de entorno, nunca en el repo");
+        svc.GetProperty("Scopes").EnumerateArray().Select(s => s.GetString()).Should().BeEquivalentTo(
+            ["platform.identidad.read", "platform.identidad.credenciales.impuesto", "platform.identidad.credenciales.impuesto.webhook"]);
         svc.GetProperty("Scopes").EnumerateArray().Select(s => s.GetString())
             .Should().OnlyContain(s => OidcDefaults.ServiceScopes.Contains(s!), "todo scope del cliente debe existir en el mapa de audiencias");
     }

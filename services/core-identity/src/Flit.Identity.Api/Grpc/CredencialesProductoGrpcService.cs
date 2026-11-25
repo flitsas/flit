@@ -10,12 +10,14 @@ namespace Flit.Identity.Api.Grpc;
 /// apagado; nunca escribe la llave en logs. HU #14694: <see cref="ObtenerCredencialImpuestoParaCopia"/> la entrega a
 /// <c>svc-impuestos</c> (solo ese rpc, con su scope <see cref="ScopeCopia"/>) aunque Diagnóstico esté apagado, auditada; y
 /// <see cref="ActualizarCredencialImpuestoDiagnostico"/> (M04b, scope <see cref="ScopeActualizar"/>) reemplaza esa llave cuando el
-/// alta del proveedor la rotó (D-ALTA-IDEM).
+/// alta del proveedor la rotó (D-ALTA-IDEM). HU #14711: <see cref="ObtenerSecretoWebhookImpuesto"/> entrega a <c>svc-consultas</c>
+/// (scope <see cref="ScopeWebhook"/>) el secreto del webhook del impuesto para verificar los avisos del proveedor.
 /// </summary>
 internal sealed partial class CredencialesProductoGrpcService(
     GetTenantProductCredentialHandler handler,
     GetTenantProductCredentialForCopyHandler copia,
     UpdateTenantProductCredentialFromServiceHandler actualizar,
+    GetTenantProductWebhookSecretHandler secretoWebhook,
     ILogger<CredencialesProductoGrpcService> logger)
     : CredencialesProductoService.CredencialesProductoServiceBase
 {
@@ -25,6 +27,8 @@ internal sealed partial class CredencialesProductoGrpcService(
     public const string ScopeCopia = "platform.identidad.credenciales.impuesto.copia";
     /// <summary>HU #14694 (M04b) — scope del rpc que reemplaza la llave de Diagnóstico (solo <c>svc-impuestos</c>).</summary>
     public const string ScopeActualizar = "platform.identidad.credenciales.impuesto.actualizar";
+    /// <summary>HU #14711 — scope del rpc del secreto del webhook del impuesto (solo <c>svc-consultas</c>).</summary>
+    public const string ScopeWebhook = "platform.identidad.credenciales.impuesto.webhook";
     private const string ClientePermitido = "svc-consultas";
     private const string ClienteCopia = "svc-impuestos";
     private const string ClienteNoPermitido = "CLIENTE_NO_PERMITIDO";
@@ -223,6 +227,69 @@ internal sealed partial class CredencialesProductoGrpcService(
         }
     }
 
+    /// <summary>
+    /// HU #14711 (plan §3.2) — el secreto del webhook del impuesto para que core-consultas verifique los avisos del proveedor:
+    /// el actual, el anterior mientras siga vigente y la versión (<c>row_version</c> del actual). Solo <c>svc-consultas</c>
+    /// (scope <see cref="ScopeWebhook"/>); fail-closed con Diagnóstico apagado. Los secretos nunca entran a un log ni a un error.
+    /// </summary>
+    public override async Task<ObtenerSecretoWebhookImpuestoResponse> ObtenerSecretoWebhookImpuesto(
+        ObtenerSecretoWebhookImpuestoRequest request,
+        ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var caller = PlatformServiceCaller.From(context);
+        var quien = new Quien(caller.ClientId, Jti(context), caller.TenantId, context.Peer);
+
+        if (caller.TenantId == Guid.Empty)
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Falta x-flit-tenant-id."));
+
+        if (!string.Equals(caller.ClientId, ClientePermitido, StringComparison.Ordinal))
+        {
+            LogSecretoWebhookDenegado(logger, quien.Sub, quien.Jti, quien.Tenant, ClienteNoPermitido, quien.Ip);
+            throw PlatformRpcErrors.ToRpcException(
+                ClienteNoPermitido,
+                "Este rpc solo lo atiende Consultas.",
+                StatusCode.PermissionDenied);
+        }
+
+        try
+        {
+            var entrega = await secretoWebhook.HandleAsync(caller.TenantId, context.CancellationToken).ConfigureAwait(false);
+            if (!entrega.Configurado)
+            {
+                LogSecretoWebhookDenegado(logger, quien.Sub, quien.Jti, quien.Tenant, entrega.Motivo.ToString(), quien.Ip);
+                return new ObtenerSecretoWebhookImpuestoResponse { Configurado = false, Actual = string.Empty, Anterior = string.Empty, Version = 0 };
+            }
+
+            LogSecretoWebhookEntregado(logger, quien.Sub, quien.Jti, quien.Tenant, entrega.Version, entrega.Anterior is not null, quien.Ip);
+            var respuesta = new ObtenerSecretoWebhookImpuestoResponse
+            {
+                Configurado = true,
+                Actual = entrega.Actual ?? string.Empty,
+                Anterior = entrega.Anterior ?? string.Empty,
+                Version = entrega.Version,
+            };
+            if (entrega.Anterior is not null && entrega.AnteriorVenceEn is { } vence)
+                respuesta.AnteriorVenceEn = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(vence);
+            return respuesta;
+        }
+        catch (RpcException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogFalla(logger, quien.Sub, quien.Tenant, ex.GetType().Name, quien.Ip);
+            throw new RpcException(new Status(StatusCode.Internal, "Error interno al entregar el secreto del webhook."));
+        }
+    }
+
     private sealed record Quien(string Sub, string? Jti, Guid Tenant, string Ip);
 
     [LoggerMessage(EventId = 7410, EventName = "impuesto.credencial.entregada", Level = LogLevel.Information,
@@ -256,6 +323,14 @@ internal sealed partial class CredencialesProductoGrpcService(
     [LoggerMessage(EventId = 7418, EventName = "impuesto.credencial.diagnostico.denegada", Level = LogLevel.Warning,
         Message = "impuesto.credencial.diagnostico.denegada sub={Sub} jti={Jti} tenant={Tenant} motivo={Motivo} ip={Ip}")]
     private static partial void LogActualizacionDenegada(ILogger logger, string sub, string? jti, Guid tenant, string motivo, string ip);
+
+    [LoggerMessage(EventId = 7419, EventName = "impuesto.webhook.secreto.entregado", Level = LogLevel.Information,
+        Message = "impuesto.webhook.secreto.entregado sub={Sub} jti={Jti} tenant={Tenant} version={Version} con_anterior={ConAnterior} ip={Ip}")]
+    private static partial void LogSecretoWebhookEntregado(ILogger logger, string sub, string? jti, Guid tenant, long version, bool conAnterior, string ip);
+
+    [LoggerMessage(EventId = 7409, EventName = "impuesto.webhook.secreto.denegado", Level = LogLevel.Warning,
+        Message = "impuesto.webhook.secreto.denegado sub={Sub} jti={Jti} tenant={Tenant} motivo={Motivo} ip={Ip}")]
+    private static partial void LogSecretoWebhookDenegado(ILogger logger, string sub, string? jti, Guid tenant, string motivo, string ip);
 
     [LoggerMessage(EventId = 7412, EventName = "impuesto.credencial.error", Level = LogLevel.Error,
         Message = "impuesto.credencial.error sub={Sub} tenant={Tenant} tipo={Tipo} ip={Ip}")]

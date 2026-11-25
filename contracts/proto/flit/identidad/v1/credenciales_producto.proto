@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package flit.identidad.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option csharp_namespace = "Flit.Identidad.Grpc.V1";
 
 // Credenciales de un producto por empresa para el servicio que llama a un tercero en su nombre (ADR-0092).
@@ -32,6 +34,24 @@ service CredencialesProductoService {
   // llave deja el mismo valor. Cada reemplazo queda en admin.tenant_config_audit_logs (sin valor ni huella, con el cliente).
   // Llave con forma inválida -> INVALID_ARGUMENT reason CREDENCIAL_INVALIDA (no se reintenta).
   rpc ActualizarCredencialImpuestoDiagnostico(ActualizarCredencialImpuestoDiagnosticoRequest) returns (ActualizarCredencialImpuestoDiagnosticoResponse);
+
+  // Solo svc-consultas, scope platform.identidad.credenciales.impuesto.webhook (HU #14711, plan §3.2).
+  // El secreto del webhook del proveedor de impuesto de la empresa (diagnostico/impuesto_webhook_secret), con el que
+  // core-consultas verifica la firma de los avisos, y el anterior mientras siga vigente (24 h desde su rotación).
+  // Idempotente y sin efectos. Fail-closed como ObtenerCredencialImpuesto: con Diagnóstico apagado para la empresa o algún
+  // ancestro, o sin secreto, configurado=false. core-identity NUNCA escribe los secretos en logs.
+  rpc ObtenerSecretoWebhookImpuesto(ObtenerSecretoWebhookImpuestoRequest) returns (ObtenerSecretoWebhookImpuestoResponse);
+}
+
+// La empresa va en la metadata x-flit-tenant-id.
+message ObtenerSecretoWebhookImpuestoRequest {}
+
+message ObtenerSecretoWebhookImpuestoResponse {
+  bool configurado = 1;                                // false => sin secreto o Diagnóstico apagado: no se pide aviso
+  string actual = 2;                                   // solo con configurado = true (secreto completo, con su prefijo whsec_)
+  string anterior = 3;                                 // vacío si no hay anterior o ya venció
+  google.protobuf.Timestamp anterior_vence_en = 4;     // solo con anterior
+  int64 version = 5;                                   // row_version del secreto actual; 0 sin secreto. Versión de la caché
 }
 
 // La empresa va en la metadata x-flit-tenant-id. api_key: la nueva llave del impuesto (texto visible, 16 a 256 caracteres).

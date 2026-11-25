@@ -11,6 +11,7 @@ internal static class SolicitudServicioImpuesto
     public const string ClaveDocumentType = "documentType";
     public const string ClaveDocumentNumber = "documentNumber";
     public const string ClavePlateNumber = "plateNumber";
+    public const string ClaveCallbackUrl = "callbackUrl";
     public const string ClaveSecretaryDepartmentCode = "secretaryDepartmentCode";
     public const string ClaveSecretaryCity = "secretaryCity";
     public const string ClaveVehicleModel = "vehicleModel";
@@ -24,7 +25,8 @@ internal static class SolicitudServicioImpuesto
     private static readonly Regex DepartamentoCodigo = new("^[0-9]{2}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly HashSet<string> TiposDocumento = new(StringComparer.Ordinal) { "CC", "NIT", "CE", "PA", "TI", "CD" };
 
-    public static string Crear(ConsultarImpuestoVehicularRequest request, string tipoHomologado, ContactoImpuesto contacto)
+    /// <param name="callbackUrl">HU #14711 (AC-DC-07): URL del aviso del proveedor (guía §5, campo <c>callbackUrl</c>); null la omite.</param>
+    public static string Crear(ConsultarImpuestoVehicularRequest request, string tipoHomologado, ContactoImpuesto contacto, string? callbackUrl = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(contacto);
@@ -112,6 +114,8 @@ internal static class SolicitudServicioImpuesto
             [ClavePlateNumber] = placa,
             ["detail"] = detalle,
         };
+        if (!string.IsNullOrEmpty(callbackUrl))
+            raiz[ClaveCallbackUrl] = callbackUrl;
         return raiz.ToJsonString();
     }
 

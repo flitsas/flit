@@ -187,7 +187,7 @@ Cliente OIDC público `diagnostico` del hub (PKCE). Se registra solo con el host
 |---|---|---|---|---|---|---|---|
 | `CORE_IDENTITY_GRPC_PORT` | core-identity | `Identidad__GrpcPort` | condicional | no | vacío | `.env.prod.example` (comentada) | gRPC de Identidad (8083). Lo usan la suscripción de Diagnóstico y la credencial de impuesto |
 | `SVC_DIAGNOSTICO_CLIENT_SECRET` | core-api / core-identity | `Suite__Oidc__ServiceClients__svc-diagnostico__Secret` | sí | sí | vacío | `.env.prod.example` | Registro de `svc-diagnostico`. Mismo valor que en core-diagnostico. Reiniciar core-api (y core-identity) al cambiarlo |
-| `SVC_CONSULTAS_CLIENT_SECRET` | core-api / core-identity | `Suite__Oidc__ServiceClients__svc-consultas__Secret` | sí | sí | vacío | `.env.prod.example` | Registro de `svc-consultas`, con el scope `platform.identidad.credenciales.impuesto` |
+| `SVC_CONSULTAS_CLIENT_SECRET` | core-api / core-identity | `Suite__Oidc__ServiceClients__svc-consultas__Secret` | sí | sí | vacío | `.env.prod.example` | Registro de `svc-consultas`, con los scopes `platform.identidad.credenciales.impuesto` y `platform.identidad.credenciales.impuesto.webhook` (HU #14711) |
 | `SVC_CONSULTAS_CLIENT_SECRET` | core-consultas | `Platform__ServiceClient__ClientSecret` | sí | sí | vacío | `.env.prod.example` | Token de servicio de core-consultas. Mismo valor que el registro |
 | `CORE_CONSULTAS_GRPC_PORT` | core-consultas | `Servicio__GrpcPort` | no | no | `8084` | `.env.prod.example` | Destino de `DIAGNOSTICO_CONSULTAS_ADDRESS` (`http://core-consultas:8084`) |
 | `RABBITMQ_URL_CONSULTAS` | core-consultas | `Platform__Messaging__ConnectionString` | sí | sí | `amqp://consultas:sin-clave@rabbitmq:5672/flit` | `.env.prod.example` | Consume los trabajos que Diagnóstico deja en `flit.consultas`. El default no sirve: poner la clave real |
@@ -270,7 +270,7 @@ Lo que sí hay que configurar para que la entrega funcione:
 | Perfil `identity` arriba con gRPC | core-identity | `COMPOSE_PROFILES=…,identity` y `CORE_IDENTITY_GRPC_PORT=8083` (`Identidad__GrpcPort`) |
 | Dirección del gRPC de Identidad | core-consultas | `CONSULTAS_IDENTIDAD_ADDRESS=http://core-identity:8083` (`Consultas__Identidad__Address`) |
 | Cliente de servicio `svc-consultas` | core-api y core-identity (registro) + core-consultas (uso) | `SVC_CONSULTAS_CLIENT_SECRET` → `Suite__Oidc__ServiceClients__svc-consultas__Secret` y `Platform__ServiceClient__ClientSecret`. Mismo valor en los dos lados |
-| Scope del cliente | `appsettings.json` de core-api/core-identity | `svc-consultas` ya trae `platform.identidad.credenciales.impuesto`. No es variable |
+| Scope del cliente | `appsettings.json` de core-api/core-identity | `svc-consultas` ya trae `platform.identidad.credenciales.impuesto` y, desde HU #14711, `platform.identidad.credenciales.impuesto.webhook`. No es variable |
 | Producto Diagnóstico encendido | Admin › Compañías › Productos | Dato de la base, no variable |
 
 ### 3.4 Lado Diagnóstico

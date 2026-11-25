@@ -52,6 +52,7 @@ public sealed class CredencialesProductoGrpcTests
             new GetTenantProductCredentialHandler(_acceso, _credenciales, _protector),
             new GetTenantProductCredentialForCopyHandler(_credenciales, _protector),
             new UpdateTenantProductCredentialFromServiceHandler(_credenciales, _protector),
+            new GetTenantProductWebhookSecretHandler(_acceso, _credenciales, _protector, new RelojFijo(AhoraWebhook)),
             _logger);
 
     private static Task<ActualizarCredencialImpuestoDiagnosticoResponse> Actualizar(
@@ -375,6 +376,136 @@ public sealed class CredencialesProductoGrpcTests
         CredencialesProductoGrpcService.ScopeActualizar.Should().Be("platform.identidad.credenciales.impuesto.actualizar");
     }
 
+    // ── HU #14711 — ObtenerSecretoWebhookImpuesto ─────────────────────────────────────────────────────────────────────
+
+    private const string SecretoActual = "whsec_CENTINELA_actual_0123456789";
+    private const string SecretoAnterior = "whsec_CENTINELA_anterior_0123456789";
+    private static readonly DateTimeOffset AhoraWebhook = new(2026, 11, 25, 15, 0, 0, TimeSpan.Zero);
+
+    private void ConSecretos(bool anteriorVigente)
+    {
+        _credenciales.PorCodigo["impuesto_webhook_secret"] =
+            new TenantProductCredential(Empresa, "diagnostico", "impuesto_webhook_secret", "cifrado-actual", RowVersion: 12, AhoraWebhook.AddDays(-1));
+        _credenciales.PorCodigo["impuesto_webhook_secret_anterior"] = new TenantProductCredential(
+            Empresa, "diagnostico", "impuesto_webhook_secret_anterior", "cifrado-anterior", RowVersion: 2,
+            anteriorVigente ? AhoraWebhook.AddHours(-2) : AhoraWebhook.AddHours(-30));
+        _protector.PlanoPorCodigo["impuesto_webhook_secret"] = SecretoActual;
+        _protector.PlanoPorCodigo["impuesto_webhook_secret_anterior"] = SecretoAnterior;
+    }
+
+    private static Task<ObtenerSecretoWebhookImpuestoResponse> SecretoWebhook(
+        CredencialesProductoGrpcService servicio, string cliente = "svc-consultas", Guid? empresa = null) =>
+        servicio.ObtenerSecretoWebhookImpuesto(new ObtenerSecretoWebhookImpuestoRequest(), new Contexto(cliente, empresa ?? Empresa, Ct));
+
+    private bool SinSecretosEnLogs() =>
+        _logger.Entradas.All(e => !e.Texto.Contains(SecretoActual, StringComparison.Ordinal)
+            && !e.Texto.Contains(SecretoAnterior, StringComparison.Ordinal)
+            && e.Campos.All(c => c.Value == null
+                || (!c.Value.Contains(SecretoActual, StringComparison.Ordinal) && !c.Value.Contains(SecretoAnterior, StringComparison.Ordinal))));
+
+    [Fact]
+    public async Task SecretoWebhook_SvcConsultas_EntregaActualAnteriorVigenteYVersion_SinSecretosEnLogs()
+    {
+        ConSecretos(anteriorVigente: true);
+
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeTrue();
+        r.Actual.Should().Be(SecretoActual);
+        r.Anterior.Should().Be(SecretoAnterior);
+        r.AnteriorVenceEn.ToDateTimeOffset().Should().Be(AhoraWebhook.AddHours(22));
+        r.Version.Should().Be(12);
+        _logger.Entradas.Should().ContainSingle(e => e.Texto.Contains("impuesto.webhook.secreto.entregado", StringComparison.Ordinal));
+        SinSecretosEnLogs().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_AnteriorVencido_SoloElActual_SinVencimiento()
+    {
+        ConSecretos(anteriorVigente: false);
+
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeTrue();
+        r.Actual.Should().Be(SecretoActual);
+        r.Anterior.Should().BeEmpty();
+        r.AnteriorVenceEn.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_SinSecreto_NoConfigurado_Version0()
+    {
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeFalse();
+        r.Actual.Should().BeEmpty();
+        r.Anterior.Should().BeEmpty();
+        r.Version.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_DiagnosticoApagado_NoConfigurado_SinDescifrar()
+    {
+        ConSecretos(anteriorVigente: true);
+        _acceso.Encendidas = [Cabeza];
+
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeFalse();
+        r.Actual.Should().BeEmpty();
+        _protector.Descifrados.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("svc-impuestos")]
+    [InlineData("svc-diagnostico")]
+    public async Task SecretoWebhook_OtroCliente_PermissionDenied_SinLeer(string cliente)
+    {
+        ConSecretos(anteriorVigente: true);
+
+        var act = () => SecretoWebhook(Servicio(), cliente);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        _protector.Descifrados.Should().BeEmpty();
+        _credenciales.Consultas.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_SinEmpresa_InvalidArgument()
+    {
+        var act = () => SecretoWebhook(Servicio(), empresa: Guid.Empty);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_ErrorInesperado_InternalGenerico_SinSecretos()
+    {
+        ConSecretos(anteriorVigente: true);
+        _protector.Falla = new InvalidOperationException("detalle " + SecretoActual);
+
+        var act = () => SecretoWebhook(Servicio());
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.Internal);
+        ex.Status.Detail.Should().NotContain(SecretoActual);
+        SinSecretosEnLogs().Should().BeTrue();
+    }
+
+    [Fact]
+    public void SecretoWebhook_ExigeSuScopePropio_ConEmpresa()
+    {
+        ServiceTokenPorMetodoInterceptor.Requisito(
+                "/flit.identidad.v1.CredencialesProductoService/ObtenerSecretoWebhookImpuesto", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be(("platform.identidad.credenciales.impuesto.webhook", true));
+        CredencialesProductoGrpcService.ScopeWebhook.Should().Be("platform.identidad.credenciales.impuesto.webhook");
+    }
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
     private static ClaimsPrincipal Usuario(string sub, string aud, string scope) =>
         new(new ClaimsIdentity([new Claim("sub", sub), new Claim("aud", aud), new Claim("scope", scope)], "Bearer"));
 
@@ -397,11 +528,16 @@ public sealed class CredencialesProductoGrpcTests
     {
         public TenantProductCredential? Fila { get; set; }
 
+        /// <summary>HU #14711: filas de los secretos del webhook, por código (la llave sigue en <see cref="Fila"/>).</summary>
+        public Dictionary<string, TenantProductCredential> PorCodigo { get; } = new(StringComparer.Ordinal);
+
         public List<(Guid, string, string)> Consultas { get; } = [];
 
         public Task<TenantProductCredential?> GetAsync(Guid tenantId, string productCode, string credentialCode, CancellationToken cancellationToken = default)
         {
             Consultas.Add((tenantId, productCode, credentialCode));
+            if (credentialCode.StartsWith("impuesto_webhook_secret", StringComparison.Ordinal))
+                return Task.FromResult(PorCodigo.TryGetValue(credentialCode, out var s) && s.TenantId == tenantId ? s : null);
             return Task.FromResult(Fila is { } f && f.TenantId == tenantId ? f : null);
         }
 
@@ -441,6 +577,8 @@ public sealed class CredencialesProductoGrpcTests
     {
         public string Plano { get; set; } = string.Empty;
 
+        public Dictionary<string, string> PlanoPorCodigo { get; } = new(StringComparer.Ordinal);
+
         public Exception? Falla { get; set; }
 
         public List<(Guid, string, string)> Descifrados { get; } = [];
@@ -458,7 +596,7 @@ public sealed class CredencialesProductoGrpcTests
             if (Falla is not null)
                 throw Falla;
             Descifrados.Add((tenantId, credentialCode, protectedValue));
-            return Plano;
+            return PlanoPorCodigo.TryGetValue(credentialCode, out var plano) ? plano : Plano;
         }
     }
 

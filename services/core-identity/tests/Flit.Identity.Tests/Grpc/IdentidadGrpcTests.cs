@@ -363,9 +363,9 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
         using var scope = _host.Services.CreateScope();
         var fila = await scope.ServiceProvider.GetRequiredService<IdentityDbContext>().Set<TenantProductProvisioningEntity>().AsNoTracking()
             .SingleAsync(f => f.TenantId == _empresaAlta && f.ProductCode == "impuestos", ct);
-        fila.Estado.Should().Be("LISTO");
-        fila.FirmaConfirmada.Should().BeFalse();
-        fila.Version.Should().Be(2);
+        fila.Status.Should().Be("LISTO");
+        fila.SignatureConfirmed.Should().BeFalse();
+        fila.ReportedVersion.Should().Be(2);
     }
 
     [Fact]
