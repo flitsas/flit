@@ -120,6 +120,59 @@ Se acepta tener **dos clientes del mismo API** y **secretos de un proveedor fuer
   - Los logs no llevan PII, payload ni secretos.
   - Retención: la de Diagnóstico, que hoy es no borrar (R-18). Queda registrado para el gate de Security (Ley 1581).
 
+## Aplicabilidad y excepciones a las convenciones de datos
+
+**Aplicabilidad.** Las excepciones de esta sección rigen solo para el schema `impuestos` de `core-impuestos` y para `platform.tenant_product_provisioning` (DDL 205 de core-api). Las referencias de la lista siguen `.claude/skills/db-schema-validator/checklist-validacion-schema.md`. Cualquier otra tabla de esos servicios sigue el checklist sin excepción. El `db-schema-validator` seguirá marcando estos puntos; las tablas citadas aquí se validan contra esta sección y no necesitan otra excepción. Anclas verificadas sobre `feature/AB-14694-producto-impuestos@6bdb63efb`.
+
+### E1. FKs simples, no compuestas con `tenant_id` (decisión del usuario)
+
+- **Dónde:** `services/core-impuestos/src/Flit.Impuestos.Api/Persistence/Configuraciones/NotificacionConfig.cs:34` (`fk_notificaciones_liquidaciones`) y `.../Configuraciones/LiquidacionItemConfig.cs:113` (`fk_liquidacion_items_liquidaciones`). La autorreferencia `fk_liquidacion_items_relanzado_desde` (`LiquidacionItemConfig.cs:115`) también es simple.
+- **Motivo:** el usuario la decidió. Se aparta de la forma (c) de `ADR-0072`, que pide FK compuestas.
+- **Alcance:** las FKs entre tablas del schema `impuestos`.
+- **Mitigación:** el `HasQueryFilter` de la empresa del token (`Modulos/Comun/TenantFilter.cs`, cerrado por defecto) en las lecturas, y `AND tenant_id = …` explícito en cada escritura, también en SQL crudo. El code review lo revisa. Si en algún momento una escritura pudiera colgar una fila de un padre de otra empresa, la excepción se revisa y se pasa a FK compuesta.
+
+### E2. A8: FKs con `ON UPDATE NO ACTION`
+
+- **Dónde:** las FKs que genera EF, por ejemplo la que añade `Persistence/Migrations/20261125160959_R2_Revision.cs:267-275`. EF no emite `ON UPDATE` y PostgreSQL aplica `NO ACTION`.
+- **Motivo:** las PK son `uuid` que se generan en la aplicación (`ValueGeneratedNever`) y nunca se actualizan. Un `ON UPDATE CASCADE` no tendría efecto.
+- **Alcance:** todas las FKs del schema `impuestos`.
+- **Mitigación:** ningún flujo actualiza una PK. Si alguno llegara a necesitarlo, se define el `ON UPDATE` en SQL explícito en la migración.
+
+### E3. A11: `ix_notificaciones_liquidacion` empieza por `liquidacion_id`
+
+- **Dónde:** `NotificacionConfig.cs:36` y `R2_Revision.cs:216`.
+- **Motivo:** el índice sirve a la FK `RESTRICT` (A9). Con `liquidacion_id` como primera columna, la verificación al borrar una liquidación no tiene que recorrer la tabla. En este caso A9 pesa más que A11.
+- **Alcance:** solo este índice.
+- **Mitigación:** las lecturas por empresa usan `ix_notificaciones_tenant_creada (tenant_id, creada_en)` (`NotificacionConfig.cs:37`), que sí empieza por `tenant_id`.
+
+### E4. A5/A6: `platform.tenant_product_provisioning` sin `created_by`/`updated_by` ni soft delete
+
+- **Dónde:** `services/core-api/src/Flit.Infrastructure/Persistence/Sql/Ddl/205-impuestos-producto-y-aprovisionamiento.sql:23-26`. El propio DDL declara ahí la excepción.
+- **Motivo:** la escribe un servicio y no un usuario, con un upsert monotónico por versión (rpc `ReportarEstadoAprovisionamiento`). Guarda solo el último estado y no hay nada que borrar de forma lógica.
+- **Alcance:** solo esa tabla.
+- **Mitigación:** `audit.audit_logs` (`trg_audit_log`) guarda el rastro técnico de cada cambio.
+
+### E5. Idioma de los nombres
+
+- **Dónde:** las tablas y columnas del schema `impuestos` van en español (`liquidaciones`, `liquidacion_items`, `notificaciones`, `avisos_recibidos`, `credenciales_empresa`…). El DDL 205 de core-api va en inglés, como el resto de su esquema (decisión del usuario, 2026-11-25). El contrato gRPC que lo alimenta sigue en español.
+- **Motivo:** `core-impuestos` ya nombraba todo en español desde su migración inicial (`20261006233452_Inicial_EsquemaConOutboxEInbox`). Renombrarlo cambiaría todas las migraciones sin ganar nada. Cada base conserva la convención que ya tenía.
+- **Alcance:** el schema `impuestos` usa español. Los esquemas de core-api, incluido `platform`, usan inglés.
+- **Mitigación:** no hay lecturas cruzadas entre esquemas (`ADR-0064`). El mapeo entre los dos idiomas queda solo en el contrato gRPC.
+
+### E6. A10: `core-impuestos` sin RLS
+
+- **Dónde:** el schema `impuestos` completo.
+- **Motivo:** se sigue el precedente de `ADR-0072` («Sin RLS (A10) y sin FK a `identity.tenants` (A4)»). La empresa vive en otro servicio y en otra base, y la aplicación es dueña de las tablas. Un RLS sin `FORCE` sería decorativo.
+- **Alcance:** todas las tablas de negocio de `core-impuestos`.
+- **Mitigación:** el filtro de EF cerrado por defecto, `tenant_id` explícito en las escrituras y en SQL crudo, y los jobs sin usuario fijan la empresa en el scope. A diferencia de `ADR-0072`, aquí no hay FK compuestas (ver E1), así que el control en las escrituras tiene más peso.
+
+### E7. Riesgo de datos: R2 no limpia datos previos
+
+- **Dónde:** `R2_Revision.cs`. Ahí se crean el índice único `ux_avisos_recibidos_consulta_attempt` (`:259-265`), los 4 CHECK (`:221`, `:227`, `:247`, `:253`) y la FK nueva `fk_notificaciones_liquidaciones` (`:267-275`).
+- **Motivo:** la migración no corre en ningún ambiente compartido. Fuera de las bases locales y de prueba no hay filas que puedan violar esas restricciones.
+- **Alcance:** la migración `R2_Revision` mientras no se haya aplicado en DEV, QA ni PDN.
+- **Mitigación:** si `R0`/`R1` llegan a un ambiente compartido antes que `R2`, se añade a `R2` un paso de limpieza previo (deduplicar avisos, corregir valores fuera del CHECK, quitar huérfanos de la FK) antes de crear las restricciones. Database Agent lo verifica en el gate de despliegue.
+
 ## ADRs relacionados
 
 - `ADR-0065-consultas-externas-capacidad-de-plataforma.md` — este ADR es su excepción parcial (§6 y §7).
