@@ -748,6 +748,29 @@ Permisos del broker (`deploy/rabbitmq/usuario-de-servicio.sh`; gate LT): el usua
 
 `ClasificadorEnvio` traduce las excepciones de `HttpClient` a `NoSalio` (`SocketException` `ConnectionRefused` o `HostNotFound`, `AuthenticationException` en el *handshake*), `Incierto` (`TaskCanceledException` por timeout, `HttpIOException` tras escribir, 5xx) o `Respuesta(status, error.code)`. Timeout: `IMPUESTOS_SVC_HTTP_TIMEOUT_SECONDS` (30 s). Sin Polly ni dependencias nuevas.
 
+### 5.7 Deltas 1.1.0 de `impuestos.v1.yaml` (2026-11-25)
+
+Salieron al implementar M06, M08, M16, M17 y M18. Todos son aditivos, salvo el código de `?empresa`, que se unifica. Cada módulo cumple su delta en su código y en sus pruebas.
+
+| # | Delta | Implementa |
+|---|---|---|
+| 1 | `guardarConfiguracionContractual`: 409 `APROVISIONAMIENTO_NO_LISTO` (no se puede validar contra `/fuentes`) | M08-fix |
+| 2 | `?empresa` (solo SA) en POST individual, `masiva/analizar`, `masiva`, `relanzar` y GET `plantilla` | M09 |
+| 3 | `?empresa` en `PUT /configuracion` (obligatoria para el SA) | M08-fix |
+| 4 | `ResumenLiquidacion.itemId` y `estadoItem` (solo INDIVIDUAL) | M09 |
+| 5 | `Liquidacion.motivoCierre` (más la descripción de `cerradaPor`/`cerradaEn`); `Item.secretaria{nombre, ciudad}` y `Item.relanzadoDesdeItemId` (`relanzadoDesde` se conserva con el mismo valor) | M10/M12 |
+| 6 | `UsuarioImpuestos.protegido` (AdminCompany, D-ROL-ADMIN); filtros `rol` y `estado` en `GET /usuarios` (enum `EstadoUsuarioImpuestos`); `EmpresaBackoffice.usuarios` (conteo) | M13 |
+| 7 | `empresa{id, nombre, nit}` (`EmpresaIdentificada`) en `AprovisionamientoDetalle` y en `PaginaUsuarios` del SA | M13 |
+| 8 | `?empresa` de quien no es SA: un solo código, **403 `EMPRESA_SOLO_SUPER_ADMIN`**. `EMPRESA_REQUERIDA` es 400 (valor no uuid, repetido o ausente donde el SA opera sobre una sola compañía; respuesta `Empresa400`). `EMPRESA_NO_PERMITIDA` queda retirado (literal conservado para clientes viejos) | M08-fix |
+| — | Literales: `CREDENCIAL_INVALIDA`, `EMPRESA_REQUERIDA` y `EMPRESA_SOLO_SUPER_ADMIN` tienen texto en `x-flit-literales.errores`; el `error` que emite el backend debe ser ese literal | M06-fix |
+| 9 | Exportes `/reportes/{tipo}/excel` y `/pdf` declaran los mismos filtros que el GET (parámetros `Reporte*` compartidos) | M14 |
+| 10 | `Dashboard.serie[].individuales/masivas`; `Dashboard.porDepartamento[].monto` (nullable) | M14 |
+| 11 | `empresa{id, nombre}` en las cuatro filas de reporte cuando el SA está en la vista global | M14 |
+| 12 | `GET /catalogos/reportes` (`impuestos.reportes.ver`): `{departamentos[], usuarios[{id, nombre}]}` para los filtros | M14 |
+| 13 | `Dashboard.montoTotal` nullable (null = «Sin dato», nunca 0) | M14 |
+
+Para el delta 12 se eligió una ruta propia entre tres opciones. Las otras dos eran abrir `/fuentes` a `reportes.ver` o añadir `/usuarios?soloNombres` con `reportes.ver`. Ambas ampliaban permisos de rutas que exponen más datos: correos, estados y la regla 409 del aprovisionamiento. Con la ruta propia, el Gestor solo ve id y nombre, y una compañía suspendida o en error sigue filtrando sus reportes.
+
 ---
 
 ## 6. Frontend
