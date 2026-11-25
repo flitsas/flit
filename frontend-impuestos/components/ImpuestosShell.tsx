@@ -180,6 +180,8 @@ export function ImpuestosShell({ user, tramitesUrl, children }: { user: UsuarioS
         user={usuario}
         accountUrl={tramitesUrl}
         layout="app"
+        // Como Diagnóstico (spec-visual §2): el dock reparte los módulos mitad y mitad alrededor del inicio.
+        dockDistribucion="equilibrada"
         headerActions={
           sesion ? (
             <>

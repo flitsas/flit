@@ -1,36 +1,41 @@
 import { InlineAlert, type InlineAlertTone } from "@flit/ui/InlineAlert";
-import type { BannerEstado } from "@/lib/sesion";
+import { PRIORIDAD_BANNERS, type BannerEstado } from "@/lib/sesion";
 
-// Banners de estado del producto (plan §6.1 y §3.1). Los títulos son los del plan; los textos explican el efecto sin
-// nombrar credenciales ni códigos internos. Contenido estático (`vivo={false}`): se pintan al abrir el producto y no
-// interrumpen al lector de pantalla; el icono y el título dicen el estado, no solo el color.
+// Banners de estado del producto (plan §6.1, spec-visual §4.3). Títulos en lenguaje de negocio, sin nombrar credenciales,
+// webhooks ni códigos internos. Contenido estático (`vivo={false}`): se pintan al abrir el producto, no se cierran y no
+// interrumpen al lector de pantalla; el icono y el título dicen el estado, no solo el color. FIRMA_SIN_CONFIRMAR va en
+// `info` (azul, en proceso): no pide ninguna acción.
 const BANNERS: Readonly<Record<BannerEstado, { tono: InlineAlertTone; titulo: string; texto: string }>> = {
-  FIRMA_SIN_CONFIRMAR: {
+  SUSPENDIDO: {
+    tono: "warning",
+    titulo: "Impuestos está suspendido: solo lectura",
+    texto: "Puedes consultar las liquidaciones, los recibos y los reportes, pero no crear liquidaciones nuevas. Los lotes que estaban en curso terminan solos.",
+  },
+  NO_LISTO: {
     tono: "pending",
-    titulo: "Firma sin confirmar",
-    texto: "Todavía no llega el primer aviso firmado del proveedor. Las liquidaciones se resuelven igual, pero el resultado puede tardar más.",
+    titulo: "Impuestos todavía no está listo para liquidar",
+    texto:
+      "La conexión de tu compañía con el proveedor se está configurando. Puedes consultar lo que ya existe; para liquidar, espera a que termine o pídele ayuda a tu administrador.",
   },
   SIN_WEBHOOK: {
     tono: "info",
-    titulo: "Modo sin webhook",
-    texto: "Los resultados se consultan al proveedor cada cierto tiempo, así que pueden tardar unos minutos más en aparecer.",
+    titulo: "Los resultados pueden tardar un poco más",
+    texto: "Ya puedes liquidar. Los resultados se consultan con el proveedor cada pocos minutos, en lugar de llegar al instante.",
   },
-  SUSPENDIDO: {
-    tono: "warning",
-    titulo: "Producto suspendido: solo lectura",
-    texto: "Puedes consultar el historial y los reportes, pero no crear liquidaciones nuevas.",
+  FIRMA_SIN_CONFIRMAR: {
+    tono: "info",
+    titulo: "Conexión con el proveedor en verificación",
+    texto: "Ya puedes liquidar. Se confirma sola con el primer resultado que llegue.",
   },
 };
 
+/** Si llegan varios, solo se muestra el de mayor prioridad (SUSPENDIDO > NO_LISTO > SIN_WEBHOOK > FIRMA_SIN_CONFIRMAR). */
 export function BannerEstadoProducto({ banners }: { banners: readonly BannerEstado[] }) {
-  if (banners.length === 0) return null;
+  const b = PRIORIDAD_BANNERS.find((clave) => banners.includes(clave));
+  if (!b) return null;
   return (
-    <div className="flex flex-col gap-2">
-      {banners.map((b) => (
-        <InlineAlert key={b} tone={BANNERS[b].tono} title={BANNERS[b].titulo} vivo={false}>
-          {BANNERS[b].texto}
-        </InlineAlert>
-      ))}
-    </div>
+    <InlineAlert tone={BANNERS[b].tono} title={BANNERS[b].titulo} vivo={false}>
+      {BANNERS[b].texto}
+    </InlineAlert>
   );
 }

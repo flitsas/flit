@@ -36,18 +36,25 @@ export function tienePermiso(sesion: SesionImpuestos | null | undefined, permiso
   return sesion.esSuperAdmin === true || sesion.permisos.map((p) => p.toLowerCase()).includes(permiso);
 }
 
-/** Banners de estado del producto (plan §6.1). */
-export type BannerEstado = "FIRMA_SIN_CONFIRMAR" | "SIN_WEBHOOK" | "SUSPENDIDO";
+/** Banners de estado del producto (plan §6.1 y spec-visual §4.3). */
+export type BannerEstado = "SUSPENDIDO" | "NO_LISTO" | "SIN_WEBHOOK" | "FIRMA_SIN_CONFIRMAR";
+
+/** Prioridad de los banners (spec-visual §4.3): si hay varios, solo se muestra el primero de esta lista. */
+export const PRIORIDAD_BANNERS: readonly BannerEstado[] = ["SUSPENDIDO", "NO_LISTO", "SIN_WEBHOOK", "FIRMA_SIN_CONFIRMAR"];
+
+/** Estados de aprovisionamiento en los que todavía no se puede liquidar (la API respondería 409 APROVISIONAMIENTO_NO_LISTO). */
+const ESTADOS_NO_LISTOS: ReadonlySet<string> = new Set(["PENDIENTE", "ERROR", "INCIERTO", "REQUIERE_CREDENCIALES", "REQUIERE_REVISION_NIT"]);
 
 /**
- * Qué banners pinta la sesión (plan §3.1): «Firma sin confirmar» en LISTO hasta el primer webhook válido, «Modo sin
- * webhook» en LISTO_SIN_WEBHOOK y «Producto suspendido: solo lectura» en SUSPENDIDO. Sin el bloque de aprovisionamiento
- * (un back anterior) no se pinta nada.
+ * Qué banner pinta la sesión (plan §3.1, spec-visual §4.3): SUSPENDIDO en SUSPENDIDO; NO_LISTO en PENDIENTE, ERROR,
+ * INCIERTO, REQUIERE_CREDENCIALES y REQUIERE_REVISION_NIT; SIN_WEBHOOK en LISTO_SIN_WEBHOOK, y FIRMA_SIN_CONFIRMAR en
+ * LISTO hasta el primer webhook válido. Sin el bloque de aprovisionamiento (un back anterior) no se pinta nada.
  */
 export function bannersDeSesion(sesion: SesionImpuestos | null | undefined): BannerEstado[] {
   const a = sesion?.aprovisionamiento;
   if (!a?.estado) return [];
   if (a.estado === "SUSPENDIDO") return ["SUSPENDIDO"];
+  if (ESTADOS_NO_LISTOS.has(a.estado)) return ["NO_LISTO"];
   if (a.estado === "LISTO_SIN_WEBHOOK") return ["SIN_WEBHOOK"];
   if (a.estado === "LISTO" && a.firmaConfirmada === false) return ["FIRMA_SIN_CONFIRMAR"];
   return [];

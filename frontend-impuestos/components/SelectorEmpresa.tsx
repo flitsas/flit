@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { InlineAlert } from "@flit/ui/InlineAlert";
 import { SearchableSelect, type SearchableSelectOption } from "@flit/ui/SearchableSelect";
 import { RUTAS, apiFetch } from "@/lib/api";
 import { useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
 
 /** Compañía del selector (plan §5.1, lista del backoffice: `{items:[{id, nombre, nit, …}], total, page, pageSize}`). */
 export interface EmpresaOpcion {
@@ -34,14 +32,23 @@ async function cargarEmpresas(signal: AbortSignal): Promise<EmpresaOpcion[]> {
   return todas;
 }
 
-type Listado = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; empresas: EmpresaOpcion[] };
+type Listado = { tipo: "cargando" } | { tipo: "error" } | { tipo: "listo"; empresas: EmpresaOpcion[] };
 
-const TEXTO = "text-xs text-[color:var(--di-text-secondary)]";
+// WCAG 2.2 · 2.5.8: el botón «Quitar selección» del SearchableSelect del kit mide 22 px; se le da 24 × 24 px desde aquí,
+// como `SelectorCompania` de Diagnóstico. El hueco real es del kit (spec-visual §5, H-6).
+const QUITAR_24PX_CLS = "[&_button[aria-label^='Quitar']]:min-w-6 [&_button[aria-label^='Quitar']]:min-h-6";
+
+// Receta de Reintentar del molde (BOTON_REINTENTAR_CLS) con 32 px de alto, en tono warning: la vista global sigue sirviendo.
+const BOTON_REINTENTAR_CLS =
+  "inline-flex min-h-8 shrink-0 items-center rounded-full border border-current px-3 py-1 text-xs font-semibold text-[color:var(--di-warning)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /**
  * Selector de compañía del Super Admin en la barra (plan §6.1, AC-FE-23 y AC-FE-33). «Todas las compañías» es la vista
  * global (sin ?empresa=); elegir una la guarda en ?empresa= de la URL, conserva los filtros y vuelve a la primera página.
- * Cuatro estados: cargando (combobox deshabilitado), error fijo con Reintentar, vacío (solo la vista global) y listo.
+ * Cuatro estados, todos dentro del propio control para no crecer en alto en la barra (spec-visual §4): cargando (combobox
+ * deshabilitado con «Cargando compañías…» y aria-busy), error en tono warning (combobox deshabilitado con «No se
+ * cargaron las compañías» y Reintentar de 32 px en la misma fila), vacío (solo la vista global; la búsqueda dice «No hay
+ * compañías con Impuestos») y listo.
  * Accesibilidad la del SearchableSelect de @flit/ui: etiqueta (oculta a la vista, no al lector), teclado completo y
  * anuncio de resultados.
  */
@@ -56,8 +63,8 @@ export function SelectorEmpresa({ id = "impuestos-empresa" }: { id?: string }) {
       (empresas) => {
         if (!controller.signal.aborted) setListado({ tipo: "listo", empresas });
       },
-      (e: unknown) => {
-        if (!controller.signal.aborted) setListado({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudieron cargar las compañías.") });
+      () => {
+        if (!controller.signal.aborted) setListado({ tipo: "error" });
       },
     );
     return () => controller.abort();
@@ -73,43 +80,37 @@ export function SelectorEmpresa({ id = "impuestos-empresa" }: { id?: string }) {
     setIntento((n) => n + 1);
   };
 
+  const listo = listado.tipo === "listo";
+  const sinCompanias = listo && listado.empresas.length === 0;
+  const selector = (
+    <SearchableSelect
+      id={id}
+      className={`${QUITAR_24PX_CLS} min-w-0 flex-1`}
+      label="Compañía"
+      hideLabel
+      // Sin la opción por defecto mientras no hay lista: así el input muestra el placeholder del estado.
+      defaultLabel={listo ? "Todas las compañías" : undefined}
+      placeholder={listado.tipo === "cargando" ? "Cargando compañías…" : listado.tipo === "error" ? "No se cargaron las compañías" : "Todas las compañías"}
+      noResultsLabel={sinCompanias ? "No hay compañías con Impuestos" : "Ninguna compañía coincide"}
+      options={opciones}
+      value={listo ? (empresa ?? "") : ""}
+      onChange={(valor) => elegir(valor || null)}
+      disabled={!listo}
+    />
+  );
+
   return (
-    <div className="flex w-56 flex-col gap-1">
-      <SearchableSelect
-        id={id}
-        label="Compañía"
-        hideLabel
-        defaultLabel="Todas las compañías"
-        placeholder="Todas las compañías"
-        noResultsLabel="Ninguna compañía coincide"
-        options={opciones}
-        value={listado.tipo === "listo" ? (empresa ?? "") : ""}
-        onChange={(valor) => elegir(valor || null)}
-        disabled={listado.tipo !== "listo"}
-      />
-      {listado.tipo === "cargando" && (
-        <p role="status" className={TEXTO}>
-          Cargando compañías…
-        </p>
+    <div className="flex w-40 flex-col sm:w-56" aria-busy={listado.tipo === "cargando" ? true : undefined}>
+      {listado.tipo === "error" ? (
+        <div className="flex items-center gap-1">
+          {selector}
+          <button type="button" onClick={reintentar} aria-label="Reintentar cargar compañías" className={BOTON_REINTENTAR_CLS}>
+            Reintentar
+          </button>
+        </div>
+      ) : (
+        selector
       )}
-      {listado.tipo === "error" && (
-        <InlineAlert
-          tone="error"
-          compact
-          action={
-            <button
-              type="button"
-              onClick={reintentar}
-              className="rounded-full border border-current px-2 py-0.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              Reintentar
-            </button>
-          }
-        >
-          {listado.mensaje}
-        </InlineAlert>
-      )}
-      {listado.tipo === "listo" && listado.empresas.length === 0 && <p className={TEXTO}>No hay compañías con Impuestos.</p>}
     </div>
   );
 }
