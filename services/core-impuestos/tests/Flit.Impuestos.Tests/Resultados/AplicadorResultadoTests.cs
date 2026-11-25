@@ -108,12 +108,12 @@ public sealed class AplicadorResultadoTests
         leido.Parcial.Should().BeTrue();
         leido.Warnings.Should().Equal("pdf_download_failed", "period_not_liquidable");
         leido.ResultadoCifrado.Should().NotBeNull();
-        System.Text.Encoding.UTF8.GetString(leido.ResultadoCifrado!).Should().NotContain("PEDRO", "el cuerpo va cifrado");
+        System.Text.Encoding.UTF8.GetString(leido.ResultadoCifrado!).Should().NotContain("PROPIETARIO PRUEBA", "el cuerpo va cifrado");
         using var scope = api.App.Services.CreateScope();
         var claro = scope.ServiceProvider.GetRequiredService<IProteccionImpuestos>().DesprotegerResultado(leido.ResultadoCifrado!);
-        claro.Should().Contain("\"validations\"").And.Contain("OwnerName").And.Contain("PEDRO PEREZ");
+        claro.Should().Contain("\"validations\"").And.Contain("OwnerName").And.Contain("PROPIETARIO PRUEBA");
         new[] { leido.ErrorCodigo, leido.ErrorMensaje, leido.ResultadoStatus, leido.ConsultaStatus, leido.DepartamentoNombre, string.Join(",", leido.Warnings) }
-            .Should().NotContain(v => v != null && v.Contains("PEDRO", StringComparison.Ordinal), "ninguna columna en claro lleva datos del propietario");
+            .Should().NotContain(v => v != null && v.Contains("PROPIETARIO PRUEBA", StringComparison.Ordinal), "ninguna columna en claro lleva datos del propietario");
     }
 
     [Fact]

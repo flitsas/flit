@@ -43,11 +43,11 @@ public sealed class ConstructorSolicitudTests
 
         var lista = r.Should().BeOfType<Construccion.Lista>().Subject;
         lista.Solicitud.DocumentType.Should().Be("CC");
-        lista.Solicitud.DocumentNumber.Should().Be("71706228");
+        lista.Solicitud.DocumentNumber.Should().Be("1000000001");
         lista.Solicitud.PlateNumber.Should().Be("ABC123");
         lista.Solicitud.CallbackUrl.Should().BeNull();
         lista.Solicitud.Detail.Should().Contain("secretaryDepartmentCode", "05").And.Contain("secretaryCity", "MEDELLIN")
-            .And.Contain("vehicleModel", "2019").And.Contain("OwnerName", "PEDRO PEREZ");
+            .And.Contain("vehicleModel", "2019").And.Contain("OwnerName", "PROPIETARIO PRUEBA");
         lista.Solicitud.Detail.Keys.Should().NotContain(["OwnerEmail", "OwnerCellPhone", "OwnerPhone", "OwnerAddressComplete"],
             "el contacto y la dirección solo viajan si el departamento los exige (DA-7, Ley 1581)");
         lista.Datos.DepartamentoCodigo.Should().Be("05");
@@ -134,8 +134,8 @@ public sealed class ConstructorSolicitudTests
 
         var datos = r.Should().BeOfType<Construccion.Incompleta>().Subject.Datos;
         datos.DocumentoTipo.Should().Be("CC");
-        datos.DocumentoNumero.Should().Be("71706228");
-        datos.NombrePropietario.Should().Be("PEDRO PEREZ");
+        datos.DocumentoNumero.Should().Be("1000000001");
+        datos.NombrePropietario.Should().Be("PROPIETARIO PRUEBA");
         datos.DepartamentoCodigo.Should().Be("25");
     }
 

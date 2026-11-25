@@ -238,7 +238,7 @@ public sealed class AvisosEndpointsTests
         using var bueno = await api.Anonimo().SendAsync(R.PeticionAviso(token, R.Aviso(R.Consulta("c-1")), R.Secreto, DateTimeOffset.UtcNow), ct);
         await R.EsperarAsync(async () => (await R.ItemAsync(api, empresa, item.Id, ct)).Estado == EstadoItem.Exitoso, TimeSpan.FromSeconds(10), ct);
 
-        logs.Todo.Should().NotContain(R.Secreto).And.NotContain(R.ApiKey).And.NotContain("PEDRO PEREZ").And.NotContain("LHQ479");
+        logs.Todo.Should().NotContain(R.Secreto).And.NotContain(R.ApiKey).And.NotContain("PROPIETARIO PRUEBA").And.NotContain("LHQ479");
         Encoding.UTF8.GetByteCount(await malo.Content.ReadAsStringAsync(ct) + await bueno.Content.ReadAsStringAsync(ct)).Should().Be(0);
     }
 }
