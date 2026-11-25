@@ -31,8 +31,9 @@ import {
 import { ApiError } from "@/lib/api";
 import {
   ERRORES_BACKOFFICE,
-  ESTADOS_REINTENTABLES,
   ETIQUETA_ACTOR,
+  ETIQUETA_MODO_RESPALDO_FIRMA,
+  esReintentable,
   etiquetaEstadoAprovisionamiento,
   etiquetaMotivoAprovisionamiento,
   nitVisibleEmpresa,
@@ -57,8 +58,10 @@ type Reintento = { tipo: "ok" } | { tipo: "error"; mensaje: string } | null;
 
 /**
  * /backoffice/empresas/[tenantId] (spec-visual §3.10; plan §6.1): solo Super Admin. Estado de la conexión con el
- * proveedor (chip, motivo legible del contrato y «Reintentar aprovisionamiento» en ERROR, INCIERTO y
- * REQUIERE_REVISION_NIT), credenciales protegidas, enlace al contrato e historial. El nombre y el NIT salen de
+ * proveedor (chip, motivo legible del contrato, etiqueta del respaldo de firma y «Reintentar aprovisionamiento» en ERROR,
+ * INCIERTO, REQUIERE_REVISION_NIT y, desde la 1.2.0, LISTO_SIN_WEBHOOK, donde el alta idempotente trae el secreto),
+ * credenciales protegidas (la carga manual queda como respaldo), enlace al contrato e historial (con CLAVE_ROTADA y los
+ * motivos retirados rotulados). El nombre y el NIT salen de
  * `empresa` del detalle (EmpresaIdentificada, contrato 1.1.0, delta 7); si el nombre llega vacío (compañía suspendida)
  * o falta `empresa`, el título es el id. 404 ⇒ notFound().
  */
@@ -166,10 +169,11 @@ export function DetalleAprovisionamiento({ tenantId }: { tenantId: string }) {
           </h2>
           <ChipAprovisionamiento aprovisionamiento={detalle} modoRespaldoFirma={detalle.modoRespaldoFirma} vivo />
           {motivo && <p className="text-sm text-flit-primary">{motivo}</p>}
+          {detalle.modoRespaldoFirma && <p className="text-sm text-flit-primary">{ETIQUETA_MODO_RESPALDO_FIRMA}</p>}
           <p className={TEXTO_SECUNDARIO_CLS}>
             Actualizado el <time dateTime={detalle.actualizadoEn}>{fecha(detalle.actualizadoEn)}</time>
           </p>
-          {ESTADOS_REINTENTABLES.has(detalle.estado) && (
+          {esReintentable(detalle) && (
             <div>
               <Button variant="secondary" size="sm" onClick={() => void reintentar()} cargando={reintentando}>
                 Reintentar aprovisionamiento

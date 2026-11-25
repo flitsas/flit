@@ -57,8 +57,20 @@ export type ProvisioningStatus =
   | "REQUIERE_REVISION_NIT"
   | "SUSPENDIDO";
 
-/** Acción del SuperAdmin por estado (`ProvisioningAction`). */
+/**
+ * Acción del SuperAdmin por estado (`ProvisioningAction`). Desde impuestos.v1.yaml 1.2.0 (plan §5.8) LISTO_SIN_WEBHOOK
+ * lleva REINTENTAR (el alta idempotente trae el secreto) y CARGAR_SECRETO queda retirada: el literal se conserva.
+ */
 export type ProvisioningAction = "REINTENTAR" | "CARGAR_SECRETO" | "CARGAR_CREDENCIALES" | "CORREGIR_NIT";
+
+/**
+ * Acción que se ofrece hoy. CARGAR_SECRETO (retirada en 1.2.0) solo puede llegar de un reporte anterior al cambio, que
+ * la plataforma conserva hasta el siguiente: se ofrece «Reintentar», como en el backoffice de Impuestos.
+ */
+export function accionVigente(action: ProvisioningAction | null | undefined): ProvisioningAction | null {
+  if (!action) return null;
+  return action === "CARGAR_SECRETO" ? "REINTENTAR" : action;
+}
 
 /** Último estado reportado (`TenantProductProvisioning`). `message` es el motivo legible, ya puesto por el servicio. */
 export interface TenantProductProvisioning {

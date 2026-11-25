@@ -36,7 +36,8 @@ describe("EstadoAprovisionamiento", () => {
   const CASOS: [ProvisioningStatus, ProvisioningAction | null, string, string | null][] = [
     ["PENDIENTE", null, "Pendiente", null],
     ["LISTO", null, "Listo", null],
-    ["LISTO_SIN_WEBHOOK", "CARGAR_SECRETO", "Listo sin webhook", "Cargar secreto"],
+    // 1.2.0 (plan §5.8): LISTO_SIN_WEBHOOK lleva REINTENTAR; el alta idempotente trae el secreto.
+    ["LISTO_SIN_WEBHOOK", "REINTENTAR", "Listo sin webhook", "Reintentar"],
     ["ERROR", "REINTENTAR", "Error", "Reintentar"],
     ["INCIERTO", "REINTENTAR", "Incierto", "Reintentar"],
     ["REQUIERE_CREDENCIALES", "CARGAR_CREDENCIALES", "Requiere credenciales", "Cargar credenciales"],
@@ -119,8 +120,8 @@ describe("EstadoAprovisionamiento", () => {
     expect(onReintentado).not.toHaveBeenCalled();
   });
 
-  it("con la URL de Impuestos (me/apps), credenciales y secreto son enlaces al backoffice en otra pestaña", () => {
-    const { rerender } = render(
+  it("con la URL de Impuestos (me/apps), «Cargar credenciales» es un enlace al backoffice en otra pestaña", () => {
+    render(
       <EstadoAprovisionamiento tenantId="t 1" provisioning={prov("REQUIERE_CREDENCIALES", "CARGAR_CREDENCIALES")} impuestosUrl="https://impuestos.test/" onReintentado={() => {}} />,
     );
     const enlace = screen.getByRole("link", { name: /Cargar credenciales/ });
@@ -129,11 +130,6 @@ describe("EstadoAprovisionamiento", () => {
     expect(enlace).toHaveAttribute("rel", "noopener");
     expect(within(enlace).getByText("(se abre en otra pestaña)")).toHaveClass("sr-only");
     expect(enlace).toHaveAccessibleName("Cargar credenciales (se abre en otra pestaña)");
-
-    rerender(
-      <EstadoAprovisionamiento tenantId="t1" provisioning={prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO")} impuestosUrl="https://impuestos.test" onReintentado={() => {}} />,
-    );
-    expect(screen.getByRole("link", { name: /Cargar secreto/ })).toHaveAttribute("href", "https://impuestos.test/backoffice/empresas/t1");
   });
 
   it("sin la URL de Impuestos no pinta el enlace: indica hacerlo desde el backoffice", () => {
@@ -142,10 +138,38 @@ describe("EstadoAprovisionamiento", () => {
     expect(within(grupo()).getByText("Cargar credenciales: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
   });
 
-  it("sin la URL de Impuestos, el secreto conserva el nombre de la acción en el texto de respaldo", () => {
-    render(<EstadoAprovisionamiento tenantId="t1" provisioning={prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO")} impuestosUrl={null} onReintentado={() => {}} />);
+  // Contrato 1.2.0 (impuestos.v1.yaml AccionAprovisionamiento; plan §5.8 punto 5).
+  it("LISTO_SIN_WEBHOOK con REINTENTAR: botón «Reintentar» que llama al POST, sin enlace «Cargar secreto»", async () => {
+    const user = userEvent.setup();
+    const onReintentado = vi.fn();
+    render(
+      <EstadoAprovisionamiento tenantId="t1" provisioning={prov("LISTO_SIN_WEBHOOK", "REINTENTAR")} impuestosUrl="https://impuestos.test" onReintentado={onReintentado} />,
+    );
     expect(screen.queryByRole("link")).toBeNull();
-    expect(within(grupo()).getByText("Cargar secreto: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
+    expect(screen.queryByText(/Cargar secreto/)).toBeNull();
+    await user.click(within(grupo()).getByRole("button", { name: "Reintentar" }));
+    expect(retryTenantProductProvisioning).toHaveBeenCalledWith("t1", "impuestos");
+    expect(onReintentado).toHaveBeenCalledTimes(1);
+  });
+
+  it("CARGAR_SECRETO (retirada en 1.2.0) de un reporte anterior se pinta como «Reintentar», nunca como «Cargar secreto»", async () => {
+    const user = userEvent.setup();
+    render(
+      <EstadoAprovisionamiento tenantId="t1" provisioning={prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO")} impuestosUrl="https://impuestos.test" onReintentado={() => {}} />,
+    );
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText(/Cargar secreto/)).toBeNull();
+    await user.click(within(grupo()).getByRole("button", { name: "Reintentar" }));
+    expect(retryTenantProductProvisioning).toHaveBeenCalledWith("t1", "impuestos");
+  });
+
+  it.each([
+    ["EMPRESA_INACTIVA_EN_PROVEEDOR", "ERROR", "REINTENTAR", "El proveedor tiene la compañía desactivada: pide su reactivación y luego reintenta."],
+    ["CLAVE_ROTADA", "LISTO", null, "El proveedor reemplazó la API key de la compañía; la nueva quedó guardada."],
+  ] as const)("motivo %s: se muestra el `message` que trae el servidor (literal del contrato), nunca el código", (reason, status, action, message) => {
+    render(<EstadoAprovisionamiento tenantId="t1" provisioning={prov(status, action, { reason, message })} impuestosUrl={null} onReintentado={() => {}} />);
+    expect(within(grupo()).getByText(message)).toBeInTheDocument();
+    expect(within(grupo()).queryByText(reason)).toBeNull();
   });
 
   it("Corregir NIT: con onEditarCompania es un botón que lo llama", async () => {

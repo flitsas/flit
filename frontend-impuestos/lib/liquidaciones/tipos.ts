@@ -109,6 +109,8 @@ export interface Item {
   relanzadoDesde?: string | null;
   /** Ítem original del que se relanzó (1.1.0, delta 5; mismo valor que `relanzadoDesde`). */
   relanzadoDesdeItemId?: string | null;
+  /** Liquidación (lote) del ítem original (1.2.0), para enlazar /liquidaciones/{id}/items/{itemId}. null si no es un relanzamiento. */
+  relanzadoDesdeLiquidacionId?: string | null;
   secretaria?: Secretaria | null;
 }
 
