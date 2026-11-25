@@ -210,7 +210,7 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
     expect(within(section).getByText(/Traspaso/i)).toBeInTheDocument();
   });
 
-  it('muestra el QR Kyverum aunque el estado sea terminal si hay captureUrl', async () => {
+  it('NO muestra QR ni enlace de captura aunque haya captureUrl (Bug #14674)', async () => {
     mocks.getPrevalidacionDetail.mockResolvedValueOnce(
       detail({
         status: 'expirado',
@@ -223,10 +223,10 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
 
     render(<PrevalidacionDetailDrawer validationId="pv-1" onClose={() => {}} />);
 
-    expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toHaveAttribute(
-      'href',
-      'https://capture.kyverum.co/tok-expirado',
-    );
+    expect(await screen.findByText(/tracking del proceso/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('identity-capture-qr')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/código qr/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar enlace/i })).not.toBeInTheDocument();
   });
 });

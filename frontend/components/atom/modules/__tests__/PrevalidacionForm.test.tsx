@@ -86,7 +86,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 // ── Imports después de los mocks ────────────────────────────────────────────
 import { ToastProvider } from '@/components/admin/Toast';
-import { PrevalidacionForm } from '@/components/atom/modules/PrevalidacionForm';
+import { PrevalidacionForm, PrevalidacionSuccessPanel } from '@/components/atom/modules/PrevalidacionForm';
 import { Validaciones } from '@/components/atom/modules/Validaciones';
 import type {
   TenantBiometricPerson,
@@ -608,5 +608,26 @@ describe('Validaciones null-safety (HU #10869)', () => {
       await screen.findAllByText(/ya existía una validación para este documento en este tenant/i),
     ).toHaveLength(2);
     expect(screen.getByText(/se envió un enlace nuevo a nuevo@correo\.co/i)).toBeInTheDocument();
+    // Bug #14674 AC4: el panel de reenvío no muestra ni ofrece copiar el enlace de captura.
+    expect(screen.queryByRole('button', { name: /copiar enlace/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /enlace de captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/capture\.kyverum\.co/)).not.toBeInTheDocument();
+  });
+});
+
+describe('PrevalidacionSuccessPanel — sin enlace de captura (Bug #14674 AC4)', () => {
+  it('con captureUrl avisa que el enlace se envió por correo, sin mostrarlo ni ofrecer copiarlo', () => {
+    render(
+      <PrevalidacionSuccessPanel
+        result={{ validationId: 'v-1', captureUrl: 'https://capture.kyverum.co/abc123', status: 'enviado' } as never}
+        onClose={() => {}}
+        onNew={() => {}}
+      />,
+    );
+    expect(screen.getByText(/enviamos el enlace de captura al correo de la persona/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByText(/capture\.kyverum\.co/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/comparte el enlace/i)).not.toBeInTheDocument();
   });
 });

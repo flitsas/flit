@@ -26,7 +26,11 @@ vi.mock('@/lib/api/tramites-client', () => ({
   },
 }));
 
-import { PrevalidacionEditForm, parseRateLimitDetail } from '@/components/atom/modules/PrevalidacionEditForm';
+import {
+  PrevalidacionEditForm,
+  PrevalidacionResendResultPanel,
+  parseRateLimitDetail,
+} from '@/components/atom/modules/PrevalidacionEditForm';
 import type { TenantBiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 const ROW: TenantBiometricValidation = {
@@ -133,5 +137,14 @@ describe('PrevalidacionEditForm (HU #10944)', () => {
       expect(onRateLimited).toHaveBeenCalledWith({ cooldownMinutes: 4 });
     });
     expect(screen.getByRole('alert')).toHaveTextContent(/espera 4 minuto/i);
+  });
+});
+
+describe('PrevalidacionResendResultPanel — sin enlace de captura (Bug #14674 AC4)', () => {
+  it('informa el correo de envío y no muestra ni ofrece copiar el enlace', () => {
+    render(<PrevalidacionResendResultPanel email="a@b.co" resendCount={1} onClose={() => {}} />);
+    expect(screen.getByText(/se envió un enlace nuevo a a@b\.co/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

@@ -509,3 +509,20 @@ describe('filasDesdeSolicitud · documento del radicante', () => {
     expect(filas.find((f) => f.rol === 'comprador')?.numeroDocumento).toBe('');
   });
 });
+
+describe("ActoresPunto — sin enlace de captura copiable (Bug #14674 AC6)", () => {
+  it("con identidad aprobada las tarjetas de invitados no ofrecen «Copiar enlace»", async () => {
+    montarPunto(clienteMock({ estado: async () => ESTADO_APROBADO }));
+    await screen.findByText(/Comprador/);
+    expect(screen.queryByRole("button", { name: /copiar enlace/i })).toBeNull();
+    expect(screen.queryByText(/también puedes copiarlo/i)).toBeNull();
+  });
+
+  it("el aviso de invitación solo menciona el correo (contrato del fuente)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const fuente = readFileSync(join(__dirname, "../components/punto/ActoresPunto.tsx"), "utf8");
+    expect(fuente).toContain("Se envió el enlace de validación al correo indicado.");
+    expect(fuente).not.toMatch(/También puedes copiarlo|Copiar enlace|clipboard/);
+  });
+});

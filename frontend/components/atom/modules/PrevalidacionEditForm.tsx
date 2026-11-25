@@ -285,11 +285,11 @@ export function PrevalidacionEditForm({
  * Panel de resultado tras un reenvío (automático al editar el correo, o manual) — HU #10944, AC1/AC2.
  * Mismo patrón visual que `PrevalidacionSuccessPanel` (HU #10868), adaptado a la forma de
  * `EditarPrevalidacionResult`/`ReenviarPrevalidacionResult` (contrato real: `{ validation, captureUrl,
- * resent/queued }`, no el shape aplanado que usa el panel de creación).
+ * resent/queued }`, no el shape aplanado que usa el panel de creación). Bug #14674: el enlace de
+ * captura nunca se muestra ni se copia; solo se informa el correo al que se envió.
  */
 export interface PrevalidacionResendResultPanelProps {
   email: string;
-  captureUrl?: string | null;
   queued?: boolean;
   resendCount: number;
   onClose: () => void;
@@ -302,24 +302,11 @@ export interface PrevalidacionResendResultPanelProps {
 
 export function PrevalidacionResendResultPanel({
   email,
-  captureUrl,
   queued,
   resendCount,
   onClose,
   notice,
 }: PrevalidacionResendResultPanelProps) {
-  const [copied, setCopied] = useState(false);
-
-  const copiar = async () => {
-    if (!captureUrl) return;
-    try {
-      await navigator.clipboard.writeText(captureUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
-    } catch {
-      /* sin permiso de clipboard */
-    }
-  };
 
   return (
     <div
@@ -350,31 +337,6 @@ export function PrevalidacionResendResultPanel({
             ? `El proveedor no respondió en este momento. La validación quedó encolada y se reintentará automáticamente hacia ${email}.`
             : `Se envió un enlace nuevo a ${email}.`}
         </p>
-
-        {captureUrl && (
-          <>
-            <div className="mt-4 flex items-center gap-2 rounded-xl border p-3 text-left text-xs font-mono break-all">
-              <a
-                href={captureUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-flit-brand underline underline-offset-2"
-                aria-label="Abrir enlace de captura"
-              >
-                {captureUrl}
-              </a>
-              <Icono nombre="externo" className="h-3.5 w-3.5 shrink-0 text-flit-brand" />
-            </div>
-            <button
-              type="button"
-              onClick={() => void copiar()}
-              className={buttonClass({ variant: 'secondary', size: 'sm', className: 'mt-3' })}
-              aria-live="polite"
-            >
-              {copied ? <><IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Copiado</> : 'Copiar enlace'}
-            </button>
-          </>
-        )}
 
         <p className="mt-4 text-xs opacity-60">
           Reenvíos usados: {resendCount} de 3.
