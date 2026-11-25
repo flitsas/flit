@@ -660,7 +660,8 @@ export interface ProcedureInstanceEvent {
     | 'revocatoria_solicitada'
     | 'revocatoria_aprobada'
     | 'revocatoria_rechazada'
-    | 'documento_cargado_admin';
+    | 'documento_cargado_admin'
+    | 'identidad_manual_rechazada';
   createdAt: string;
   createdByName: string | null;
   // reasignar_gestor_admin
@@ -702,6 +703,10 @@ export interface ProcedureInstanceEvent {
   estadoAlMomento?: string | null;
   /** Observación obligatoria escrita por el administrador. */
   observacion?: string | null;
+  // identidad_manual_rechazada (Bug #14634) — motivo YA homologado a texto (lista cerrada, HU #13299): no
+  // delata el mecanismo, así que se ve en el tracking para cualquiera con acceso al módulo. Reutiliza
+  // `partyRole` de arriba.
+  rejectionReasonLabel?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */
@@ -1855,6 +1860,10 @@ export interface IdentityAuditEvent {
   providerStatus: string | null;
   errorType: string | null;
   message: string | null;
+  // Bug #14634 — motivo YA homologado (lista cerrada, HU #13299) de ESTE evento de rechazo manual
+  // puntual: a diferencia de BiometricValidation.rejectionReason (que la siguiente captura borra),
+  // este queda fijo en la bitácora. Ya es texto seguro, se ve igual para todos.
+  rejectionReasonLabel?: string | null;
   /** Quién aprobó/rechazó (solo manual_aprobado/manual_rechazado y solo para el Super Admin FLIT). */
   revisor?: { name: string | null; email: string | null; role: string | null } | null;
 }

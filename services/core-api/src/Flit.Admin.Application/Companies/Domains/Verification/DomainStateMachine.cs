@@ -137,17 +137,10 @@ public static class DomainStateMachine
     }
 
     /// <summary>
-    /// Señal de certificado emitido (#12426 → HU #12425 AC3): solo <c>verified</c> pasa a <c>active</c>
-    /// (respeta <c>ck_tenant_domains_active_requires_verified</c> — nunca se activa sin haber pasado por
-    /// <c>verified</c>). Si ya está <c>active</c>, solo se actualizan las fechas del certificado (sin
-    /// cambio de estado) — decisión del llamador (repositorio), no de esta máquina.
+    /// Señal de certificado emitido (#12426): solo registra las fechas, sin cambiar el estado. La activación es un paso
+    /// aparte que pide el SuperAdmin (<c>ActivateNetworkHandler</c>), porque corta el acceso de los usuarios por el hub de FLIT.
     /// </summary>
-    public static DomainCertificateDecision DecideCertificate(string currentStatus, DateTimeOffset now)
-    {
-        return currentStatus == TenantDomainStatus.Verified
-            ? new DomainCertificateDecision(TenantDomainStatus.Active, now)
-            : new DomainCertificateDecision(currentStatus, null);
-    }
+    public static DomainCertificateDecision DecideCertificate(string currentStatus) => new(currentStatus, null);
 
     /// <summary>Backoff exponencial acotado por <see cref="DomainVerificationOptions.MaxRetryInterval"/> (AC2 "intervalo creciente"). Público: <c>DomainStateMachineTests</c> lo ejercita directamente.</summary>
     public static TimeSpan Backoff(int attempts, DomainVerificationOptions options)

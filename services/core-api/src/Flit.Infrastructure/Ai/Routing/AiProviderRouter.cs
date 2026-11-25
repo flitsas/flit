@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.Plataforma.Ai;
 using Flit.Admin.Domain.Plataforma.Ai;
+using Flit.Platform.Sdk.IaConsumo;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Infrastructure.Ai.Routing;
@@ -15,8 +16,12 @@ internal sealed class AiProviderRouter(
     IEnumerable<IAiVisionProvider> visionProviders,
     IEnumerable<IAiChatProvider> chatProviders,
     IAdminAuditWriter auditWriter,
-    ILogger<AiProviderRouter> logger) : IAiProviderRouter
+    ILogger<AiProviderRouter> logger,
+    IIaCallContext? iaContexto = null) : IAiProviderRouter
 {
+    /// <summary>Ámbito del registro de consumo de IA (ADR-0090): cada proveedor de la cola es una pasada.</summary>
+    private readonly IIaCallContext _ia = iaContexto ?? IaCallContext.Instancia;
+
     private readonly Dictionary<string, IAiVisionProvider> _vision =
         visionProviders.ToDictionary(p => AiProviderCodes.Normalize(p.ProviderCode), StringComparer.Ordinal);
 
@@ -89,12 +94,19 @@ internal sealed class AiProviderRouter(
         string? failedFrom = null;
         AiProviderCallResult? lastFail = null;
 
+        // Toda la cola es UNA operación de negocio: el failover a otro proveedor queda con el mismo
+        // correlacion_id y pasada = posición del proveedor en la cola (1 = el activo).
+        using var operacion = _ia.Iniciar(new IaAmbito());
+        short pasada = 0;
+
         foreach (var providerCode in queue)
         {
+            pasada++;
             AiProviderCallResult result;
             try
             {
-                result = await invoke(providerCode, cancellationToken).ConfigureAwait(false);
+                using (_ia.Iniciar(new IaAmbito { Pasada = pasada }))
+                    result = await invoke(providerCode, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

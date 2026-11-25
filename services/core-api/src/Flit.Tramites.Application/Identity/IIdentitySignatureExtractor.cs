@@ -17,4 +17,11 @@ public interface IIdentitySignatureExtractor
     /// «Verify» opaco y de color continuo no cuenta como rúbrica y la captura lo re-extrae.
     /// </summary>
     bool IsUsableInk(byte[] imageBytes);
+
+    /// <summary>
+    /// Bug #14661 — firma de una validación MANUAL lista para estamparse en un documento: exige solo tinta visible
+    /// (no aplica el filtro de transparencia/paleta de Kyverum de <see cref="IsUsableInk"/>) y devuelve un PNG con el
+    /// fondo blanco/casi blanco transparente. Devuelve <c>null</c> si no hay tinta o el formato no es PNG/JPEG.
+    /// </summary>
+    byte[]? PrepareManualSignature(byte[] imageBytes);
 }

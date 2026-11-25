@@ -22,6 +22,9 @@
 > el comprobante se acepta en **cualquier estado salvo `anulado` y `revocado`**, y en todos ellos marca el impuesto
 > como pagado (también en `aprobado` y `entregado`). `409 not_allowed_in_state` queda solo para anulado y revocado,
 > siempre con `terminal: true`, y la respuesta tiene la misma forma.
+> **Cambio v3.2.2** (2026-11-24, Bug [#14660](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/14660)):
+> solo documentación del `POST .../adjuntos`: tras archivar (201) FLIT 2 regenera en segundo plano los consolidados
+> que el trámite ya tenga (wizard y maestro del OT). Sin cambios de request ni response.
 >
 > **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
 > otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
@@ -403,7 +406,11 @@ Reglas:
   no puede desmarcar lo que marcó el consumidor.
 - **Reversa en el consumidor:** si el consumidor reversa el pago, no avisa a FLIT; el adjunto y la marca
   quedan. Un nuevo comprobante posterior se reenvía y reemplaza el anterior.
-- **Solo archiva:** no corre OCR ni regenera el consolidado del trámite.
+- **Solo archiva:** no corre OCR ni toca el checklist (la casilla se satisface porque el checklist mira los adjuntos
+  del trámite). Bug #14660 (ADR-0087): cuando el envío cambió el expediente (201, no el 200 idempotente), FLIT 2
+  encola en segundo plano, de forma best-effort y sin bloquear esta respuesta, la regeneración de los consolidados
+  que el trámite ya tenga (el del wizard y el maestro del OT), salvo en estado final; no depende de `enMatriz`; no hay ningún endpoint para forzarla ni ninguna forma de request/response nueva, Flito
+  no necesita ningún cambio.
 - Exige `external.tramites.attachments.write`. Cada llamada queda en la bitácora de acceso (§6) como
   escritura con datos personales; el archivo no se registra.
 

@@ -1205,4 +1205,53 @@ public sealed class BiometricaHandlerTests
         result!.Validations.Should().ContainSingle();
         result.Validations[0].RejectionReason.Should().Be("La verificación del documento no fue exitosa.");
     }
+
+    [Fact]
+    public async Task Bug14634_RechazoManual_HomologaElMotivoEnVezDelGenerico()
+    {
+        // Antes de este fix, un rechazo manual (Detail/ProviderPayload vacíos, ninguno trae "motivo" ni
+        // "subject_motivo") caía siempre al texto genérico del final de ExtractMotivoRechazo, ignorando
+        // RejectionReasonCode (la lista cerrada, HU #13299) — en TODAS las pantallas que leen RejectionReason
+        // (no solo en el tracking del trámite).
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var manual = TenantVal(tenant, BiometricEstados.Rechazado, provider: BiometricProviders.Manual);
+        manual.RejectionReasonCode = "documento_ilegible_o_incompleto";
+
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { manual });
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int>());
+
+        var (result, error) = await handler.HandleAsync(tenant, new TenantBiometricValidationListQuery(), ct);
+
+        error.Should().BeNull();
+        result!.Validations.Should().ContainSingle()
+            .Which.RejectionReason.Should().Be("Documento ilegible o incompleto")
+            .And.NotBe("No se pudo verificar la identidad con las imágenes recibidas.");
+    }
+
+    [Fact]
+    public async Task Bug14634_RechazoManual_SinCodigoReconocido_SigueCayendoAlGenerico()
+    {
+        // Un código fuera de la lista cerrada (dato corrupto/migrado) no inventa una etiqueta: sigue el
+        // camino existente (mock/Kyverum/genérico), nunca expone el código crudo.
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var manual = TenantVal(tenant, BiometricEstados.Rechazado, provider: BiometricProviders.Manual);
+        manual.RejectionReasonCode = "codigo_no_reconocido";
+
+        _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { manual });
+        _repo.CountBiometricValidationsByEstadoAsync(OnlyTenant(tenant), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int>());
+
+        var (result, error) = await handler.HandleAsync(tenant, new TenantBiometricValidationListQuery(), ct);
+
+        error.Should().BeNull();
+        result!.Validations.Should().ContainSingle()
+            .Which.RejectionReason.Should().Be("No se pudo verificar la identidad con las imágenes recibidas.");
+    }
 }

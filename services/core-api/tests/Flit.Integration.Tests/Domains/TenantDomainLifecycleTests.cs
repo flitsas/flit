@@ -59,6 +59,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
             now: Now,
             changedByUserId: null,
             changedByJob: "job:dns-verification",
+            TenantDomainPurposes.Hub,
             TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
@@ -93,6 +94,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
             now: Now,
             changedByUserId: null,
             changedByJob: "job:dns-verification",
+            TenantDomainPurposes.Hub,
             TestContext.Current.CancellationToken);
 
         updated!.Status.Should().Be(TenantDomainStatus.Failed);
@@ -111,6 +113,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
             var repo = new TenantDomainRepository(ctx);
             await repo.ApplyCheckOutcomeAsync(
                 MarcaBlancaHeadId, TenantDomainStatus.Verified, null, Now, null, 0, null, Now, null, "job:dns-verification",
+                TenantDomainPurposes.Hub,
                 TestContext.Current.CancellationToken);
         }
 
@@ -148,6 +151,64 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
     }
 
     [PostgresFact]
+    public async Task RedConProducto_NaceProgramada_YSeActivaEntera()
+    {
+        await SeedClientAsync();
+        var ct = TestContext.Current.CancellationToken;
+
+        await using (var ctx = NewContext())
+        {
+            var repo = new TenantDomainRepository(ctx);
+            var hub = await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "consola.example.com", "tok-0000000000000011", null, TenantDomainPurposes.Hub, ct);
+            var tramites = await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "tramites.example.com", "tok-0000000000000012", null, "tramites", ct);
+
+            hub.Purpose.Should().Be(TenantDomainPurposes.Hub);
+            hub.NextCheckAt.Should().NotBeNull("sin próxima comprobación el trabajo programado no la toma");
+            tramites.Purpose.Should().Be("tramites");
+            tramites.NextCheckAt.Should().NotBeNull();
+
+            // Cambiar el dominio del producto no retira el del hub.
+            var cambiado = await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "app.example.com", "tok-0000000000000013", null, "tramites", ct);
+            cambiado.Host.Should().Be("app.example.com");
+            (await repo.ListByTenantIdAsync(MarcaBlancaHeadId, ct)).Select(d => d.Host).Should().Equal("consola.example.com", "app.example.com");
+
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repo = new TenantDomainRepository(ctx);
+            var claims = await repo.ClaimDueForCheckAsync(10, TimeSpan.FromMinutes(2), DateTimeOffset.UtcNow.AddMinutes(1), ct);
+            claims.Should().Contain(c => c.Host == "app.example.com" && c.Purpose == "tramites");
+            claims.Should().Contain(c => c.Host == "consola.example.com" && c.Purpose == TenantDomainPurposes.Hub);
+
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repo = new TenantDomainRepository(ctx);
+            await repo.ApplyCheckOutcomeAsync(MarcaBlancaHeadId, TenantDomainStatus.Verified, null, Now, null, 0, null, Now, null, "job:dns-verification", TenantDomainPurposes.Hub, ct);
+            await repo.ApplyCheckOutcomeAsync(MarcaBlancaHeadId, TenantDomainStatus.Verified, null, Now, null, 0, null, Now, null, "job:dns-verification", "tramites", ct);
+
+            (await repo.ListProvisioningAsync(ct)).Select(d => d.Host).Should().Equal("app.example.com", "consola.example.com");
+
+            // Solo el de Trámites tiene certificado: el otro no se activa.
+            await repo.ApplyCertificateAsync("app.example.com", TenantDomainStatus.Verified, null, Now, Now.AddDays(90), "job:certificate-issuer", ct);
+            var parcial = await repo.ActivateNetworkAsync(MarcaBlancaHeadId, Now, null, ct);
+            parcial.Single(d => d.Purpose == "tramites").Status.Should().Be(TenantDomainStatus.Active);
+            parcial.Single(d => d.Purpose == TenantDomainPurposes.Hub).Status.Should().Be(TenantDomainStatus.Verified);
+
+            await repo.ApplyCertificateAsync("consola.example.com", TenantDomainStatus.Verified, null, Now, Now.AddDays(90), "job:certificate-issuer", ct);
+            var activos = await repo.ActivateNetworkAsync(MarcaBlancaHeadId, Now, null, ct);
+            activos.Should().OnlyContain(d => d.Status == TenantDomainStatus.Active && d.ActivatedAt != null);
+        }
+
+        await using (var ctx = NewContext())
+        {
+            (await ctx.ActiveNetworkDomains.CountAsync(ct)).Should().Be(2);
+        }
+    }
+
+    [PostgresFact]
     public async Task AC4_ActivoConGracia_SigueApareciendoEnLaVistaHastaQueVenceLaGracia()
     {
         await SeedClientAsync();
@@ -156,7 +217,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
         await using (var ctx = NewContext())
         {
             var repo = new TenantDomainRepository(ctx);
-            await repo.ApplyCheckOutcomeAsync(MarcaBlancaHeadId, TenantDomainStatus.Verified, null, Now, null, 0, null, Now, null, "job:dns-verification", TestContext.Current.CancellationToken);
+            await repo.ApplyCheckOutcomeAsync(MarcaBlancaHeadId, TenantDomainStatus.Verified, null, Now, null, 0, null, Now, null, "job:dns-verification", TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
             await repo.ApplyCertificateAsync("app.example.com", TenantDomainStatus.Active, Now, Now, Now.AddDays(90), "job:certificate-issuer", TestContext.Current.CancellationToken);
         }
 
@@ -166,6 +227,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
             // TXT desaparece: entra en gracia, sigue active (AC4 "durante la gracia sigue operando").
             var graced = await repo.ApplyCheckOutcomeAsync(
                 MarcaBlancaHeadId, TenantDomainStatus.Active, null, null, Now.AddDays(3), 0, Now.AddMinutes(5), Now, null, "job:dns-verification",
+                TenantDomainPurposes.Hub,
                 TestContext.Current.CancellationToken);
             graced!.Status.Should().Be(TenantDomainStatus.Active);
             graced.GraceUntil.Should().NotBeNull();
@@ -187,6 +249,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
         var repo = new TenantDomainRepository(ctx);
         await repo.ApplyCheckOutcomeAsync(
             MarcaBlancaHeadId, TenantDomainStatus.Failed, DomainStatusReasons.DnsError, null, null, 1, Now.AddMinutes(5), Now, null, "job:dns-verification",
+            TenantDomainPurposes.Hub,
             TestContext.Current.CancellationToken);
 
         await using var check = NewContext();
@@ -248,7 +311,7 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
         var repo = new TenantDomainRepository(ctx);
 
         var registered = await repo.RegisterOrReplaceAsync(
-            MarcaBlancaHeadId, "app.example.com", "tok-0000000000000011", changedBy: null, TestContext.Current.CancellationToken);
+            MarcaBlancaHeadId, "app.example.com", "tok-0000000000000011", changedBy: null, TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
 
         registered.Host.Should().Be("app.example.com");
         registered.Status.Should().Be(TenantDomainStatus.Pending);
@@ -281,13 +344,13 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
         await using (var ctx = NewContext())
         {
             var repo = new TenantDomainRepository(ctx);
-            await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "app.example.com", "tok-0000000000000012", null, TestContext.Current.CancellationToken);
+            await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "app.example.com", "tok-0000000000000012", null, TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
         }
 
         await using (var ctx = NewContext())
         {
             var repo = new TenantDomainRepository(ctx);
-            var replaced = await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "red.example.com", "tok-0000000000000013", null, TestContext.Current.CancellationToken);
+            var replaced = await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "red.example.com", "tok-0000000000000013", null, TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
             replaced.Host.Should().Be("red.example.com");
             replaced.Status.Should().Be(TenantDomainStatus.Pending);
         }
@@ -328,13 +391,13 @@ public sealed class TenantDomainLifecycleTests(PostgresDatabaseFixture fixture) 
         await using (var ctx = NewContext())
         {
             var repo = new TenantDomainRepository(ctx);
-            await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "app.example.com", "tok-0000000000000014", null, TestContext.Current.CancellationToken);
+            await repo.RegisterOrReplaceAsync(MarcaBlancaHeadId, "app.example.com", "tok-0000000000000014", null, TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
         }
 
         await using (var ctx = NewContext())
         {
             var repo = new TenantDomainRepository(ctx);
-            var retired = await repo.RetireAsync(MarcaBlancaHeadId, changedBy: null, TestContext.Current.CancellationToken);
+            var retired = await repo.RetireAsync(MarcaBlancaHeadId, changedBy: null, TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
             retired.Should().NotBeNull();
         }
 

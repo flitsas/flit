@@ -132,7 +132,7 @@ public sealed class GenerarFurHandler(
 
     private MandatoEmisor MandatoEmisor => _mandatoEmisor ??= new MandatoEmisor(
         repo, certClient, storage, logger, _vaultPolicy, _mandatoGenerator, _mandatePolicy, _mandateDirectory,
-        _mandateTemplateBlob, _mandateFormatTemplates, identitySignatureCapture);
+        _mandateTemplateBlob, _mandateFormatTemplates, identitySignatureCapture, identitySignatureExtractor);
 
     /// <summary>
     /// HU #10860 (cascada β) — regenera el FUR y sus documentos en caliente (con fecha vigente) para
@@ -1376,14 +1376,30 @@ public sealed class GenerarFurHandler(
                     if (ms.Length == 0)
                         continue;
                     var bytes = ms.ToArray();
-                    // Bug #13304 — paridad con la impronta: por encima del tope del extractor no se
-                    // decodifica ni se estampa, haya o no extractor; queda el sello de texto.
-                    if (bytes.Length > IdentitySignatureImageFormat.MaxArtifactBytes)
-                        continue;
-                    if (!IdentitySignatureImageFormat.IsSupported(bytes))
-                        continue;
-                    if (identitySignatureExtractor is not null && !identitySignatureExtractor.IsUsableInk(bytes))
-                        continue;
+                    // Bug #14661 — la firma de una validación MANUAL es un PNG opaco de fondo blanco: no pasa el
+                    // filtro de transparencia de Kyverum (IsUsableInk) y se descartaba en silencio. Con extractor
+                    // solo se exige tinta visible y se le quita el fondo; el tope es el de la captura manual.
+                    if (identitySignatureExtractor is not null
+                        && string.Equals(val.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (bytes.Length > ManualCapture.ManualCaptureImages.MaxSignatureBytes)
+                            continue;
+                        var lista = identitySignatureExtractor.PrepareManualSignature(bytes);
+                        if (lista is null)
+                            continue;
+                        bytes = lista;
+                    }
+                    else
+                    {
+                        // Bug #13304 — paridad con la impronta: por encima del tope del extractor no se
+                        // decodifica ni se estampa, haya o no extractor; queda el sello de texto.
+                        if (bytes.Length > IdentitySignatureImageFormat.MaxArtifactBytes)
+                            continue;
+                        if (!IdentitySignatureImageFormat.IsSupported(bytes))
+                            continue;
+                        if (identitySignatureExtractor is not null && !identitySignatureExtractor.IsUsableInk(bytes))
+                            continue;
+                    }
                     (images ??= new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase))[slot.Key] = bytes;
                 }
             }

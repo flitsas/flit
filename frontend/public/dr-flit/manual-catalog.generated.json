@@ -697,6 +697,7 @@
           "paragraphs": [
             "Un traspaso u otro trámite con placa pasa a Entregado (en revisión del organismo) y de ahí a Aprobado, Rechazado o En subsanación.",
             "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
+            "Si el organismo recibe los trámites por Quipux, al enviar verás «¡Trámite enviado!» y el aviso «El trámite quedó en cola para radicarse por Quipux ante el organismo de tránsito». El trámite sigue en Preparado mientras la plataforma lo radica en Quipux, y cambia de estado cuando Quipux lo confirma. No tienes que volver a enviarlo; si pasa mucho tiempo sin cambiar, repórtalo a soporte.",
             "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT."
           ],
           "bullets": [],
@@ -862,7 +863,7 @@
           ],
           "bullets": [
             "Borrador: editable; complétalo y radícalo desde el detalle. Puedes anularlo si no va a continuar.",
-            "Preparado: datos completos, listo para radicar.",
+            "Preparado: datos completos, listo para radicar. Si el organismo recibe por Quipux, también es el estado mientras el trámite espera en cola a que Quipux confirme la radicación.",
             "Preasignación (solo matrícula inicial en ruta larga): radicado sin placa; el organismo debe asignarla. Aún no está en su cola de decisión.",
             "Asignado: el organismo ya asignó la placa. Te toca gestionar SOAT e impuestos y pulsar «Enviar al OT» (acción de la fila).",
             "Entregado: en revisión del organismo de tránsito.",
@@ -2880,7 +2881,7 @@
     },
     {
       "slug": "4-superadmin/3-plataforma",
-      "title": "Plataforma: tipos de trámite, mandatos, FUR, notificaciones, Confirmación RUNT y banners",
+      "title": "Plataforma: tipos de trámite, mandatos, FUR, notificaciones, Confirmación RUNT, banners y contingencia RUNT",
       "href": "/manual/4-superadmin/3-plataforma",
       "audience": "Super Admin",
       "sectionId": "superadmin",
@@ -2936,6 +2937,36 @@
           ],
           "bullets": [],
           "callouts": []
+        },
+        {
+          "id": "contingencia-runt",
+          "title": "5. Contingencia de proveedor RUNT",
+          "paragraphs": [
+            "Úsala cuando uno de los proveedores que consultan el RUNT (Kyverum o Verifik) está caído. En un solo paso mandas las consultas al otro proveedor para todas las compañías, sin cambiar la configuración de ninguna. La encuentras en Administradores > Plataforma > Contingencia RUNT. Solo la ve el Super Admin.",
+            "La tabla tiene tres filas: Vehículo por VIN, Vehículo por placa y Conductor. Cada una muestra su estado («Sin contingencia» o el proveedor elegido), quién hizo el último cambio, cuándo y el motivo.",
+            "Paso 1. En la fila del tipo de consulta afectado, abre «Acciones» y elige «Editar».",
+            "Paso 2. Elige el proveedor que debe atender mientras dura la caída. Para volver a la normalidad, elige «Sin contingencia».",
+            "Paso 3. Escribe el motivo, por ejemplo «Kyverum no responde desde las 9:10». Es obligatorio y no debe incluir datos personales.",
+            "Paso 4. Pulsa «Guardar» y confirma. Las consultas nuevas usan el cambio en menos de un minuto."
+          ],
+          "bullets": [
+            "Aplica a las consultas RUNT de vehículo y conductor que hacen Trámites, el portal Persona Natural y la integración ICT. Comparendos, RNMC, RUES, avalúos, validación de identidad y Diagnóstico no cambian.",
+            "El proveedor elegido se consulta primero. Si también falla, la consulta sigue con el proveedor que tenía configurado cada compañía.",
+            "Al apagar la contingencia, cada compañía vuelve sola a su configuración: no hay que tocar ninguna.",
+            "Una consulta que ya estaba guardada se reutiliza igual; el cambio solo afecta las consultas nuevas."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Las compañías no ven la contingencia: su pantalla «Proveedores de consulta RUNT» y su historial de cambios siguen iguales, y el resultado de la consulta muestra «RUNT» como origen. El cambio queda solo en la auditoría de Plataforma."
+            },
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Si el servicio de consultas no responde, verás el mensaje «El servicio de consultas no responde. Intenta de nuevo en unos minutos.» y nada cambia. Usa «Reintentar»."
+            }
+          ]
         }
       ],
       "sources": []
@@ -3467,7 +3498,7 @@
           "bullets": [
             "Selfie: debe aparecer un solo rostro dentro del óvalo.",
             "Anverso: debe verse un documento con un rostro.",
-            "Reverso: debe verse un documento con código de barras o QR.",
+            "Reverso: debe verse un documento. No se exige leer un código de barras ni un QR.",
             "Pasaporte: se revisa que sea un documento, pero no el lado. La persona toma igual las tres fotos."
           ],
           "callouts": []

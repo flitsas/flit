@@ -8,6 +8,7 @@ using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Plataforma;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +56,8 @@ public static class Program
         builder.Services.AddAutorizacionComparendos();
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<ComparendosDb>(builder.Configuration);
+        // Contrato ia-consumo v1 (ADR-0090): cada llamada al OCR con IA queda en comparendos.ia_consumo_log.
+        builder.Services.AddFlitIaConsumo<ComparendosDb>(builder.Configuration, aplicativo: "flit", servicio: "core-comparendos");
         AddTokensDeServicio(builder.Services, builder.Configuration);
 
         builder.Services.ConfigureHttpJsonOptions(o =>

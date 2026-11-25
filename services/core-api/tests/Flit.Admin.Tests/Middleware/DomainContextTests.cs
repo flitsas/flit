@@ -23,7 +23,7 @@ public sealed class DomainContextTests
     private static DomainOptions NewOptions() => new()
     {
         Reserved = ["*.flitsas.online", "*.flitsas.com"],
-        EdgeTarget = "edge.flitsas.online",
+        EdgeIp = "203.0.113.10",
     };
 
     [Fact]
@@ -80,7 +80,7 @@ public sealed class DomainContextTests
     {
         Reserved = ["*.flitsas.online", "*.flitsas.com"],
         Allowed = ["marcablancadev.flitsas.online", "marcablancaqa.flitsas.online", "marcablancapdn.flitsas.online"],
-        EdgeTarget = "edge.flitsas.online",
+        EdgeIp = "203.0.113.10",
     };
 
     [Fact]

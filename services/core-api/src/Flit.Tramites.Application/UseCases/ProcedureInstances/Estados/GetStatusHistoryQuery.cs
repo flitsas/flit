@@ -200,7 +200,8 @@ public static class StatusHistoryModificacionLectura
     private const string TipoDatoModificado = "dato_modificado";
     private const int MaxFrase = 2000;
 
-    private static readonly string[] FraseKeys = ["motivo", "accion", "acción", "reason", "decision_reason", "observacion"];
+    private static readonly string[] FraseKeys =
+        ["motivo", "accion", "acción", "reason", "decision_reason", "observacion", "observation"];
 
     private static readonly Dictionary<string, (string Etiqueta, string Campo)> Actos = new(StringComparer.Ordinal)
     {
@@ -210,6 +211,8 @@ public static class StatusHistoryModificacionLectura
         ["revocatoria_aprobada"] = ("Revocatoria aprobada", "revocatoria"),
         ["revocatoria_rechazada"] = ("Revocatoria rechazada", "revocatoria"),
         ["documento_cargado_admin"] = ("Documento actualizado por el administrador", "documento_admin"), // Bug #14604
+        ["tramite_pausado"] = ("Trámite pausado", "pausa"), // HU #14691
+        ["tramite_reanudado"] = ("Trámite reanudado", "reanudacion"), // HU #14691
     };
 
     /// <summary>Tipos que entran en la línea de Modificaciones. Lista local para que EF la traduzca a IN.</summary>
@@ -222,6 +225,8 @@ public static class StatusHistoryModificacionLectura
         "revocatoria_aprobada",
         "revocatoria_rechazada",
         "documento_cargado_admin", // Bug #14604
+        "tramite_pausado", // HU #14691
+        "tramite_reanudado", // HU #14691
     ];
 
     public readonly record struct Fila(

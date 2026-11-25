@@ -62,8 +62,33 @@ public sealed class Bug13912ConsultaPreviaPrimerClaimTests
             .RegisterDocumentAsync(Arg.Any<QuipuxRegisterRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Bug14672_fallo_HTTP_del_registro_deja_el_mensaje_con_el_codigo_en_la_bitacora()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var audit = Substitute.For<IQuipuxAuditLog>();
+        var detalles = new List<(string Stage, string Json)>();
+        audit.When(a => a.WriteAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<object?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>()))
+            .Do(c => detalles.Add((c.ArgAt<string>(2), System.Text.Json.JsonSerializer.Serialize(c.ArgAt<object?>(4)))));
+
+        var (handler, client, _) = ArmarHandler(attempts: 1, ct, audit);
+        client.RegisterDocumentAsync(Arg.Any<QuipuxRegisterRequest>(), ct)
+            .Returns<QuipuxRegisterResult>(_ => throw new QuipuxException(
+                "Quipux no disponible en registro (503).", isTransient: true));
+
+        await handler.HandleAsync(
+            new RegistrarDocumentoQuipuxCommand { SubmissionId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee") },
+            ct);
+
+        detalles.Should().Contain(d =>
+            d.Stage == QuipuxStage.RegistroRespuesta
+            && d.Json.Contains("\"error\":\"Quipux no disponible en registro (503).\""));
+    }
+
     private static (RegistrarDocumentoQuipuxHandler Handler, IQuipuxClient Client, Guid SubmissionId)
-        ArmarHandler(int attempts, CancellationToken ct)
+        ArmarHandler(int attempts, CancellationToken ct, IQuipuxAuditLog? audit = null)
     {
         var tenantId = Guid.NewGuid();
         var instanceId = Guid.NewGuid();
@@ -155,7 +180,7 @@ public sealed class Bug13912ConsultaPreviaPrimerClaimTests
 
         var handler = new RegistrarDocumentoQuipuxHandler(
             settings, submissions, client, uploader, instances, procedureTypes, lifecycle,
-            Substitute.For<IQuipuxAuditLog>(),
+            audit ?? Substitute.For<IQuipuxAuditLog>(),
             NullLogger<RegistrarDocumentoQuipuxHandler>.Instance);
 
         return (handler, client, submissionId);

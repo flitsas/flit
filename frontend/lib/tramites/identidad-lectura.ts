@@ -272,12 +272,15 @@ export function hitosDeIdentidad(
         const aprobado =
           e.stage === 'manual_aprobado' ||
           (e.stage !== 'manual_rechazado' && OUTCOMES_CORRECTOS.has(e.outcome));
+        // Bug #14634 — el motivo de ESTE rechazo puntual vive en el evento (rejectionReasonLabel, fijo
+        // en la bitácora); v.rejectionReason es el de la validación VIGENTE y una captura nueva lo borra,
+        // así que un hito histórico (validación ya reintentada o aprobada) se quedaba sin motivo.
         const quien =
           e.stage === 'manual_aprobado' || e.stage === 'manual_rechazado' ? descripcionRevisor(e.revisor) : null;
         return {
           ...base,
           titulo: aprobado ? 'Identidad aprobada' : 'Identidad rechazada',
-          detalle: aprobado ? null : v.rejectionReason?.trim() || null,
+          detalle: aprobado ? null : e.rejectionReasonLabel?.trim() || v.rejectionReason?.trim() || null,
           tono: aprobado ? 'ok' : 'alerta',
           ...(quien ? { revisadoPor: `Revisado por ${quien}` } : {}),
         };
