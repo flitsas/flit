@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using Flit.Impuestos.Api;
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
+using Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 using Flit.Impuestos.Api.Modulos.Credenciales;
 using Flit.Impuestos.Tests.ApiLiquidacion;
+using Flit.Impuestos.Tests.Aprovisionamiento;
 using Flit.Impuestos.Tests.Credenciales;
 using FluentAssertions;
 using Xunit;
@@ -82,6 +84,28 @@ public sealed class SinSecretosEnRespuestasTests
     }
 
     [Fact]
+    public async Task El_alta_y_la_vista_del_aprovisionamiento_no_llevan_la_api_key_ni_el_secreto_ni_el_token()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.Created, ClienteApiLiquidacionTests.Alta201);
+        var logs = new RegistroDeLogs();
+        await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, new IdentidadDePrueba(), logs);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoAprovisionamiento.EntregarAsync(api, EntornoAprovisionamiento.Cambio(empresa, true), ct);
+
+        await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct);
+        using var vista = await api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(api))
+            .GetAsync($"{Program.Prefijo}/backoffice/empresas/{empresa}/aprovisionamiento", ct);
+
+        vista.StatusCode.Should().Be(HttpStatusCode.OK);
+        var texto = await vista.Content.ReadAsStringAsync(ct);
+        texto.Should().NotContain(ApiKey).And.NotContain(Secreto).And.NotContain(Token);
+        logs.Todo.Should().Contain("Authorization", "el registro del HttpClient escribe las cabeceras del alta");
+        logs.Todo.Should().NotContain(ApiKey).And.NotContain(Secreto).And.NotContain(Token).And.NotContain("ops@flota.example");
+    }
+
+    [Fact]
     public void Los_tipos_con_secretos_no_los_imprimen()
     {
         var textos = new object[]
@@ -92,6 +116,9 @@ public sealed class SinSecretosEnRespuestasTests
             new OpcionesApiLiquidacion { BaseUrl = ClienteApiLiquidacionTests.Base, IntegrationToken = Token },
             ResultadoEnvio<AltaEmpresaRespuesta>.Exito(201, new AltaEmpresaRespuesta(new EmpresaApi("e", null, null, null, null), ApiKey, Secreto)),
             new AltaEmpresaPeticion("Flota Andina SAS", "900123456", "ops@flota.example"),
+            new LlaveDiagnostico(true, ApiKey, 2),
+            new DatosAltaProveedor("Flota Andina SAS", "900123456", EstadoNitAlta.Valido, "ops@flota.example", true),
+            new ResultadoEvaluacion(Flit.Impuestos.Domain.Aprovisionamiento.EventoAprovisionamiento.Alta201, null, new CredencialesEnClaro(ApiKey, Secreto, "e"), Flit.Impuestos.Api.Persistence.OrigenCredencial.Alta),
         }.Select(o => o.ToString()!);
 
         textos.Should().OnlyContain(t => !t.Contains(ApiKey) && !t.Contains(Secreto) && !t.Contains(Token) && !t.Contains("ops@flota.example"));

@@ -174,6 +174,39 @@ public sealed class ServicioHostTests : IAsyncLifetime
             .Which.Message.Should().NotContain("RABBITMQ_URL", "solo nombra lo que falta");
     }
 
+    [Theory]
+    [InlineData("Impuestos:Api:IntegrationToken", "Impuestos__Api__IntegrationToken*IMPUESTOS_SVC_INTEGRATION_TOKEN")]
+    [InlineData("Impuestos:Api:BaseUrl", "Impuestos__Api__BaseUrl*IMPUESTOS_SVC_API_BASE_URL")]
+    public void Sin_el_token_de_integracion_o_la_base_del_API_no_arranca_y_nombra_la_variable(string clave, string patron)
+    {
+        var settings = Settings();
+        settings.Remove(clave);
+
+        var act = () => Program.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(settings);
+        });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*{patron}*")
+            .Which.Message.Should().NotContain("token-integracion-de-prueba-no-real", "el mensaje no revela secretos");
+    }
+
+    [Fact]
+    public void Sin_la_clave_del_certificado_no_arranca_y_nombra_la_variable_del_env()
+    {
+        var settings = Settings();
+        settings.Remove(CertificadoDePrueba.ClaveClave);
+
+        var act = () => Program.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(settings);
+        });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Impuestos__DataProtection__CertificadoClave*IMPUESTOS_SVC_DP_CERTIFICADO_CLAVE*");
+    }
+
     private Dictionary<string, string?> Settings() => new()
     {
         ["ConnectionStrings:Servicio"] = _database,
@@ -185,5 +218,8 @@ public sealed class ServicioHostTests : IAsyncLifetime
         [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
         [CertificadoDePrueba.ClaveRuta] = CertificadoDePrueba.Ruta,
         [CertificadoDePrueba.ClaveClave] = CertificadoDePrueba.Clave,
+        ["Impuestos:Api:BaseUrl"] = "https://api.prueba",
+        ["Impuestos:Api:IntegrationToken"] = "token-integracion-de-prueba-no-real",
+        ["Impuestos:Aprovisionamiento:TrabajadorActivo"] = "false",
     };
 }

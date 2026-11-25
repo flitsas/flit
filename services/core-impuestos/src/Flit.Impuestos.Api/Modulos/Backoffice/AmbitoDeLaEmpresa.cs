@@ -94,6 +94,34 @@ public static class BackofficeImpuestosExtensions
     /// <summary>Scope del gRPC global de empresas de Identidad.</summary>
     public const string ScopeEmpresas = "platform.identidad.empresas";
 
+    /// <summary>Scope de <c>ObtenerDatosAltaProveedor</c> (M07, aprovisionamiento).</summary>
+    public const string ScopeEmpresasAlta = "platform.identidad.empresas.alta";
+
+    /// <summary>
+    /// Scopes del ÚNICO token del cliente <c>EmpresasService</c>: el listado global (M13) y los datos del alta (M07) van por el
+    /// mismo cliente, así que se pide un token con los dos (separados por espacio; Identidad valida cada rpc por su scope).
+    /// </summary>
+    public const string ScopesClienteEmpresas = ScopeEmpresas + " " + ScopeEmpresasAlta;
+
+    /// <summary>
+    /// Registra UNA sola vez el cliente gRPC de <c>EmpresasService</c> de Identidad (plazo 5 s) con <see cref="ScopesClienteEmpresas"/>.
+    /// Lo llaman el backoffice (M13) y el aprovisionamiento (M07); la segunda llamada no hace nada (dos registros sumarían dos
+    /// credenciales al mismo cliente). Devuelve false si no hay <see cref="GuardSuscripcionExtensions.IdentidadAddressKey"/>.
+    /// </summary>
+    public static bool AddClienteEmpresasIdentidad(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (configuration[GuardSuscripcionExtensions.IdentidadAddressKey] is not { Length: > 0 } identidad)
+            return false;
+        if (services.Any(d => d.ServiceType == typeof(ClienteEmpresasRegistrado)))
+            return true;
+        services.AddSingleton<ClienteEmpresasRegistrado>();
+        services.AddFlitGrpcClient<EmpresasService.EmpresasServiceClient>(
+            configuration, new Uri(identidad), ScopesClienteEmpresas, o => o.Deadline = TimeSpan.FromSeconds(5));
+        return true;
+    }
+
     /// <summary>
     /// Con <see cref="GuardSuscripcionExtensions.IdentidadAddressKey"/>, el directorio por Identidad (plazo 5 s); sin ella, el «no
     /// conectado». TryAdd: las pruebas registran su doble antes.
@@ -101,9 +129,8 @@ public static class BackofficeImpuestosExtensions
     public static IServiceCollection AddBackofficeImpuestos(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        if (configuration[GuardSuscripcionExtensions.IdentidadAddressKey] is { Length: > 0 } identidad)
+        if (services.AddClienteEmpresasIdentidad(configuration))
         {
-            services.AddFlitGrpcClient<EmpresasService.EmpresasServiceClient>(configuration, new Uri(identidad), ScopeEmpresas, o => o.Deadline = TimeSpan.FromSeconds(5));
             services.TryAddScoped<IDirectorioEmpresas, DirectorioEmpresasIdentidad>();
         }
         else
@@ -116,3 +143,6 @@ public static class BackofficeImpuestosExtensions
         return services;
     }
 }
+
+/// <summary>Marca de que el cliente de <c>EmpresasService</c> ya se registró (registro único, M07 + M13).</summary>
+internal sealed class ClienteEmpresasRegistrado;
