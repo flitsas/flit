@@ -59,8 +59,8 @@ public sealed class ReglaException : Exception
 /// <summary>
 /// Convierte las excepciones de negocio en <c>{ code, error }</c>: <see cref="ReglaException"/> con su estado (y
 /// <c>campo</c> y <c>tope</c> si los trae), <see cref="TransicionInvalida"/> del dominio como 409 con su código, una escritura
-/// entre empresas como 403, un CHECK de la base como 422 <c>VALOR_INVALIDO</c> (sin el detalle de la base) y un conflicto de
-/// <c>xmin</c> como 409. Lo demás sigue su curso.
+/// entre empresas como 403, un CHECK de la base como 422 <c>VALOR_INVALIDO</c> (sin el detalle de la base), un conflicto de
+/// <c>xmin</c> como 409 y un permiso negado por la plataforma sin código como 403 sin cuerpo. Lo demás sigue su curso.
 /// </summary>
 internal sealed class ManejadorReglas : IExceptionHandler
 {
@@ -71,6 +71,13 @@ internal sealed class ManejadorReglas : IExceptionHandler
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
+        if (exception is Modulos.Usuarios.PermisoNegadoException)
+        {
+            // La plataforma negó el permiso sin un código del contrato: 403 sin cuerpo (respuesta Prohibido de impuestos.v1.yaml).
+            httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return true;
+        }
+
         var regla = exception switch
         {
             ReglaException r => r,

@@ -53,15 +53,8 @@ public static class MotivosAprovisionamiento
     /// <summary>¿Es un código del contrato? (el historial puede tener códigos internos, p. ej. <c>CARGA_MANUAL</c> de M06).</summary>
     public static bool EsDelContrato(string? codigo) => codigo is not null && Literales.ContainsKey(codigo);
 
-    /// <summary>Acción del Super Admin para el estado; null si no hay ninguna.</summary>
-    public static string? Accion(EstadoAprovisionamiento estado) => estado switch
-    {
-        EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto => "REINTENTAR",
-        EstadoAprovisionamiento.ListoSinWebhook => "CARGAR_SECRETO",
-        EstadoAprovisionamiento.RequiereCredenciales => "CARGAR_CREDENCIALES",
-        EstadoAprovisionamiento.RequiereRevisionNit => "CORREGIR_NIT",
-        _ => null,
-    };
+    /// <summary>Acción del Super Admin para el estado; null si no hay ninguna. La tabla es una sola: la del backoffice (M13).</summary>
+    public static string? Accion(EstadoAprovisionamiento estado) => Backoffice.EmpresasBackofficeEndpoints.Accion(estado);
 
     /// <summary>Motivo de un estado al que se llega sin un motivo propio (reactivar, suspender); null si no tiene.</summary>
     public static string? DelEstado(EstadoAprovisionamiento estado) => estado switch

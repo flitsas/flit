@@ -208,8 +208,8 @@ public static class AprovisionamientoExtensions
         if (configuration[GuardSuscripcionExtensions.IdentidadAddressKey] is { Length: > 0 } identidad)
         {
             var direccion = new Uri(identidad);
-            services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.EmpresasService.EmpresasServiceClient>(
-                configuration, direccion, "platform.identidad.empresas.alta", o => o.Deadline = PlazoIdentidad);
+            // EmpresasService: un solo registro compartido con el backoffice (M13), con los scopes de los dos módulos.
+            Backoffice.BackofficeImpuestosExtensions.AddClienteEmpresasIdentidad(services, configuration);
             services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.CredencialesProductoService.CredencialesProductoServiceClient>(
                 configuration, direccion, "platform.identidad.credenciales.impuesto.copia", o => o.Deadline = PlazoIdentidad);
             services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.AprovisionamientoProductoService.AprovisionamientoProductoServiceClient>(
