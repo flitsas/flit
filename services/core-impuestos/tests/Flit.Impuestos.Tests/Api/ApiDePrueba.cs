@@ -119,6 +119,8 @@ public sealed class ApiDePrueba : IAsyncDisposable
         ["Impuestos:Api:IntegrationToken"] = "token-integracion-de-prueba-no-real",
         // El trabajador de aprovisionamiento no corre solo en las pruebas: cada una llama la ronda o el aprovisionador a mano.
         ["Impuestos:Aprovisionamiento:TrabajadorActivo"] = "false",
+        // M11: sin file-manager en las pruebas, los recibos quedan en el almacén en memoria (solo con esta bandera).
+        [Flit.Impuestos.Api.Infraestructura.Archivos.OpcionesAlmacen.GuardarEnMemoria] = "true",
     };
 
     public HttpClient Anonimo() => App.GetTestClient();

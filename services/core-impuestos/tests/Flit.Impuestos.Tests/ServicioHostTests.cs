@@ -263,5 +263,6 @@ public sealed class ServicioHostTests : IAsyncLifetime
         ["Impuestos:Api:BaseUrl"] = "https://api.prueba",
         ["Impuestos:Api:IntegrationToken"] = "token-integracion-de-prueba-no-real",
         ["Impuestos:Aprovisionamiento:TrabajadorActivo"] = "false",
+        [Flit.Impuestos.Api.Infraestructura.Archivos.OpcionesAlmacen.GuardarEnMemoria] = "true",
     };
 }

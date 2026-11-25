@@ -20,6 +20,9 @@
     // Receptor del webhook (M09, guía §2.2): https, sin usuario ni fragmento. http solo en loopback y solo con PermitirHttpLocal=true
     // (apagada por defecto). Sin UrlBase válida las liquidaciones salen sin callbackUrl y se concilian por GET.
     "Avisos": { "UrlBase": "CAMBIAR-https-publica/api/v1/impuestos/avisos", "PermitirHttpLocal": false },
+    // M11: los recibos PDF van al file-manager (FileManager:BaseUrl o FILE_MANAGER_BASE_URL, categoría impuestos). Sin él el
+    // servicio no arranca, salvo con esta bandera de memoria (solo local y pruebas: los recibos se pierden al reiniciar).
+    "Archivos": { "GuardarEnMemoria": true },
     // Sin GatewayUrl el manifiesto no se registra (solo un aviso en el log).
     "Plataforma": { "GatewayUrl": "http://127.0.0.1:4002" }
   },
