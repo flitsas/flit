@@ -238,6 +238,20 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
         (await VigentesAsync(cn, UserAmbos, "gestor_impuestos")).Should().Be(1, "igual que el trigger, un AdminCompany borrado no cuenta");
     }
 
+    [PostgresFact]
+    public async Task Ddl_NoSiembraAdminImpuestosSiElRolAdminCompanyEstaBorrado()
+    {
+        // 3b con el mismo filtro que 3a: un AdminCompany con soft delete no da admin_impuestos (db-schema-validator).
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await SeedAsync(cn);
+        await AsignarAsync(cn, UserAdmin, "AdminCompany");
+        await ExecAsync(cn, "UPDATE security.roles SET deleted_at = now() WHERE code = 'AdminCompany' AND tenant_id IS NULL");
+
+        await RunDdlAsync(cn);
+
+        (await VigentesAsync(cn, UserAdmin, "admin_impuestos")).Should().Be(0, "un AdminCompany borrado no cuenta en la siembra");
+    }
+
     // ── Down de la migración ─────────────────────────────────────────────────────────────
 
     private static string DownSql() =>
@@ -302,6 +316,32 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
                 .Should().Be(0);
             (await CountAsync(cn, "SELECT count(*) FROM security.user_invitations WHERE token_hash = 'hash-14694-down'"))
                 .Should().Be(0);
+        });
+    }
+
+    [PostgresFact]
+    public async Task Down_ConUnOverrideDePermisoEnImpuestos_NoAborta_YConservaProductoYOverride()
+    {
+        // security.user_permission_overrides.product_code es FK RESTRICT a platform.products (DDL 144). El override es de
+        // un permiso del manifiesto (no de esta migración): el Down no lo borra y deja el producto en su lugar.
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await SeedAsync(cn);
+        await RunDdlAsync(cn);
+        // Sin gestor_impuestos, ningún rol ni módulo retiene el producto: solo lo referencia el override.
+        await ExecAsync(cn, $"""
+            DELETE FROM security.roles WHERE code = 'gestor_impuestos' AND tenant_id IS NULL;
+            INSERT INTO security.modules (code, name, sort_order, is_active, product_code) VALUES ('imp_it_14694','IMP IT',1,true,'tramites');
+            INSERT INTO security.permissions (module_id, slug, name, http_method, route_pattern, is_active)
+              SELECT id, 'imp_it_14694.ver', 'Ver', 'GET', '/api/v1/imp-it-14694', true FROM security.modules WHERE code = 'imp_it_14694';
+            INSERT INTO security.user_permission_overrides (tenant_id, user_id, product_code, permission_id, effect, granted_by)
+              SELECT '{Tenant}', '{UserGestor}', 'impuestos', id, 'allow', '{UserAdmin}' FROM security.permissions WHERE slug = 'imp_it_14694.ver';
+            """);
+
+        await ConDownAsync(cn, async () =>
+        {
+            (await CountAsync(cn, "SELECT count(*) FROM platform.products WHERE code = 'impuestos'")).Should().Be(1);
+            (await CountAsync(cn, "SELECT count(*) FROM security.user_permission_overrides WHERE product_code = 'impuestos'"))
+                .Should().Be(1);
         });
     }
 

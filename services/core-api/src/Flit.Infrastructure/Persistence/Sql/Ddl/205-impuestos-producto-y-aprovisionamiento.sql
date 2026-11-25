@@ -20,7 +20,8 @@
 --      admin de compañías (decisión R1, plan §1.2). Una fila por empresa y producto.
 --   5. Sin cambio en el CHECK del DDL 204 (DA-2=b): las credenciales de Impuestos viven en core-impuestos.
 --
--- Excepciones al checklist de esquema (pendientes de registrar en ADR-0093, que hoy no las menciona; las propone este DDL):
+-- Excepciones al checklist de esquema (A5/A6 registrada en ADR-0093 §«Aplicabilidad y excepciones a las convenciones de
+-- datos», E4; A11 se cumple y se anota solo como aclaración):
 --   A5/A6 sin created_by/updated_by ni soft delete en tenant_product_provisioning: la escribe un servicio (no un usuario)
 --         con upsert por versión; el rastro técnico queda en audit.audit_logs (trg_audit_log). Columnas en inglés como el
 --         resto del esquema (decisión del usuario, 2026-11-25); el contrato gRPC que las alimenta sigue en español.
@@ -69,6 +70,7 @@ INSERT INTO security.user_role_assignments (tenant_id, user_id, role_id, assigne
 SELECT a.tenant_id, a.user_id, ai.id, now()
   FROM security.user_role_assignments a
   JOIN security.roles ac ON ac.id = a.role_id AND ac.code = 'AdminCompany' AND ac.target_entity_type = 'COMPANY'
+                        AND ac.deleted_at IS NULL
  CROSS JOIN LATERAL (
        SELECT id FROM security.roles
         WHERE code = 'admin_impuestos' AND target_entity_type = 'COMPANY' AND tenant_id IS NULL AND is_system
