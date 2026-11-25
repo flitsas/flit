@@ -21,6 +21,19 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
 
     public const string MotivoErrorTecnico = "No se pudo asociar este documento ahora. Vuelve a intentarlo.";
     public const string MotivoCambio = "El documento cambió mientras esperaba: ábrelo para revisarlo.";
+    public const string MotivoOtroDocumento = "Otra persona le puso un documento a este comparendo mientras tanto; revísalo uno por uno.";
+    public const string MotivoYaNoAsociable = "Ya no se puede asociar: revísalo uno por uno.";
+
+    /// <summary>
+    /// Los motivos de <see cref="ServicioOcr.AsociarAsync"/> están escritos para la pantalla individual («mientras lo revisabas»); en
+    /// el lote nadie estaba revisando, así que se traducen a lo que pasó. Solo en el lote; la pantalla individual no cambia.
+    /// </summary>
+    internal static string MotivoDelLote(ReglaException ex) => ex.Codigo switch
+    {
+        "EVIDENCIA_CAMBIO" or "EVIDENCIA_EXISTENTE" => MotivoOtroDocumento,
+        "NO_ASOCIABLE" => MotivoYaNoAsociable,
+        _ => ex.Message,
+    };
 
     private sealed record Reclamo(Guid LoteId, Guid DocumentoId, short Intentos);
 
@@ -148,7 +161,7 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
             if (actual is { Estado: EstadoDocumentoOcr.Asociado, ComparendoId: { } ya })
                 await RetomarCorreoAsync(sp, db, r, tenant, ya, archivo, solicitadoEn, actor, ct).ConfigureAwait(false); // commit en duda: sí quedó asociado
             else
-                await NoAsociadoAsync(db, servicio, tenant, paqueteId, r, ex.Message, ct).ConfigureAwait(false);
+                await NoAsociadoAsync(db, servicio, tenant, paqueteId, r, MotivoDelLote(ex), ct).ConfigureAwait(false);
         }
     }
 
