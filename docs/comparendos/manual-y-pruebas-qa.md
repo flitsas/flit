@@ -362,7 +362,7 @@ Marca cada caso como OK, Falla o Bloqueado. Prioridad A = flujo principal, B = i
 | CP-CON-06 | B | Cédula y licencia | Conductor con documento. | 1. Cargar cédula y licencia.<br>2. Cargar otra licencia. | Quedan vigentes; la anterior queda como reemplazada. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-CON-07 | C | Portal del conductor | Aviso enviado. | 1. Abrir el enlace del portal (desde el Centro de mensajes). | Muestra el comparendo, el descuento vigente y cómo pagar, con la marca correcta (FLIT o Renting). | ☐ OK ☐ Falla ☐ Bloq. |
 
-### Avisos (CP-AV · 10 casos)
+### Avisos (CP-AV · 13 casos)
 
 | Código | Prior. | Caso | Antes | Pasos | Esperado | Resultado |
 |---|---|---|---|---|---|---|
@@ -376,6 +376,9 @@ Marca cada caso como OK, Falla o Bloqueado. Prioridad A = flujo principal, B = i
 | CP-AV-08 | B | Aviso en lote | Varios comparendos seleccionados, mezclando aptos y no aptos. | 1. Bandeja → Enviar aviso. | Dice cuántos salieron y, de los omitidos, el motivo de cada uno. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-AV-09 | B | Automático diario | Comparendo apto sin aviso, día hábil. | 1. Esperar a la corrida de las 7:00 (o pedir al SuperAdmin que ejecute el trabajo).<br>2. Revisar al día siguiente. | Sale el aviso que toca, solo uno por comparendo en el día. En fin de semana o festivo no sale nada. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-AV-10 | C | Horario de avisos | SuperAdmin. | 1. Cambiar la hora, pausar y reanudar.<br>2. Ver el historial. | Se guarda y queda auditado. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-AV-11 | A | Documento al asociar | Comparendo con aviso 1 y 2 enviados y conductor con correo del buzón de pruebas; un escaneado duplicado de ese comparendo. | 1. Asociar el escaneado.<br>2. Ver el Centro de mensajes y la línea de tiempo del comparendo. | Sale de inmediato un correo «Documento del comparendo» al conductor, con el documento adjunto y los datos del comparendo; la línea de tiempo lo registra. El estado de notificación sigue en «Aviso 2» y el aviso 3 sale a su tiempo, también con el documento. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-AV-12 | B | Documento al asociar: no sale | Comparendo pagado o inactivo, o conductor sin correo, o documento de más de 3 MB. | 1. Ver el aviso de la pantalla antes de asociar.<br>2. Asociar. | La pantalla ya dice que no se enviará correo y por qué; el documento queda asociado igual y no sale ningún correo. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-AV-13 | B | Reemplazo y copias | Comparendo con documento y copias CC/BCC configuradas para «Documento del comparendo». | 1. Reemplazar el documento.<br>2. Asociar otra vez el mismo escaneado. | Sale un correo con el documento nuevo, con las copias de ese tipo (y no las de otros). Repetir la asociación no reenvía. | ☐ OK ☐ Falla ☐ Bloq. |
 
 ### Cambio de contraventor (CP-CC · 7 casos)
 
@@ -415,7 +418,7 @@ Marca cada caso como OK, Falla o Bloqueado. Prioridad A = flujo principal, B = i
 | CP-OCR-02 | A | Revisión | Documento incompleto. | 1. Abrir en vista dividida.<br>2. Completar los campos que faltan. | Marcas donde revisar; la fecha de notificación tomada de un sello pide confirmarla; la corrección queda auditada. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-03 | B | Reprocesar | Documento incompleto ya corregido. | 1. Reprocesar.<br>2. Reprocesar en lote. | Vuelve a leer y conserva lo corregido; máximo 3 veces. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-04 | A | Registrar | Documentos completos. | 1. Registrar. | Crea los comparendos con fuente OCR y el documento adjunto; aparecen en la bandeja. | ☐ OK ☐ Falla ☐ Bloq. |
-| CP-OCR-05 | A | Duplicado | Subir un comparendo que ya existe. | 1. Procesar. | Queda como duplicado, no se registra y enlaza al original. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-OCR-05 | A | Duplicado | Subir un comparendo que ya existe. | 1. Procesar. | Queda como duplicado, no se registra y enlaza al original. Al asociarlo, el conductor recibe de inmediato un correo con ese documento (ver CP-AV-11). | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-06 | B | Exportar paquete | — | 1. Exportar el paquete. | Excel con los datos de cada documento. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-07 | B | Sin tecnología a la vista | Usuario de empresa. | 1. Recorrer la pantalla de OCR. | No menciona prompt, modelo, proveedor ni costos (eso solo lo ve el SuperAdmin). | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-08 | C | Versiones de lectura (SuperAdmin) | — | 1. Crear versión → Evaluar → Publicar.<br>2. Volver a la versión anterior. | Sin evaluación aprobada no publica; la anterior vuelve sin evaluar; todo auditado. | ☐ OK ☐ Falla ☐ Bloq. |

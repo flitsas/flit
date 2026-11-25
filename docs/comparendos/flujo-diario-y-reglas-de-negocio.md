@@ -130,6 +130,7 @@ flowchart TD
   W -- "Hoy es sin descuento, y el último aviso<br/>salió con descuento" --> A3["Aviso 3"]
   W -- "Nada de lo anterior" --> X
   G(["Evento: la gestora solicita el cambio de contraventor<br/>y el correo al organismo se entrega"]) --> A4["Aviso 4"]
+  D(["Evento: se asocia o reemplaza el documento escaneado<br/>de un comparendo que ya existe"]) --> V["Correo de evidencia al conductor<br/>con el documento adjunto, de inmediato<br/>(no es un aviso: no cambia la secuencia 1-2-3)"]
 ```
 
 ### 4. Cambio de contraventor
@@ -265,6 +266,7 @@ Sin conductor con correo no salen avisos. Sin conductor con documento no se pued
 - **Aviso 2:** hoy está en la ventana del 25 % y el aviso 1 salió cuando estaba en el 50 %.
 - **Aviso 3:** hoy ya no hay descuento, y el último aviso salió cuando sí lo había.
 - **Aviso 4:** no depende del reloj. Sale cuando se solicita el cambio de contraventor y el correo al organismo se entrega.
+- **Correo de evidencia (no es un aviso):** al asociar, o reemplazar, el documento escaneado de un comparendo que ya existe, sale de inmediato un correo al conductor con ese documento adjunto y los datos del comparendo. Es independiente de los avisos 1 a 3: no espera al siguiente, no cuenta en la secuencia, no cambia el estado de notificación del conductor y no entra en el límite de un aviso por día. Lleva solo el documento (sin autorización ni poder) y respeta las copias CC/BCC configuradas para ese tipo de correo. Sale si el comparendo está activo y sin pagar, el conductor tiene correo, la empresa notifica por correo y tiene el producto habilitado, y el documento cabe en un correo (hasta 3 MB). Si algo falla, la asociación se hace igual y la pantalla dice por qué no salió. Asociar el mismo documento dos veces no lo reenvía.
 
 **¿El aviso 2 exige el aviso 1? ¿Qué intervalo hay?**
 
@@ -585,7 +587,7 @@ Después, el DP y el cambio de contraventor quedan bloqueados por «propietario 
 
 **Cómo funciona hoy:**
 
-- La llave de unicidad del comparendo ignora las letras iniciales y los separadores cuando lo que sigue son 10 dígitos o más: «D-11001000000000012345» y «11001000000000012345» son el mismo comparendo, y si el escaneo trae uno que ya llegó por la fuente se ofrece **asociar** el documento en vez de crear otro.
+- La llave de unicidad del comparendo ignora las letras iniciales y los separadores cuando lo que sigue son 10 dígitos o más: «D-11001000000000012345» y «11001000000000012345» son el mismo comparendo, y si el escaneo trae uno que ya llegó por la fuente se ofrece **asociar** el documento en vez de crear otro. Al asociarlo (o reemplazar el que tenía) el conductor recibe de inmediato un correo con ese documento como evidencia.
 - Al registrar un comparendo desde un documento escaneado se guarda **sin la letra inicial**, con la misma regla de la llave. Lo que leyó el lector queda intacto en los campos del documento, para auditoría; en la revisión se ve «Número que se guardará».
 - Los números cortos o mixtos («A-98765») conservan la letra y no se tratan como el mismo comparendo que «98765».
 - También detecta el mismo archivo subido dos veces.
