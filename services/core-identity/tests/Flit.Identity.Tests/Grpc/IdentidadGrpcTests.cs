@@ -195,8 +195,15 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
             var now = DateTimeOffset.UtcNow;
             void Empresa(Guid id, string code, string nit, Guid? padre = null, bool activa = true, bool cabeza = false, string tipo = "RENTING") => db.Tenants.Add(new Tenant
             {
-                Id = id, Code = $"IT-EMP-{code}-{_suffix}", LegalName = $"Empresa {code} {_suffix}", TaxId = nit, TenantType = tipo,
-                IsActive = activa, ParentTenantId = padre, IsGroupParent = cabeza, CreatedAt = now,
+                Id = id,
+                Code = $"IT-EMP-{code}-{_suffix}",
+                LegalName = $"Empresa {code} {_suffix}",
+                TaxId = nit,
+                TenantType = tipo,
+                IsActive = activa,
+                ParentTenantId = padre,
+                IsGroupParent = cabeza,
+                CreatedAt = now,
             });
             Empresa(encendida, "ON", "811011779");
             Empresa(apagada, "OFF", "900000001", cabeza: true, tipo: "CONCESION");
@@ -245,8 +252,13 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
                 // NIT distinto por empresa: la base exige NIT único (uq_tenants_tax_id) y otras pruebas usan los fijos.
                 db.Tenants.Add(new Tenant
                 {
-                    Id = id, Code = $"IT-CANAL-{code}-{_suffix}", LegalName = $"Canal {code} {_suffix}", TaxId = $"8{Random.Shared.Next(10000000, 99999999)}", TenantType = "RENTING",
-                    IsActive = true, CreatedAt = now,
+                    Id = id,
+                    Code = $"IT-CANAL-{code}-{_suffix}",
+                    LegalName = $"Canal {code} {_suffix}",
+                    TaxId = $"8{Random.Shared.Next(10000000, 99999999)}",
+                    TenantType = "RENTING",
+                    IsActive = true,
+                    CreatedAt = now,
                 });
             }
 
@@ -382,6 +394,23 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
         (await entrega.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied, "el scope de copia no sirve para la entrega a Consultas");
     }
 
+    [Fact]
+    public async Task ActualizarLlaveDeDiagnostico_ConSuScope_SinFilaNoCrea_YConElDeCopiaEsPermissionDenied()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var conScope = new CredencialesProductoService.CredencialesProductoServiceClient(
+            Invoker(await ServiceTokenAsync(ct, "svc-impuestos", "platform.identidad.credenciales.impuesto.actualizar")));
+        var conCopia = new CredencialesProductoService.CredencialesProductoServiceClient(
+            Invoker(await ServiceTokenAsync(ct, "svc-impuestos", "platform.identidad.credenciales.impuesto.copia")));
+        var pedido = new ActualizarCredencialImpuestoDiagnosticoRequest { ApiKey = "llave-rotada-de-prueba-0123456789" };
+
+        var r = await conScope.ActualizarCredencialImpuestoDiagnosticoAsync(pedido, Metadata(_empresaAlta), cancellationToken: ct);
+        r.Actualizada.Should().BeFalse("la empresa de la prueba no tiene llave de Diagnóstico y el rpc nunca la crea");
+
+        var otro = async () => await conCopia.ActualizarCredencialImpuestoDiagnosticoAsync(pedido, Metadata(_empresaAlta), cancellationToken: ct);
+        (await otro.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied, "el scope de copia no sirve para reemplazar");
+    }
+
     // ── Solo en el puerto gRPC ───────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -454,7 +483,10 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
         using var client = _host.CreateClient();
         var response = await client.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["grant_type"] = "client_credentials", ["client_id"] = clientId, ["client_secret"] = Secret, ["scope"] = scope,
+            ["grant_type"] = "client_credentials",
+            ["client_id"] = clientId,
+            ["client_secret"] = Secret,
+            ["scope"] = scope,
         }), ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
         return (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("access_token").GetString()!;
@@ -480,8 +512,13 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
         {
             db.Tenants.Add(new Tenant
             {
-                Id = id, Code = $"IT-GRPC-{code}-{_suffix}", LegalName = $"Empresa gRPC {code}",
-                TaxId = $"9{Random.Shared.NextInt64(10_000_000, 99_999_999)}", TenantType = "RENTING", IsActive = true, CreatedAt = now,
+                Id = id,
+                Code = $"IT-GRPC-{code}-{_suffix}",
+                LegalName = $"Empresa gRPC {code}",
+                TaxId = $"9{Random.Shared.NextInt64(10_000_000, 99_999_999)}",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = now,
             });
         }
 
@@ -581,6 +618,7 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
             builder.UseSetting("Suite:Oidc:ServiceClients:svc-impuestos:Scopes:0", "platform.identidad.empresas.alta");
             builder.UseSetting("Suite:Oidc:ServiceClients:svc-impuestos:Scopes:1", "platform.aprovisionamiento.reportar");
             builder.UseSetting("Suite:Oidc:ServiceClients:svc-impuestos:Scopes:2", "platform.identidad.credenciales.impuesto.copia");
+            builder.UseSetting("Suite:Oidc:ServiceClients:svc-impuestos:Scopes:3", "platform.identidad.credenciales.impuesto.actualizar");
         }
     }
 }

@@ -152,7 +152,7 @@ h2c en la red interna, nada se publica. Cada llamada lleva un token de `svc-impu
 
 | Origen → destino | Dirección | Scope | Para qué | Si falta |
 |---|---|---|---|---|
-| core-impuestos → core-identity | `http://core-identity:8083` | `platform.identidad.read`, `platform.identidad.empresas`, `platform.identidad.empresas.alta`, `platform.identidad.credenciales.impuesto.copia`, `platform.aprovisionamiento.reportar` | Suscripción, datos del alta, copia de la llave de Diagnóstico, estado del aprovisionamiento | 403 en todo el negocio |
+| core-impuestos → core-identity | `http://core-identity:8083` | `platform.identidad.read`, `platform.identidad.empresas`, `platform.identidad.empresas.alta`, `platform.identidad.credenciales.impuesto.copia`, `platform.identidad.credenciales.impuesto.actualizar`, `platform.aprovisionamiento.reportar` | Suscripción, datos del alta, copia de la llave de Diagnóstico y su reemplazo tras una rotación, estado del aprovisionamiento | 403 en todo el negocio |
 | core-impuestos → core-api | `http://core-api:8082` | `platform.tramites.catalogos`, `platform.usuarios.impuestos`, `platform.usuarios.impuestos.conteos` | Organismos y usuarios del producto | Sin réplica de organismos |
 
 El canal h2c en claro es el mismo riesgo aceptado del `credenciales_producto.proto` (gate G-12, aval de seguridad).

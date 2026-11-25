@@ -82,6 +82,7 @@ internal sealed class ServiceTokenPorMetodoInterceptor(string scope, string audi
         new Dictionary<string, (string Scope, bool Empresa)>(StringComparer.Ordinal)
         {
             ["/flit.identidad.v1.CredencialesProductoService/ObtenerCredencialImpuestoParaCopia"] = (CredencialesProductoGrpcService.ScopeCopia, true),
+            ["/flit.identidad.v1.CredencialesProductoService/ActualizarCredencialImpuestoDiagnostico"] = (CredencialesProductoGrpcService.ScopeActualizar, true),
             ["/flit.identidad.v1.EmpresasService/ObtenerDatosAltaProveedor"] = (EmpresasGrpcService.ScopeAlta, true),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 

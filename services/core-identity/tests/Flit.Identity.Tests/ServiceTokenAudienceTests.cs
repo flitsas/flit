@@ -29,6 +29,7 @@ public sealed class ServiceTokenAudienceTests
     // HU #14694 (ADR-0093): scopes de svc-impuestos. Los tres primeros los atiende core-identity; los de usuarios, core-api.
     [InlineData("platform.identidad.empresas.alta", "plataforma")]
     [InlineData("platform.identidad.credenciales.impuesto.copia", "plataforma")]
+    [InlineData("platform.identidad.credenciales.impuesto.actualizar", "plataforma")]
     [InlineData("platform.aprovisionamiento.reportar", "plataforma")]
     [InlineData("platform.usuarios.impuestos", "tramites")]
     [InlineData("platform.usuarios.impuestos.conteos", "tramites")]
@@ -47,7 +48,7 @@ public sealed class ServiceTokenAudienceTests
     [Fact]
     public void LosScopesRegistradosSonExactamenteLosDelMapa() =>
         OidcDefaults.ServiceScopes.Should().BeEquivalentTo(
-            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.identidad.empresas", "platform.identidad.credenciales.impuesto", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.notificaciones.admin", "platform.tramites.ict", "platform.tramites.catalogos", "platform.tramites.persona_natural", "platform.tramites.derivacion", "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos", "platform.ia.diagnostico", "platform.personanatural.leer", "platform.personanatural.caja", "platform.identidad.empresas.alta", "platform.identidad.credenciales.impuesto.copia", "platform.aprovisionamiento.reportar", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos"]);
+            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.identidad.empresas", "platform.identidad.credenciales.impuesto", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.notificaciones.admin", "platform.tramites.ict", "platform.tramites.catalogos", "platform.tramites.persona_natural", "platform.tramites.derivacion", "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos", "platform.ia.diagnostico", "platform.personanatural.leer", "platform.personanatural.caja", "platform.identidad.empresas.alta", "platform.identidad.credenciales.impuesto.copia", "platform.identidad.credenciales.impuesto.actualizar", "platform.aprovisionamiento.reportar", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos"]);
 
     /// <summary>
     /// HU #14694 (plan §5.3): el cliente de servicio svc-impuestos de core-api tiene exactamente sus scopes. Lo lee del
@@ -64,7 +65,7 @@ public sealed class ServiceTokenAudienceTests
         svc.GetProperty("Secret").GetString().Should().BeEmpty("el secreto llega por variable de entorno, nunca en el repo");
         svc.GetProperty("Scopes").EnumerateArray().Select(s => s.GetString()).Should().BeEquivalentTo(
             ["platform.manifest", "platform.identidad.read", "platform.identidad.empresas", "platform.identidad.empresas.alta",
-             "platform.identidad.credenciales.impuesto.copia", "platform.aprovisionamiento.reportar", "platform.consultas",
+             "platform.identidad.credenciales.impuesto.copia", "platform.identidad.credenciales.impuesto.actualizar", "platform.aprovisionamiento.reportar", "platform.consultas",
              "platform.tramites.catalogos", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos"]);
         svc.GetProperty("Scopes").EnumerateArray().Select(s => s.GetString())
             .Should().OnlyContain(s => OidcDefaults.ServiceScopes.Contains(s!), "todo scope del cliente debe existir en el mapa de audiencias");

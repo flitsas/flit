@@ -8,11 +8,14 @@ namespace Flit.Identity.Api.Grpc;
 /// <summary>
 /// Entrega la API key del impuesto a <c>svc-consultas</c> (ADR-0092). Fail-closed con Diagnóstico
 /// apagado; nunca escribe la llave en logs. HU #14694: <see cref="ObtenerCredencialImpuestoParaCopia"/> la entrega a
-/// <c>svc-impuestos</c> (solo ese rpc, con su scope <see cref="ScopeCopia"/>) aunque Diagnóstico esté apagado, auditada.
+/// <c>svc-impuestos</c> (solo ese rpc, con su scope <see cref="ScopeCopia"/>) aunque Diagnóstico esté apagado, auditada; y
+/// <see cref="ActualizarCredencialImpuestoDiagnostico"/> (M04b, scope <see cref="ScopeActualizar"/>) reemplaza esa llave cuando el
+/// alta del proveedor la rotó (D-ALTA-IDEM).
 /// </summary>
 internal sealed partial class CredencialesProductoGrpcService(
     GetTenantProductCredentialHandler handler,
     GetTenantProductCredentialForCopyHandler copia,
+    UpdateTenantProductCredentialFromServiceHandler actualizar,
     ILogger<CredencialesProductoGrpcService> logger)
     : CredencialesProductoService.CredencialesProductoServiceBase
 {
@@ -20,9 +23,12 @@ internal sealed partial class CredencialesProductoGrpcService(
 
     /// <summary>HU #14694 — scope del rpc de copia (solo <c>svc-impuestos</c>).</summary>
     public const string ScopeCopia = "platform.identidad.credenciales.impuesto.copia";
+    /// <summary>HU #14694 (M04b) — scope del rpc que reemplaza la llave de Diagnóstico (solo <c>svc-impuestos</c>).</summary>
+    public const string ScopeActualizar = "platform.identidad.credenciales.impuesto.actualizar";
     private const string ClientePermitido = "svc-consultas";
     private const string ClienteCopia = "svc-impuestos";
     private const string ClienteNoPermitido = "CLIENTE_NO_PERMITIDO";
+    private const string CredencialInvalida = "CREDENCIAL_INVALIDA";
     private const int TtlConLlave = 300;
     private const int TtlSinLlave = 60;
 
@@ -159,6 +165,64 @@ internal sealed partial class CredencialesProductoGrpcService(
         }
     }
 
+    /// <summary>
+    /// HU #14694 (M04b, D-ALTA-IDEM) — el alta del proveedor rotó la llave de la empresa y core-impuestos propaga la nueva a
+    /// Diagnóstico. Solo <c>svc-impuestos</c> (scope <see cref="ScopeActualizar"/>); solo reemplaza una fila que ya existe
+    /// (<c>actualizada=false</c> sin ella, nunca la crea). Llave con forma inválida: <c>INVALID_ARGUMENT</c>
+    /// <c>CREDENCIAL_INVALIDA</c>. Auditado en el repositorio con el cliente; la llave nunca entra a un log ni a un error.
+    /// </summary>
+    public override async Task<ActualizarCredencialImpuestoDiagnosticoResponse> ActualizarCredencialImpuestoDiagnostico(
+        ActualizarCredencialImpuestoDiagnosticoRequest request,
+        ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var caller = PlatformServiceCaller.From(context);
+        var quien = new Quien(caller.ClientId, Jti(context), caller.TenantId, context.Peer);
+
+        if (caller.TenantId == Guid.Empty)
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Falta x-flit-tenant-id."));
+
+        if (!string.Equals(caller.ClientId, ClienteCopia, StringComparison.Ordinal))
+        {
+            LogActualizacionDenegada(logger, quien.Sub, quien.Jti, quien.Tenant, ClienteNoPermitido, quien.Ip);
+            throw PlatformRpcErrors.ToRpcException(
+                ClienteNoPermitido,
+                "Este rpc solo lo atiende Impuestos.",
+                StatusCode.PermissionDenied);
+        }
+
+        try
+        {
+            var actualizada = await actualizar.HandleAsync(caller.TenantId, request.ApiKey, caller.ClientId, context.CancellationToken)
+                .ConfigureAwait(false);
+            if (actualizada)
+                LogActualizada(logger, quien.Sub, quien.Jti, quien.Tenant, quien.Ip);
+            else
+                LogActualizacionSinFila(logger, quien.Sub, quien.Jti, quien.Tenant, quien.Ip);
+            return new ActualizarCredencialImpuestoDiagnosticoResponse { Actualizada = actualizada };
+        }
+        catch (TenantProductException ex) when (ex.Code == TenantProductException.CredentialInvalid)
+        {
+            LogActualizacionDenegada(logger, quien.Sub, quien.Jti, quien.Tenant, CredencialInvalida, quien.Ip);
+            throw PlatformRpcErrors.ToRpcException(CredencialInvalida, "La llave no cumple el formato permitido.", StatusCode.InvalidArgument);
+        }
+        catch (RpcException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogFalla(logger, quien.Sub, quien.Tenant, ex.GetType().Name, quien.Ip);
+            throw new RpcException(new Status(StatusCode.Internal, "Error interno al actualizar la credencial."));
+        }
+    }
+
     private sealed record Quien(string Sub, string? Jti, Guid Tenant, string Ip);
 
     [LoggerMessage(EventId = 7410, EventName = "impuesto.credencial.entregada", Level = LogLevel.Information,
@@ -180,6 +244,18 @@ internal sealed partial class CredencialesProductoGrpcService(
     [LoggerMessage(EventId = 7415, EventName = "impuesto.credencial.copia.denegada", Level = LogLevel.Warning,
         Message = "impuesto.credencial.copia.denegada sub={Sub} jti={Jti} tenant={Tenant} motivo={Motivo} ip={Ip}")]
     private static partial void LogCopiaDenegada(ILogger logger, string sub, string? jti, Guid tenant, string motivo, string ip);
+
+    [LoggerMessage(EventId = 7416, EventName = "impuesto.credencial.diagnostico.actualizada", Level = LogLevel.Information,
+        Message = "impuesto.credencial.diagnostico.actualizada sub={Sub} jti={Jti} tenant={Tenant} ip={Ip}")]
+    private static partial void LogActualizada(ILogger logger, string sub, string? jti, Guid tenant, string ip);
+
+    [LoggerMessage(EventId = 7417, EventName = "impuesto.credencial.diagnostico.sin_fila", Level = LogLevel.Information,
+        Message = "impuesto.credencial.diagnostico.sin_fila sub={Sub} jti={Jti} tenant={Tenant} ip={Ip}")]
+    private static partial void LogActualizacionSinFila(ILogger logger, string sub, string? jti, Guid tenant, string ip);
+
+    [LoggerMessage(EventId = 7418, EventName = "impuesto.credencial.diagnostico.denegada", Level = LogLevel.Warning,
+        Message = "impuesto.credencial.diagnostico.denegada sub={Sub} jti={Jti} tenant={Tenant} motivo={Motivo} ip={Ip}")]
+    private static partial void LogActualizacionDenegada(ILogger logger, string sub, string? jti, Guid tenant, string motivo, string ip);
 
     [LoggerMessage(EventId = 7412, EventName = "impuesto.credencial.error", Level = LogLevel.Error,
         Message = "impuesto.credencial.error sub={Sub} tenant={Tenant} tipo={Tipo} ip={Ip}")]

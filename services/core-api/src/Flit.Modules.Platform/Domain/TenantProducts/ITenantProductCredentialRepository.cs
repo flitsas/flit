@@ -30,6 +30,19 @@ public interface ITenantProductCredentialRepository
         bool existe,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// HU #14694 (M04b, D-ALTA-IDEM) — REEMPLAZA el valor cifrado de una fila que ya existe; sin fila devuelve false y no crea
+    /// nada. Deja en <c>admin.tenant_config_audit_logs</c>, en el mismo guardado, el reemplazo con el cliente de servicio
+    /// <paramref name="servicio"/> (sin valor ni huella).
+    /// </summary>
+    Task<bool> ReplaceExistingFromServiceAsync(
+        Guid tenantId,
+        string productCode,
+        string credentialCode,
+        string secretProtected,
+        string servicio,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteAsync(
         Guid tenantId,
         string productCode,

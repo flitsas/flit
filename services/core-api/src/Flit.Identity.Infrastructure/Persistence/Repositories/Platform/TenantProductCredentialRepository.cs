@@ -120,6 +120,40 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
         return TenantProductCredentialWrite.Replaced;
     }
 
+    /// <summary>
+    /// HU #14694 (M04b) — reemplaza solo si la fila existe; la auditoría (configurada a reemplazada, operación update, el cliente
+    /// de servicio en <c>user_agent</c>) va en el mismo guardado. Sin fila no escribe nada.
+    /// </summary>
+    public async Task<bool> ReplaceExistingFromServiceAsync(
+        Guid tenantId,
+        string productCode,
+        string credentialCode,
+        string secretProtected,
+        string servicio,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(secretProtected);
+        ArgumentException.ThrowIfNullOrWhiteSpace(servicio);
+
+        var row = await _context.Set<TenantProductCredentialEntity>()
+            .FirstOrDefaultAsync(
+                r => r.TenantId == tenantId && r.ProductCode == productCode && r.CredentialCode == credentialCode,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+            return false;
+
+        var now = _clock.GetUtcNow();
+        row.SecretProtected = secretProtected;
+        row.UpdatedAt = now;
+        row.UpdatedBy = null;
+        AddAudit(tenantId, row.Id, ValorConfigurada, ValorReemplazada, AuditVocabulary.Operations.Update, null, now, servicio);
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     public async Task<bool> DeleteAsync(
         Guid tenantId,
         string productCode,
@@ -191,7 +225,8 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
         string newValue,
         string operation,
         Guid? changedBy,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? servicio = null)
     {
         _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
         {
@@ -209,6 +244,7 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
             Module = AuditVocabulary.Modules.Companies,
             TargetEntityType = AuditTargetType,
             TargetEntityId = rowId,
+            UserAgent = servicio,
         });
     }
 

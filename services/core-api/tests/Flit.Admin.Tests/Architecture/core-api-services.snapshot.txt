@@ -537,6 +537,7 @@ Flit.Modules.Platform.Application.TenantProducts.ReportProvisioningStatusHandler
 Flit.Modules.Platform.Application.TenantProducts.RetryProvisioningHandler => Flit.Modules.Platform.Application.TenantProducts.RetryProvisioningHandler (Scoped)
 Flit.Modules.Platform.Application.TenantProducts.SetTenantProductCredentialHandler => Flit.Modules.Platform.Application.TenantProducts.SetTenantProductCredentialHandler (Scoped)
 Flit.Modules.Platform.Application.TenantProducts.SetTenantProductEnabledHandler => Flit.Modules.Platform.Application.TenantProducts.SetTenantProductEnabledHandler (Scoped)
+Flit.Modules.Platform.Application.TenantProducts.UpdateTenantProductCredentialFromServiceHandler => Flit.Modules.Platform.Application.TenantProducts.UpdateTenantProductCredentialFromServiceHandler (Scoped)
 Flit.Modules.Platform.Domain.Access.IProductAccessStore => Flit.Infrastructure.Persistence.Repositories.Platform.ProductAccessStore (Scoped)
 Flit.Modules.Platform.Domain.Manifest.IProductManifestStore => Flit.Infrastructure.Persistence.Repositories.Platform.ProductManifestStore (Scoped)
 Flit.Modules.Platform.Domain.Products.IProductCatalog => Flit.Infrastructure.Persistence.Repositories.Platform.ProductCatalogRepository (Scoped)
