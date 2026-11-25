@@ -2,6 +2,7 @@ using Flit.Api.Telemetry;
 using Flit.Consultas.Api.Avisos;
 using Flit.Consultas.Api.Configuracion;
 using Flit.Consultas.Api.Grpc;
+using Flit.Consultas.Api.Impuesto.Avisos;
 using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Modules.Consultas;
 using Flit.Modules.Consultas.KyverumVerify;
@@ -163,6 +164,32 @@ public static class Program
         });
         builder.Services.AddScoped<Impuesto.CatalogoDepartamentosImpuesto>();
         builder.Services.AddScoped<Impuesto.ICatalogoDepartamentosImpuesto>(sp => sp.GetRequiredService<Impuesto.CatalogoDepartamentosImpuesto>());
+
+        // HU #14711: aviso del proveedor de impuesto. callbackUrl con token opaco por empresa (Consultas:Impuesto:AvisoBaseUrl y
+        // AvisoTokenKey), secreto del webhook por gRPC con su scope propio, receptor POST /api/v1/impuesto/avisos/{token} con límites,
+        // deduplicación en el esquema propio (purga a 7 días) y buzón en memoria hacia el sondeo, que sigue de respaldo.
+        builder.Services.AddSingleton(Impuesto.Avisos.OpcionesAvisoImpuesto.Desde(builder.Configuration));
+        if (impuesto.IdentidadAddress is not null)
+        {
+            builder.Services.AddFlitGrpcClient<Impuesto.Avisos.ClienteSecretoWebhookImpuesto>(
+                builder.Configuration, impuesto.IdentidadAddress, Impuesto.Avisos.FuenteSecretoWebhookImpuesto.Scope,
+                o => o.Deadline = TimeSpan.FromSeconds(5));
+            builder.Services.AddSingleton<Impuesto.Avisos.FuenteSecretoWebhookImpuesto>();
+        }
+
+        builder.Services.AddSingleton<Impuesto.Avisos.IFuenteSecretoWebhookImpuesto>(sp =>
+        {
+            var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
+            if (simulacion.Simula(Bus.FuentesBus.Impuesto) || impuesto.IdentidadAddress is null)
+                return new Impuesto.Avisos.FuenteSecretoWebhookImpuestoSimulada();
+            return sp.GetRequiredService<Impuesto.Avisos.FuenteSecretoWebhookImpuesto>();
+        });
+        builder.Services.AddSingleton<Impuesto.Avisos.BuzonAvisosImpuesto>();
+        builder.Services.AddSingleton<Impuesto.Avisos.CallbackAvisoImpuesto>();
+        builder.Services.AddSingleton<Impuesto.Avisos.IRegistroAvisosImpuesto, Impuesto.Avisos.RegistroAvisosImpuestoBd>();
+        builder.Services.AddSingleton<Impuesto.Avisos.ProcesadorAvisoImpuesto>();
+        builder.Services.AddHostedService<Impuesto.Avisos.PurgaAvisosImpuesto>();
+        builder.Services.AddLimitesAvisosImpuesto();
         builder.Services.AddScoped(sp =>
         {
             var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
@@ -177,7 +204,9 @@ public static class Program
                 sp.GetRequiredService<Impuesto.ISeguimientoImpuesto>(),
                 plan,
                 sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<ILogger<Impuesto.ProveedorImpuesto>>());
+                sp.GetRequiredService<ILogger<Impuesto.ProveedorImpuesto>>(),
+                sp.GetRequiredService<Impuesto.Avisos.CallbackAvisoImpuesto>(),
+                sp.GetRequiredService<Impuesto.Avisos.BuzonAvisosImpuesto>());
         });
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
@@ -221,6 +250,7 @@ public static class Program
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter(); // HU #14711: solo lo usa el receptor de avisos del impuesto
 
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (ConsultasDb db, CancellationToken ct) =>
@@ -237,6 +267,7 @@ public static class Program
         app.MapGrpcService<Comparendos.FuentesComparendosGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<RuntIntempo.RuntIntempoGrpcService>().RequireHost(grpcHost);
         app.MapAvisosKyverum(); // HU #13351: receptor público de avisos (lo expone el gateway)
+        app.MapAvisosImpuesto(); // HU #14711: receptor público del aviso del proveedor de impuesto (lo expone el gateway)
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;
     }
