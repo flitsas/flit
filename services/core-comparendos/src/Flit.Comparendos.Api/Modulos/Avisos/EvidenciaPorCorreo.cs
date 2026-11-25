@@ -153,6 +153,9 @@ public sealed partial class ServicioEvidencia(
     /// <summary>Lo más que puede tardar el trabajo posterior a la asociación (registrar, nota y despacho).</summary>
     private static readonly TimeSpan TopeTrabajoPosterior = TimeSpan.FromSeconds(30);
 
+    /// <summary>Plazo propio de la nota de «no se envió»: corto e independiente del plazo del correo.</summary>
+    private static readonly TimeSpan TopeNota = TimeSpan.FromSeconds(10);
+
     /// <summary>El plazo en uso; las pruebas lo acortan para ejercer el vencimiento.</summary>
     internal TimeSpan Plazo { get; set; } = TopeTrabajoPosterior;
 
@@ -184,7 +187,7 @@ public sealed partial class ServicioEvidencia(
             LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
             db.ChangeTracker.Clear();
             const string motivoFallo = "No se pudo preparar el correo al conductor; el documento quedó asociado";
-            await DejarNotaAsync(comparendoId, tenantId, motivoFallo, reemplazo, actor, ct).ConfigureAwait(false);
+            await DejarNotaAsync(comparendoId, tenantId, motivoFallo, reemplazo, actor).ConfigureAwait(false);
             return new ResultadoEvidencia(ResultadoEvidencia.Omitido, motivoFallo);
         }
 
@@ -212,9 +215,15 @@ public sealed partial class ServicioEvidencia(
     private void NotaOmitida(Comparendo c, string motivo, bool reemplazo, Actor actor) =>
         timeline.Agregar(c, TipoEventoTimeline.EvidenciaOmitida, $"Documento asociado: no se envió correo al conductor. Motivo: {motivo}.", actor, new { motivo, reemplazo });
 
-    /// <summary>Tras un fallo (contexto limpio): relee el comparendo y deja la nota; si tampoco se puede, no pasa nada más.</summary>
-    private async Task DejarNotaAsync(Guid comparendoId, Guid tenantId, string motivo, bool reemplazo, Actor actor, CancellationToken ct)
+    /// <summary>
+    /// Tras un fallo (contexto limpio): relee el comparendo y deja la nota; si tampoco se puede, solo se loguea. Usa su propio
+    /// token corto e independiente: el plazo del trabajo ya pudo vencer (justo el caso en que la nota más hace falta, porque
+    /// el operador ya vio el aviso de la pantalla y no quedaría rastro persistente) y el de la petición pudo cancelarse.
+    /// </summary>
+    private async Task DejarNotaAsync(Guid comparendoId, Guid tenantId, string motivo, bool reemplazo, Actor actor)
     {
+        using var propio = new CancellationTokenSource(TopeNota);
+        var ct = propio.Token;
         try
         {
             if (await db.Comparendos.FirstOrDefaultAsync(x => x.Id == comparendoId && x.TenantId == tenantId, ct).ConfigureAwait(false) is not { } c)

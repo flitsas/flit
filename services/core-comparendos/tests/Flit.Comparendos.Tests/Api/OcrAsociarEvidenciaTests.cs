@@ -223,6 +223,11 @@ public sealed partial class OcrAsociarTests
         (await EvidenciasAsync(comparendo)).Should().BeEmpty();
         (await ComparendoDbAsync(comparendo)).ArchivoEvidenciaId.Should().Be(doc.ArchivoId);
         (await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.Id == doc.Id, ct))).Estado.Should().Be(EstadoDocumentoOcr.Asociado);
+        // El plazo ya venció, pero la nota (con su token propio) queda: es el único rastro persistente de por qué no salió.
+        // (La primera nota es la de la asociación con el canal apagado; la segunda, la del vencimiento.)
+        (await OmitidasAsync(comparendo)).Select(n => n.Descripcion).Should().Equal(
+            "Documento asociado: no se envió correo al conductor. Motivo: La empresa no usa correo para notificar.",
+            "Documento asociado: no se envió correo al conductor. Motivo: No se pudo preparar el correo al conductor; el documento quedó asociado.");
     }
 
     /// <summary>El plazo vence durante el despacho: el correo ya está registrado y queda Pendiente para el ciclo; no lanza.</summary>

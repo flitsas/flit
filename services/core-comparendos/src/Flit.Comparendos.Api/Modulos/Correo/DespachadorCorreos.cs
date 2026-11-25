@@ -24,6 +24,8 @@ public interface IReaccionCorreo
 /// con varias réplicas), los entrega al transporte y guarda cada intento. Transitorio: hasta 3 intentos a 1, 5 y 25
 /// minutos; rebote: REBOTADO sin reintento; definitivo: FALLIDO.
 /// </summary>
+// Esta clase no es sealed y DespacharAsync es virtual SOLO para que las pruebas de ServicioEvidencia puedan simular un
+// despacho lento (vencimiento del plazo). No hay herencia en código de producción.
 public partial class DespachadorCorreos(IServiceScopeFactory scopes, TimeProvider time, ILogger<DespachadorCorreos> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -75,6 +77,7 @@ public partial class DespachadorCorreos(IServiceScopeFactory scopes, TimeProvide
     /// UPDATE condicional (la misma concesión de 10 minutos que deja el ciclo): si el ciclo u otra llamada ya lo tomó, no lo
     /// vuelve a enviar y devuelve el estado que tenga (bug #14270: correos duplicados del cambio de contraventor).
     /// </summary>
+    // Virtual solo por las pruebas (ver el comentario de la clase).
     public virtual async Task<EstadoComunicacion> DespacharAsync(Guid id, CancellationToken ct)
     {
         await using (var reclamo = scopes.CreateAsyncScope())
