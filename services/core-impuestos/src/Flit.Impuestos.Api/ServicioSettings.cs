@@ -20,6 +20,11 @@ internal static class ServicioSettings
         ("Platform:Auth:Issuers:0", "FLIT_HUB_URL"),
         ("Platform:Messaging:ConnectionString", "RABBITMQ_URL_IMPUESTOS"),
         (GrpcPortKey, "CORE_IMPUESTOS_GRPC_PORT"),
+        // M07 (plan §4.2 y §5.6): sin el API del proveedor ni el certificado de Data Protection no se aprovisiona ni se cifra.
+        ("Impuestos:Api:BaseUrl", "IMPUESTOS_SVC_API_BASE_URL"),
+        ("Impuestos:Api:IntegrationToken", "IMPUESTOS_SVC_INTEGRATION_TOKEN"),
+        ("Impuestos:DataProtection:CertificadoRuta", "IMPUESTOS_SVC_DP_CERTIFICADO_RUTA"),
+        ("Impuestos:DataProtection:CertificadoClave", "IMPUESTOS_SVC_DP_CERTIFICADO_CLAVE"),
     ];
 
     public static void Validate(IConfiguration configuration)

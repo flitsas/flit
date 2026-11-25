@@ -114,6 +114,11 @@ public sealed class ApiDePrueba : IAsyncDisposable
         [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
         [CertificadoDePrueba.ClaveRuta] = CertificadoDePrueba.Ruta,
         [CertificadoDePrueba.ClaveClave] = CertificadoDePrueba.Clave,
+        // M07: obligatorios al arrancar (ServicioSettings). Valores de prueba; las pruebas que llaman al API los sobrescriben.
+        ["Impuestos:Api:BaseUrl"] = "https://api.prueba",
+        ["Impuestos:Api:IntegrationToken"] = "token-integracion-de-prueba-no-real",
+        // El trabajador de aprovisionamiento no corre solo en las pruebas: cada una llama la ronda o el aprovisionador a mano.
+        ["Impuestos:Aprovisionamiento:TrabajadorActivo"] = "false",
     };
 
     public HttpClient Anonimo() => App.GetTestClient();

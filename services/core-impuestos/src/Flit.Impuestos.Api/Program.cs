@@ -1,6 +1,7 @@
 using Flit.Api.Telemetry;
 using Flit.Impuestos.Api;
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
+using Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 using Flit.Impuestos.Api.Modulos.Catalogos;
 using Flit.Impuestos.Api.Modulos.Configuracion;
 using Flit.Impuestos.Api.Persistence;
@@ -48,6 +49,8 @@ public static class Program
         var connectionString = builder.Configuration.GetConnectionString("Servicio")!;
         builder.Services.AddDbContext<ImpuestosDb>(o => ImpuestosDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
+        // M07: los consumidores del bus fijan la empresa del sobre en el scope (el contexto de la bandeja filtra con ella).
+        builder.Services.AddEmpresaDelTrabajo();
         builder.Services.AddAutorizacionImpuestos();
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddScoped<Modulos.Comun.AuditoriaLecturaBackoffice>();
@@ -63,6 +66,9 @@ public static class Program
         builder.Services.AddCatalogosImpuestos(builder.Configuration);
         builder.Services.AddConfiguracionImpuestos();
         builder.Services.AddSuscripcionImpuestos(builder.Configuration);
+        // M07: aprovisionamiento (D-CRED-DIAG, D-ALTA-REINTENTOS, D-DESACT): consumidor de impuestos.plataforma, rondas y rpc de
+        // Identidad con el token de svc-impuestos.
+        builder.Services.AddAprovisionamientoImpuestos(builder.Configuration);
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<ImpuestosDb>(builder.Configuration);
@@ -111,6 +117,7 @@ public static class Program
         var api = app.MapGroup(Prefijo).RequireAuthorization();
         Modulos.Sesion.SesionEndpoints.Map(api);
         Modulos.Credenciales.CredencialesBackofficeEndpoints.Map(api);
+        Modulos.Aprovisionamiento.AprovisionamientoBackofficeEndpoints.Map(api);
         Modulos.Configuracion.ConfiguracionEndpoints.Map(api);
         Modulos.Configuracion.ConfiguracionContractualBackofficeEndpoints.Map(api);
         Modulos.Catalogos.FuentesEndpoints.Map(api);
