@@ -27,10 +27,11 @@ vi.mock("@/components/ComparendosShell", () => ({
   useSesion: () => ({ sesion: { usuario: { esSuperAdmin: false }, permisos }, cargando: false, error: null }),
 }));
 
+// Caso principal y REAL: el backend cierra solo el paquete en el que todo quedó Duplicado (Duplicado es estado final).
 const PAQUETE = {
   id: "p1",
   nombre: "Escaneos noviembre",
-  estado: "Procesado",
+  estado: "Cerrado",
   cantidadDocumentos: 60,
   cantidadPendientes: 0,
   cantidadCompletos: 0,
@@ -42,8 +43,12 @@ const PAQUETE = {
   cantidadDescartados: 0,
   creadoEn: "2026-11-01T10:00:00Z",
   procesamientoIniciadoEn: "2026-11-01T10:01:00Z",
-  cerradoEn: null,
+  cerradoEn: "2026-11-01T10:05:00Z",
 };
+// Mixto, cerrado después de registrar los completos.
+const MIXTO_CERRADO = { ...PAQUETE, cantidadDocumentos: 20, cantidadRegistrados: 12, cantidadDuplicados: 8 };
+// Aún con completos sin registrar: Procesado (no se cierra mientras haya completos).
+const PROCESADO_MIXTO = { ...PAQUETE, estado: "Procesado", cerradoEn: null, cantidadCompletos: 3 };
 const VISTA = {
   asociables: 55,
   correos: { saldran: 53, conductores: 40, omitidos: [{ motivo: "El conductor no tiene correo registrado", cantidad: 2 }] },
@@ -247,7 +252,7 @@ describe("cabecera y cola de reemplazos", () => {
   });
 
   it("con completos por registrar: «Registrar» primario y «Asociar» secundario", async () => {
-    abrir({ ...PAQUETE, cantidadCompletos: 3 });
+    abrir(PROCESADO_MIXTO);
     const asociar = await screen.findByRole("button", { name: "Asociar los 55" });
     expect(screen.getByRole("button", { name: "Registrar los 3 completos" }).className).toBe(BOTON_PRIMARIO_CLS);
     expect(asociar.className).not.toBe(BOTON_PRIMARIO_CLS);
@@ -265,14 +270,31 @@ describe("cabecera y cola de reemplazos", () => {
     expect(screen.queryByRole("button", { name: "Calculando…" })).toBeNull();
   });
 
-  it("sin permiso de gestión o paquete cerrado: sin botones de lote", async () => {
+  it("paquete CERRADO solo con duplicados (caso principal): «Asociar los N» primario y «Revisar reemplazos», sin «solo lectura»", async () => {
+    abrir();
+    expect((await screen.findByRole("button", { name: "Asociar los 55" })).className).toBe(BOTON_PRIMARIO_CLS);
+    expect(screen.getByRole("button", { name: "Revisar reemplazos (4)" })).toBeTruthy();
+    expect(screen.queryByText(/solo lectura/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Registrar los/ })).toBeNull();
+  });
+
+  it("paquete mixto CERRADO tras registrar los completos: también ofrece el lote", async () => {
+    abrir(MIXTO_CERRADO);
+    expect(await screen.findByRole("button", { name: "Asociar los 55" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Revisar reemplazos (4)" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Registrar los/ })).toBeNull();
+  });
+
+  it("cerrado sin duplicados: sin botones de lote y sí «solo lectura»", async () => {
+    vista = () => Promise.resolve({ ...VISTA, asociables: 0, porRevisar: { reemplazos: 0, numeroDistinto: 0 } });
+    abrir({ ...PAQUETE, cantidadDuplicados: 0, cantidadAsociados: 60 });
+    expect(await screen.findByText(/solo lectura/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos|Calculando/ })).toBeNull();
+  });
+
+  it("sin permiso de gestión: sin botones de lote (aunque haya duplicados)", async () => {
     permisos = ["comparendos.ocr.ver"];
     abrir();
-    await screen.findByRole("group", { name: "Filtrar documentos por estado" });
-    expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos|Calculando/ })).toBeNull();
-    cleanup();
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-    abrir({ ...PAQUETE, estado: "Cerrado", cerradoEn: "2026-11-02T10:00:00Z" });
     await screen.findByRole("group", { name: "Filtrar documentos por estado" });
     expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos|Calculando/ })).toBeNull();
   });

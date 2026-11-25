@@ -100,7 +100,9 @@ function Detalle({ id }: { id: string }) {
   // GDC-EVID §9/§10: vista previa del lote (la preselección es del servidor) y el último lote del paquete (avance o
   // resumen). Se pide siempre que haya paquete: el resumen sale aunque el paquete ya esté cerrado o sin duplicados. La
   // clave cambia con los contadores, así se recalcula tras asociar, descartar o reemplazar.
-  const conLote = !!p && opera && p.estado !== "Cerrado" && p.cantidadDuplicados > 0;
+  // Decisión de Samuel (2026-11-25): también en paquetes CERRADOS. Un paquete en el que todo quedó Duplicado se cierra solo
+  // al terminar la lectura, y ese es justo el caso principal del lote (como ya se puede asociar uno por uno en un cerrado).
+  const conLote = !!p && opera && p.cantidadDuplicados > 0;
   const vista = useCarga(p ? `ocr-lote:${id}:${p.cantidadDuplicados}:${p.cantidadAsociados ?? 0}:${p.cantidadDescartados}` : null, (signal) =>
     apiFetch<VistaPreviaLote>(`/ocr/paquetes/${id}/asociacion-lote`, { signal }),
   );
@@ -227,7 +229,13 @@ function Detalle({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-3">
             <Chip e={ESTADO_PAQUETE[p.estado] ?? { texto: p.estado, tono: "neutral" }} />
             <span>Creado {formatoFechaHora(p.creadoEn)}</span>
-            {p.cerradoEn && <span>· Cerrado {formatoFechaHora(p.cerradoEn)} (solo lectura)</span>}
+            {/* «Solo lectura» ya no es cierto si quedan duplicados por asociar: se puede asociar aunque esté cerrado. */}
+            {p.cerradoEn && (
+              <span>
+                · Cerrado {formatoFechaHora(p.cerradoEn)}
+                {conLote ? "" : " (solo lectura)"}
+              </span>
+            )}
             <Progreso p={p} />
           </span>
         }
