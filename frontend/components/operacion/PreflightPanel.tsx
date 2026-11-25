@@ -187,6 +187,9 @@ const SOURCE_LABEL: Record<string, string> = {
   verifik_rnmc: 'RNMC',
   intempo: 'RUNT',
   kyverum_runt: 'RUNT',
+  // Conductor: mismo origen visible, sin importar qué proveedor respondió.
+  kyverum_runt_conductor: 'RUNT',
+  verifik_conductor: 'RUNT',
   // El origen último del dato es el SIMIT; Kyverum es solo la pasarela.
   kyverum_fines: 'SIMIT',
   // Cartera propia de FLIT: aquí la fuente sí es interna.

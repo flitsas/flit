@@ -326,6 +326,29 @@ describe('TramiteTrackingModal', () => {
     expect(within(historial).getByText('Falta soporte suficiente para revocar.')).toBeInTheDocument();
   });
 
+  // Bug #14634 — el rechazo no puede caer en el default de reenvío: es otra acción y trae su motivo.
+  it('un rechazo de identidad aparece con su motivo y no como reenvío', async () => {
+    getInstance.mockResolvedValue({
+      events: [
+        {
+          tipo: 'identidad_manual_rechazada',
+          createdAt: '2026-11-19T16:00:00Z',
+          createdByName: 'Willyn Londoño',
+          partyRole: 'vendedor',
+          rejectionReasonLabel: 'Imagen borrosa',
+        },
+      ],
+    });
+    render(<TramiteTrackingModal open item={fila()} onClose={() => undefined} />);
+
+    const historial = await screen.findByRole('list', { name: 'Historial de estados del trámite' });
+    expect(within(historial).getByText('Validación de identidad rechazada · Vendedor')).toBeInTheDocument();
+    expect(within(historial).getByText('Revisado por Willyn Londoño')).toBeInTheDocument();
+    expect(within(historial).getByText('Imagen borrosa')).toBeInTheDocument();
+    expect(within(historial).queryByText(/Reenvío de validación/)).not.toBeInTheDocument();
+    expect(within(historial).queryByText(/manual/i)).not.toBeInTheDocument();
+  });
+
   it('cerrado no consulta nada', async () => {
     render(<TramiteTrackingModal open={false} item={fila()} onClose={() => undefined} />);
     await waitFor(() => expect(getStatusHistory).not.toHaveBeenCalled());

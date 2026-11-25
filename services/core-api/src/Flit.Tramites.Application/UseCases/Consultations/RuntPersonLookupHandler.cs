@@ -35,6 +35,7 @@ public sealed class RuntPersonLookupHandler(
     ILogger<RuntPersonLookupHandler>? logger = null)
 {
     private const string KyverumConductorProvider = "kyverum_runt_conductor";
+    private const string ManualOverrideProvider = "tenant_manual_conductor";
     private const string RuntSourceCode = "RUNT";
 
     public async Task<(RuntPersonDto? Result, string? Error)> HandleAsync(
@@ -71,7 +72,7 @@ public sealed class RuntPersonLookupHandler(
         var ctx = new ConsultationContext(instanceId, tenantId, instance.ReferenceNumber, fieldValues);
         var result = await chainResolver.ConsultAsync(ConsultationKind.Conductor, ctx, tenantOverride, ct);
 
-        var dto = BuildDtoFromFields(result.HydratedFields, documentType, documentNumber, ResolveMode(result.Provider));
+        var dto = BuildDtoFromFields(result.HydratedFields, documentType, documentNumber, ResolveMode(result.Provider), ResolveSource(result.Provider));
 
         // Un check en "error" es el contrato de TODOS los proveedores de conductor para «no se pudo
         // consultar» (caída, timeout, 4xx/5xx). Hasta aquí ese caso llegaba indistinguible de
@@ -192,7 +193,7 @@ public sealed class RuntPersonLookupHandler(
 
     /// <summary>Arma el DTO leyendo el shape común HydratedField[] — usado tanto en el HIT de caché como en el consult en vivo.</summary>
     private static RuntPersonDto BuildDtoFromFields(
-        IReadOnlyList<HydratedField> fields, string documentType, string documentNumber, string mode)
+        IReadOnlyList<HydratedField> fields, string documentType, string documentNumber, string mode, string source = "RUNT")
     {
         var fullName = GetHydrated(fields, "person_full_name");
         var found = !string.IsNullOrWhiteSpace(fullName);
@@ -210,6 +211,7 @@ public sealed class RuntPersonLookupHandler(
             DocumentNumber: documentNumber,
             LicenseStatus: found ? GetHydrated(fields, "person_license_status") : null,
             Mode: mode,
+            Source: source,
             CitizenStatus: found ? GetHydrated(fields, "person_citizen_status") : null,
             HasPendingFines: hasPendingFines,
             NroPazYSalvo: found ? GetHydrated(fields, "person_paz_y_salvo") : null,
@@ -218,32 +220,42 @@ public sealed class RuntPersonLookupHandler(
             Fines: null);
     }
 
-    // Mapeo documentType FLIT → Verifik: CC→CC, CE→CE, PAS→PA, TI→PPT (alias de integración),
-    // PPT nativo→PPT (HU #14501 / ADR-0082; no confundir con el alias de TI), NIT→null.
+    // Mapeo documentType FLIT → proveedor: CC→CC, CE→CE, PAS→PA, TI→TI (HU #14642: TI es un
+    // tipo de documento válido y se pasa tal cual), PPT→PPT (HU #14501 / ADR-0082), NIT→null.
     private static string? MapDocumentType(string documentType) =>
         documentType.ToUpperInvariant() switch
         {
             "CC" => "CC",
             "CE" => "CE",
             "PAS" => "PA",
-            "TI" => "PPT",
+            "TI" => "TI",
             "PPT" => "PPT",
             "NIT" => null,
             _ => documentType
         };
 
-    // Modo real|mock que reporta el DTO (informativo para el wizard). Kyverum RUNT no tiene modo
-    // mock: si respondió, es "real". Para Verifik conductor se replica la semántica de
-    // ConsultationProviderModeOptions.IsMock (VERIFIK_CONDUCTOR_MODE, default "mock"), aquí porque
-    // Application no referencia Infrastructure.
+    // Modo real|mock|manual que reporta el DTO (informativo para el wizard).
+    // Kyverum RUNT no tiene modo mock: si respondió, es "real".
+    // tenant_manual_conductor es siempre "manual" (HU #14642).
+    // Para Verifik conductor se replica la semántica de ConsultationProviderModeOptions.IsMock
+    // (VERIFIK_CONDUCTOR_MODE, default "mock"), aquí porque Application no referencia Infrastructure.
     private static string ResolveMode(string? answeringProvider)
     {
+        if (string.Equals(answeringProvider, ManualOverrideProvider, StringComparison.OrdinalIgnoreCase))
+            return "manual";
+
         if (string.Equals(answeringProvider, KyverumConductorProvider, StringComparison.OrdinalIgnoreCase))
             return "real";
 
         var mode = Environment.GetEnvironmentVariable("VERIFIK_CONDUCTOR_MODE") ?? "mock";
         return string.Equals(mode, "real", StringComparison.OrdinalIgnoreCase) ? "real" : "mock";
     }
+
+    // Fuente del resultado para el DTO. tenant_manual_conductor → "MANUAL_OVERRIDE" (HU #14642).
+    private static string ResolveSource(string? answeringProvider) =>
+        string.Equals(answeringProvider, ManualOverrideProvider, StringComparison.OrdinalIgnoreCase)
+            ? "MANUAL_OVERRIDE"
+            : RuntSourceCode;
 }
 
 /// <summary>

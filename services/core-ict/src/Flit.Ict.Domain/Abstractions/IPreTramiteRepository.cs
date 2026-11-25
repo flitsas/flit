@@ -74,4 +74,11 @@ public interface IPreTramiteRepository
         string outcome,
         string? detailJson,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Lee el estado v2 del trámite materializado desde <c>tramites.procedure_instances.status</c>
+    /// (lectura cross-schema, best-effort). Devuelve <c>null</c> si no existe, el rol no tiene
+    /// acceso a ese schema o hay un error de red. El llamador decide si trata null como "no aprobado".
+    /// </summary>
+    Task<string?> GetTramiteStatusAsync(Guid procedureInstanceId, CancellationToken ct = default);
 }

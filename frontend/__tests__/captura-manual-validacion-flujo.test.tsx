@@ -208,14 +208,16 @@ describe("documento (HU #14309)", () => {
     expect(screen.getByRole("button", { name: "Repetir" })).toBeInTheDocument();
   });
 
-  it("AC3 y AC4: reverso con código pasa; sin código → «Muestra el lado con el código de barras»", async () => {
-    const hayCodigo = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
-    await aAnverso(motorOk({ rostros: rostrosPorPaso([SELFIE_OK], [RETRATO]), hayCodigo }));
+  it("reverso con documento pasa aunque no haya código; sin documento pide encuadrar", async () => {
+    const hayDocumento = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const hayCodigo = vi.fn(async () => false);
+    await aAnverso(motorOk({ rostros: rostrosPorPaso([SELFIE_OK], [RETRATO]), hayDocumento, hayCodigo }));
     await capturar(/Capturar documento/);
     fireEvent.click(confirmar());
     await screen.findByRole("heading", { name: "Documento — reverso" });
     await capturar(/Capturar documento/);
-    expect(screen.getByTestId("rechazo-foto")).toHaveTextContent("Muestra el lado con el código de barras");
+    expect(screen.getByTestId("rechazo-foto")).toHaveTextContent(/Encuadra el documento/);
+    expect(hayCodigo).not.toHaveBeenCalled();
     fireEvent.click(repetir());
     await capturar(/Capturar documento/);
     expect(screen.queryByTestId("rechazo-foto")).not.toBeInTheDocument();
@@ -281,7 +283,6 @@ describe("envío del resultado (contrato validacionFotos)", () => {
     const submit = vi.fn().mockResolvedValue({ status: "pendiente_revision_manual" });
     const motor = motorOk({
       rostros: rostrosPorPaso([SELFIE_OK], []), // anverso sin rostro → lado_incorrecto
-      hayCodigo: vi.fn(async () => Promise.reject(new SinSoporteError())), // reverso: sin soporte
     });
     await aRostro(motor, fakeClient(VIEW, submit));
     await capturar(/Capturar rostro/);
@@ -306,7 +307,7 @@ describe("envío del resultado (contrato validacionFotos)", () => {
     expect(submit.mock.calls[0][2]).toEqual({
       rostro: { estado: "verificada", motivo: null },
       anverso: { estado: "no_verificada", motivo: "lado_incorrecto" },
-      reverso: { estado: "no_verificada", motivo: "sin_soporte" },
+      reverso: { estado: "verificada", motivo: null },
     });
   });
 

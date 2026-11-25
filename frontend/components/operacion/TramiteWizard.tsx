@@ -57,6 +57,10 @@ export function ilustracionDelAsistente({
 /** Bug #14631 — tope de espera del cliente para el consolidado al radicar (menor al corte de nginx). */
 const CONSOLIDADO_TIMEOUT_MS = 30_000;
 
+// Bug #14672 — OT con canal Quipux: /submit responde `preparado` y el worker radica después.
+const MENSAJE_RADICACION_EN_COLA =
+  'El trámite quedó en cola para radicarse por Quipux ante el organismo de tránsito. Cambiará de estado cuando Quipux confirme la radicación.';
+
 /** Rótulo del acordeón cuando el cambio ES el trámite (familia OTROS). */
 const TITULO_CAMBIO_BASE = {
   color: 'Cambio de color',
@@ -1572,7 +1576,9 @@ export function TramiteWizard(props: Props) {
       if (docs.fallaTecnica) {
         // Bug #14631 — no bloqueante: el backend encola la regeneración del consolidado al radicar.
         show(
-          'Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.',
+          radicada.status === 'preparado'
+            ? 'El expediente consolidado se está generando y estará disponible en unos minutos.'
+            : 'Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.',
           'success',
         );
       }
@@ -2697,7 +2703,7 @@ export function TramiteWizard(props: Props) {
           setRadicado(null);
           onExit();
         }}
-        title="¡Trámite completado!"
+        title={radicado?.estado === 'preparado' ? '¡Trámite enviado!' : '¡Trámite completado!'}
         titleClassName="text-lg font-bold text-flit-brand"
         size="sm"
       >
@@ -2723,7 +2729,9 @@ export function TramiteWizard(props: Props) {
           <p className="mt-4 text-xs opacity-70">
             {radicado?.estado === 'preasignacion'
               ? 'El trámite quedó en Preasignación: el organismo de tránsito asignará la placa.'
-              : 'El trámite fue validado y enviado correctamente al organismo de tránsito.'}
+              : radicado?.estado === 'preparado'
+                ? MENSAJE_RADICACION_EN_COLA
+                : 'El trámite fue validado y enviado correctamente al organismo de tránsito.'}
           </p>
           <button
             type="button"
@@ -2743,7 +2751,8 @@ export function TramiteWizard(props: Props) {
   );
 }
 
-const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS', 'PPT'];
+// HU #14642 — TI añadida: backend mapea TI→TI; Kyverum normaliza a T.
+const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'TI', 'NIT', 'PAS', 'PPT'];
 
 /**
  * Trámites principales del selector del paso 1, en el orden y con el copy de la propuesta.

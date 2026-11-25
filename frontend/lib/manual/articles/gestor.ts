@@ -102,6 +102,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "quien firmara el mandato",
       "sin mandatario configurado",
       "no se puede radicar mandatario",
+      "quipux",
+      "tramite quedo en preparado",
       "secretaria de transito matricula",
       "el runt no reporta el organismo",
       "vehiculo con placa asignada",
@@ -185,6 +187,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Un traspaso u otro trámite con placa pasa a Entregado (en revisión del organismo) y de ahí a Aprobado, Rechazado o En subsanación.",
           "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
+          "Si el organismo recibe los trámites por Quipux, al enviar verás «¡Trámite enviado!» y el aviso «El trámite quedó en cola para radicarse por Quipux ante el organismo de tránsito». El trámite sigue en Preparado mientras la plataforma lo radica en Quipux, y cambia de estado cuando Quipux lo confirma. No tienes que volver a enviarlo; si pasa mucho tiempo sin cambiar, repórtalo a soporte.",
           "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT.",
         ],
       },
@@ -369,7 +372,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
         bullets: [
           "Borrador: editable; complétalo y radícalo desde el detalle. Puedes anularlo si no va a continuar.",
-          "Preparado: datos completos, listo para radicar.",
+          "Preparado: datos completos, listo para radicar. Si el organismo recibe por Quipux, también es el estado mientras el trámite espera en cola a que Quipux confirme la radicación.",
           "Preasignación (solo matrícula inicial en ruta larga): radicado sin placa; el organismo debe asignarla. Aún no está en su cola de decisión.",
           "Asignado: el organismo ya asignó la placa. Te toca gestionar SOAT e impuestos y pulsar «Enviar al OT» (acción de la fila).",
           "Entregado: en revisión del organismo de tránsito.",

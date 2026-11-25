@@ -138,6 +138,16 @@ public sealed record ExternalAttachmentTarget(
     bool PagadoMarcado,
     IReadOnlyList<ExternalAttachmentExisting> Vigentes);
 
+/// <summary>
+/// Bug #14660 — consolidados que el trámite ya tiene persistidos (adjuntos <c>consolidado</c> y <c>consolidado_maestro</c>):
+/// solo esos se regeneran por anticipado, igual que <c>ConsolidadoVigenciaTracker.EncolarRegeneracionAsync</c> (no se crean
+/// consolidados que nadie pidió).
+/// </summary>
+public sealed record ConsolidadosExistentes(bool Wizard, bool Maestro)
+{
+    public static readonly ConsolidadosExistentes Ninguno = new(false, false);
+}
+
 /// <summary>El adjunto a archivar (el archivo ya está en el almacenamiento).</summary>
 public sealed record NewExternalAttachment(string Tipo, string Filename, string Mimetype, long SizeBytes, string Sha256, string StoragePath);
 
@@ -155,6 +165,15 @@ public interface IExternalAttachmentWriter
     /// del adjunto (cualquier valor o fuente previa se reemplaza). No hace nada si la marca ya está vigente.
     /// </summary>
     Task MarkTaxPaidAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Bug #14660 (ADR-0087) — baja las DOS marcas de vigencia (<c>consolidado_wizard_vigente</c> y
+    /// <c>consolidado_maestro_vigente</c>) en la MISMA transacción del adjunto y dice qué consolidados tiene ya el trámite.
+    /// Espejo, en SQL crudo, de <c>ConsolidadoVigenciaTracker</c> (<c>InvalidarAsync</c> + <c>EncolarRegeneracionAsync</c>)
+    /// para cualquier otro escritor EF: este repositorio escribe por fuera del <c>ChangeTracker</c>, así que sin esto el
+    /// camino perezoso seguiría sirviendo el PDF viejo. Las marcas que ya estén abajo no se reescriben.
+    /// </summary>
+    Task<ConsolidadosExistentes> InvalidateConsolidadosAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>

@@ -1,3 +1,6 @@
+using System.Text.RegularExpressions;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -13,7 +16,32 @@ public sealed record IdentityAuditEventDto(
     bool? DecryptOk,
     string? ProviderStatus,
     string? ErrorType,
-    string? Message);
+    string? Message,
+    // Bug #14634 — motivo YA homologado (lista cerrada, HU #13299) de ESTE evento puntual de rechazo
+    // manual: a diferencia de BiometricValidationDto.RejectionReason (que la siguiente captura borra),
+    // este queda fijo en la bitácora, así que un hito histórico sigue mostrando por qué se rechazó
+    // aunque la validación ya se haya vuelto a intentar o aprobar. Ya es texto seguro (no delata el
+    // mecanismo), así que se expone igual a todos (ver IdentityAuditParaCliente.Equivalente).
+    string? RejectionReasonLabel = null);
+
+internal static class IdentityAuditEventMapper
+{
+    private static readonly Regex MotivoEnDetalle = new(@"motivo=([^;]+)", RegexOptions.Compiled);
+
+    public static IdentityAuditEventDto ToDto(IdentityValidationAuditEvent e) => new(
+        e.OccurredAt, e.Stage, e.Outcome, e.HttpStatus,
+        e.SignaturePresent, e.SecretPresent, e.DecryptOk,
+        e.ProviderStatus, e.ErrorType, e.Message,
+        RejectionReasonLabel: RechazoManualLabel(e));
+
+    private static string? RechazoManualLabel(IdentityValidationAuditEvent e)
+    {
+        if (!string.Equals(e.Stage, IdentityValidationAuditStages.ManualRechazado, StringComparison.Ordinal))
+            return null;
+        var match = e.Detail is null ? null : MotivoEnDetalle.Match(e.Detail);
+        return match is { Success: true } ? ManualRejectionReasons.LabelFor(match.Groups[1].Value.Trim()) : null;
+    }
+}
 
 /// <summary>
 /// Respuesta de la bitácora. <paramref name="ReferencedFromOtherProcedure"/> es true cuando la
@@ -48,12 +76,7 @@ public sealed class GetIdentityAuditHandler(IProcedureInstanceRepository repo)
         var referenciada = v.ProcedureInstanceId != instanceId;
 
         var events = await repo.ListIdentityAuditByValidationAsync(validationId, ct);
-        var dtos = events
-            .Select(e => new IdentityAuditEventDto(
-                e.OccurredAt, e.Stage, e.Outcome, e.HttpStatus,
-                e.SignaturePresent, e.SecretPresent, e.DecryptOk,
-                e.ProviderStatus, e.ErrorType, e.Message))
-            .ToList();
+        var dtos = events.Select(IdentityAuditEventMapper.ToDto).ToList();
 
         return (new IdentityAuditResponse(validationId, dtos, referenciada), null);
     }

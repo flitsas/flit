@@ -1182,23 +1182,24 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   }, [consolidadoTramite, abrirConsolidado]);
 
   // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.
-  // Solo aplica a borradores origin='ict' (el botón solo se muestra ahí). Al reanudar se limpia la nota.
+  // HU #14668 (AC1): observation editable al pausar Y al reanudar (null = keep en backend; "" limpia).
   const handleTogglePause = useCallback(
-    async (id: string, next: boolean, tenantId: string) => {
+    async (id: string, next: boolean, tenantId: string, observation: string | null) => {
       if (isNetworkReadOnly({ tenantId }, currentTenantId)) return; // HU #12362
       setItems((prev) =>
         prev.map((it) =>
           it.id === id
-            ? { ...it, isPaused: next, pausedObservation: next ? it.pausedObservation ?? null : null }
+            ? { ...it, isPaused: next, pausedObservation: observation }
             : it,
         ),
       );
       try {
-        await tramitesClient.pauseInstance(id, next, null, isAdmin ? tenantId : undefined);
-      } catch {
+        await tramitesClient.pauseInstance(id, next, observation, isAdmin ? tenantId : undefined);
+      } catch (err) {
         setItems((prev) =>
           prev.map((it) => (it.id === id ? { ...it, isPaused: !next } : it)),
         );
+        throw err; // propagar al modal para mostrar estado de error (HU #14668)
       }
     },
     [isAdmin, currentTenantId],
@@ -1244,8 +1245,22 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const accionPausa = accionPausaLote(particionPausa.pausables);
   const muestraPausa = seleccionTieneBorradorIct(particionPausa);
 
+  // HU #14668 (AC2) — estado del modal de pausa masiva.
+  const [bulkPauseModalState, setBulkPauseModalState] = useState<{ paused: boolean } | null>(null);
+
+  /**
+   * HU #14668 (AC2) — pausa/reanuda en lote. `mode` controla las observaciones (también al reanudar):
+   * - 'keep': no cambia observaciones (observationMode keep).
+   * - 'single': misma observation para todos.
+   * - 'perItem': observation por id vía items[].
+   */
   const handleBulkPause = useCallback(
-    async (paused: boolean) => {
+    async (
+      paused: boolean,
+      mode: 'keep' | 'single' | 'perItem' = 'keep',
+      globalObs: string | null = null,
+      perItemObs: Map<string, string | null> = new Map(),
+    ) => {
       // HU #12362 — solo los propios: ni actualización optimista ni llamada para los de la red.
       const pausables = particionPausa.pausables;
       if (pausables.length === 0) {
@@ -1255,28 +1270,47 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       const pausablesIds = new Set(pausables.map((it) => it.id));
       // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
       setItems((prev) =>
-        prev.map((it) =>
-          pausablesIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
-            ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
-            : it,
-        ),
+        prev.map((it) => {
+          if (!pausablesIds.has(it.id) || it.origin !== 'ict' || it.estado !== 'borrador') return it;
+          let newObs: string | null = it.pausedObservation ?? null;
+          if (mode === 'single') newObs = globalObs;
+          else if (mode === 'perItem') newObs = perItemObs.get(it.id) ?? it.pausedObservation ?? null;
+          // keep: conserva newObs actual
+          return { ...it, isPaused: paused, pausedObservation: newObs };
+        }),
       );
       // El superadmin puede seleccionar trámites de varias compañías; el endpoint masivo se acota por
       // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
-      const byTenant = new Map<string, string[]>();
+      const byTenant = new Map<string, typeof pausables>();
       for (const it of pausables) {
         const arr = byTenant.get(it.tenantId) ?? [];
-        arr.push(it.id);
+        arr.push(it);
         byTenant.set(it.tenantId, arr);
       }
       try {
         await Promise.all(
-          Array.from(byTenant.entries()).map(([tenantId, ids]) =>
-            tramitesClient.pauseInstancesMassive(ids, paused, null, isAdmin ? tenantId : undefined),
+          Array.from(byTenant.entries()).map(([tenantId, items]) =>
+            tramitesClient.pauseInstancesMassive(
+              {
+                ids: items.map((i) => i.id),
+                paused,
+                observationMode: mode,
+                observation: mode === 'single' ? globalObs : null,
+                items:
+                  mode === 'perItem'
+                    ? items.map((i) => ({
+                        id: i.id,
+                        observation: perItemObs.get(i.id) ?? null,
+                      }))
+                    : undefined,
+              },
+              isAdmin ? tenantId : undefined,
+            ),
           ),
         );
-      } catch {
+      } catch (err) {
         void load(); // ante fallo parcial, refresca para reflejar el estado real del backend
+        throw err; // propagar al modal para mostrar estado de error
       } finally {
         limpiarLote();
       }
@@ -1645,7 +1679,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             {muestraPausa && accionPausa === 'pausar' ? (
               <button
                 type="button"
-                onClick={() => void handleBulkPause(true)}
+                onClick={() => setBulkPauseModalState({ paused: true })}
                 className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-strong)] px-2.5 py-1 font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand "
               >
                 <Icono nombre="pausa" className="h-3.5 w-3.5" /> Pausar
@@ -1654,7 +1688,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             {muestraPausa && accionPausa === 'reanudar' ? (
               <button
                 type="button"
-                onClick={() => void handleBulkPause(false)}
+                onClick={() => setBulkPauseModalState({ paused: false })}
                 className="inline-flex items-center gap-1 rounded-lg border border-flit-brand/40 px-2.5 py-1 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
               >
                 <Icono nombre="avance" className="h-3.5 w-3.5" /> Reanudar
@@ -1892,7 +1926,209 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       )}
 
 
+      {/* HU #14668 (AC2) — modal de pausa/reanuda masiva con observación por modo. */}
+      {bulkPauseModalState !== null ? (
+        <PausaMasivaModal
+          open
+          paused={bulkPauseModalState.paused}
+          pausables={particionPausa.pausables}
+          onClose={() => setBulkPauseModalState(null)}
+          onConfirm={handleBulkPause}
+        />
+      ) : null}
     </section>
+  );
+}
+
+// ── HU #14668 (AC2) — Modal de pausa/reanuda masiva con observación ──────────────────────────────
+
+type BulkObsMode = 'keep' | 'single' | 'perItem';
+
+function PausaMasivaModal({
+  open,
+  paused,
+  pausables,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  paused: boolean;
+  pausables: InstanceSummary[];
+  onClose: () => void;
+  onConfirm: (
+    paused: boolean,
+    mode: BulkObsMode,
+    globalObs: string | null,
+    perItemObs: Map<string, string | null>,
+  ) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<BulkObsMode>('keep');
+  const [globalObs, setGlobalObs] = useState('');
+  const [perItemObs, setPerItemObs] = useState<Map<string, string>>(() => {
+    const m = new Map<string, string>();
+    for (const it of pausables) m.set(it.id, it.pausedObservation ?? '');
+    return m;
+  });
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Estado inicial al montar: el padre desmonta el modal al cerrar (`bulkPauseModalState === null`),
+  // así que no hace falta resetear con useEffect (evita react-hooks/set-state-in-effect).
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const perItemMap = new Map<string, string | null>();
+      for (const [id, val] of perItemObs) perItemMap.set(id, val.trim() || null);
+      await onConfirm(paused, mode, globalObs.trim() || null, perItemMap);
+      onClose();
+    } catch {
+      setErrorMsg('Ocurrió un error al procesar la pausa. Verifica la conexión e intenta de nuevo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const title = paused ? 'Pausar trámites' : 'Reanudar trámites';
+  const count = pausables.length;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      icono={paused ? 'pausa' : 'avance'}
+      iconBg={paused ? 'var(--color-flit-primary)' : 'var(--color-flit-brand)'}
+      description={`${count} trámite${count !== 1 ? 's' : ''} seleccionado${count !== 1 ? 's' : ''}`}
+      size="lg"
+      busy={busy}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleConfirm()}
+            disabled={busy}
+            className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+          >
+            {busy ? 'Procesando…' : 'Confirmar'}
+          </button>
+        </div>
+      }
+    >
+      {/* Estado de error */}
+      {errorMsg ? (
+        <InlineAlert tone="warning" title="Error al procesar" className="mb-4">
+          {errorMsg}
+        </InlineAlert>
+      ) : null}
+
+      {/* HU #14668: mismos modos de observación al pausar y al reanudar. */}
+      <div className="mb-4">
+        <fieldset>
+          <legend className="mb-2 text-sm font-semibold text-foreground">
+            Observaciones
+          </legend>
+          <div className="flex flex-col gap-2">
+            {(
+              [
+                ['keep', 'Dejar observaciones tal cual'],
+                ['single', 'Una observación para todos'],
+                ['perItem', 'Editar por trámite'],
+              ] as const
+            ).map(([val, label]) => (
+              <label key={val} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="bulk-obs-mode"
+                  value={val}
+                  checked={mode === val}
+                  onChange={() => setMode(val)}
+                  className="accent-flit-brand"
+                  disabled={busy}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {mode === 'single' && (
+          <div className="mt-3">
+            <label htmlFor="bulk-global-obs" className="mb-1 block text-xs font-medium text-muted-foreground">
+              Observación para todos
+            </label>
+            <textarea
+              id="bulk-global-obs"
+              rows={3}
+              maxLength={250}
+              value={globalObs}
+              onChange={(e) => setGlobalObs(e.target.value)}
+              disabled={busy}
+              placeholder="Escribe la observación (opcional, máx. 250 caracteres)"
+              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+            />
+            <p className="mt-0.5 text-right text-[11px] text-muted-foreground">{globalObs.length}/250</p>
+          </div>
+        )}
+      </div>
+
+      {/* Lista de trámites pausables */}
+      <div
+        className="max-h-64 overflow-y-auto rounded-lg border border-border"
+        role="list"
+        aria-label="Trámites a procesar"
+      >
+        {pausables.map((it, idx) => (
+          <div
+            key={it.id}
+            role="listitem"
+            className={`flex flex-col gap-1 px-3 py-2 ${idx < pausables.length - 1 ? 'border-b border-border' : ''}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-foreground">{it.placa ?? '—'}</span>
+              <span className="text-xs text-muted-foreground">{it.referenceNumber}</span>
+            </div>
+            {mode === 'perItem' && (
+              <div>
+                <label
+                  htmlFor={`obs-item-${it.id}`}
+                  className="sr-only"
+                >
+                  Observación para {it.referenceNumber}
+                </label>
+                <textarea
+                  id={`obs-item-${it.id}`}
+                  rows={2}
+                  maxLength={250}
+                  value={perItemObs.get(it.id) ?? ''}
+                  onChange={(e) =>
+                    setPerItemObs((prev) => new Map(prev).set(it.id, e.target.value))
+                  }
+                  disabled={busy}
+                  placeholder="Observación (opcional)"
+                  className="w-full resize-none rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+                />
+              </div>
+            )}
+            {mode === 'keep' && it.pausedObservation ? (
+              <p className="text-xs text-muted-foreground italic">{it.pausedObservation}</p>
+            ) : null}
+            {mode === 'single' && globalObs.trim() ? (
+              <p className="text-xs text-muted-foreground italic">{globalObs.trim()}</p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }
 
@@ -2136,7 +2372,8 @@ function TableBody({
   onRetry: () => void;
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
-  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  /** HU #14668 (AC1) — incluye observation para el modal de Pausar/Reanudar. */
+  onTogglePause: (id: string, next: boolean, tenantId: string, observation: string | null) => void;
   /** HU #13380 — selección única de la tabla (descarga masiva y pausa ICT en lote). */
   seleccionLote: SeleccionLoteFilas;
   /** HU #13380 — permiso de descarga masiva: con él todas las filas llevan casilla (AC6). */
@@ -2619,7 +2856,8 @@ function TramiteRow({
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
-  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  /** HU #14668 (AC1) — incluye observation para el modal de Pausar/Reanudar. */
+  onTogglePause: (id: string, next: boolean, tenantId: string, observation: string | null) => void;
   /** HU #13380 — la fila va en la selección única (descarga masiva y pausa ICT en lote). */
   seleccionado: boolean;
   /** HU #13380 — alterna la fila en la selección única. */
@@ -2726,13 +2964,18 @@ function TramiteRow({
       onSelect: () => handleOpen(),
     },
     // ICT (paridad v1) — pausar/reanudar como acción del menú (solo borradores origin='ict').
+    // HU #14668 (AC1): ahora abre un modal con textarea de observación en vez de toglear al instante.
     ...(isIctDraft && !consultaMode
       ? [
           {
             key: 'pausa',
             label: item.isPaused ? 'Reanudar' : 'Pausar',
             icon: item.isPaused ? ICONO_AVANCE : ICONO_PAUSA,
-            onSelect: () => onTogglePause(item.id, !item.isPaused, item.tenantId),
+            onSelect: () => {
+              setPauseObservacion(item.pausedObservation ?? '');
+              setPauseSubmitError(null);
+              setPauseActionModal({ next: !item.isPaused });
+            },
           },
         ]
       : []),
@@ -2810,6 +3053,11 @@ function TramiteRow({
   // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
   // recordar reanudarlo para poder radicarlo.
   const [confirmPauseOpen, setConfirmPauseOpen] = useState(false);
+  // HU #14668 (AC1) — modal de Pausar/Reanudar con observación.
+  const [pauseActionModal, setPauseActionModal] = useState<{ next: boolean } | null>(null);
+  const [pauseObservacion, setPauseObservacion] = useState('');
+  const [pauseSubmitting, setPauseSubmitting] = useState(false);
+  const [pauseSubmitError, setPauseSubmitError] = useState<string | null>(null);
   // Frente C, etapa 1 (Tramites.tsx:222 de la propuesta) — borrador → asistente; radicado → modal
   // de detalle, sin navegar. `isPaused` solo aplica a borradores ICT, así que el chequeo de pausa
   // queda intacto dentro de esa rama.
@@ -3493,6 +3741,96 @@ function TramiteRow({
           >
             Continuar de todos modos
           </button>
+        </div>
+      </Modal>
+
+      {/* HU #14668 (AC1) — modal Pausar/Reanudar con observación. Se porta a document.body igual que el
+          modal de confirmación de pausa: no rompe la validez de la tabla. */}
+      <Modal
+        open={pauseActionModal !== null}
+        onClose={() => { if (!pauseSubmitting) setPauseActionModal(null); }}
+        title={pauseActionModal?.next ? 'Pausar trámite' : 'Reanudar trámite'}
+        icono={pauseActionModal?.next ? 'pausa' : 'avance'}
+        iconBg={pauseActionModal?.next ? 'var(--color-flit-primary)' : 'var(--color-flit-brand)'}
+        description={`Trámite ${item.referenceNumber}`}
+        size="sm"
+        busy={pauseSubmitting}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPauseActionModal(null)}
+              disabled={pauseSubmitting}
+              className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={pauseSubmitting}
+              onClick={async () => {
+                if (!pauseActionModal) return;
+                setPauseSubmitting(true);
+                setPauseSubmitError(null);
+                try {
+                  await onTogglePause(
+                    item.id,
+                    pauseActionModal.next,
+                    item.tenantId,
+                    pauseObservacion.trim() || null,
+                  );
+                  setPauseActionModal(null);
+                } catch {
+                  setPauseSubmitError('No se pudo completar la acción. Verifica tu conexión e intenta de nuevo.');
+                } finally {
+                  setPauseSubmitting(false);
+                }
+              }}
+              className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+            >
+              {pauseSubmitting ? 'Procesando…' : 'Confirmar'}
+            </button>
+          </div>
+        }
+      >
+        {pauseSubmitError ? (
+          <InlineAlert tone="warning" title="Error" className="mb-3">
+            {pauseSubmitError}
+          </InlineAlert>
+        ) : null}
+        {/* HU #14668: observación editable al pausar y al reanudar (vacío permitido). */}
+        <div>
+          {!pauseActionModal?.next ? (
+            <p className="mb-3 text-sm text-muted-foreground">
+              ¿Confirmas que deseas <strong>reanudar</strong> este trámite? Puedes ajustar la observación.
+            </p>
+          ) : null}
+          <label
+            htmlFor={`pause-obs-${item.id}`}
+            className="mb-1 block text-sm font-medium text-foreground"
+          >
+            Observación{' '}
+            <span className="font-normal text-muted-foreground">(opcional)</span>
+          </label>
+          <textarea
+            id={`pause-obs-${item.id}`}
+            rows={4}
+            maxLength={250}
+            value={pauseObservacion}
+            onChange={(e) => setPauseObservacion(e.target.value)}
+            disabled={pauseSubmitting}
+            placeholder={
+              pauseActionModal?.next
+                ? 'Escribe una observación para este trámite pausado…'
+                : 'Observación al reanudar (opcional)…'
+            }
+            className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+            autoFocus
+          />
+          <p className="mt-0.5 text-right text-[11px] text-muted-foreground">
+            {pauseObservacion.length}/250
+          </p>
         </div>
       </Modal>
 

@@ -111,6 +111,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-transit": "administradores",
   // SuperAdmin — Plataforma anidada dentro de Administradores
   "admin-plataforma": "administradores",
+  // HU #14642 — overrides de persona RUNT (hijo de admin-plataforma).
+  "admin-runt-persona-overrides": "administradores",
   // HU #14479 — secciones con nombre de Administradores (sus hijos heredan el grupo del padre).
   "admin-documentos": "administradores",
   "admin-seguridad": "administradores",
@@ -156,6 +158,8 @@ export const DOCK_ITEM_DESCRIPCION: Record<string, string> = {
   "admin-quipux": "Radicación por Quipux",
   "admin-tipos-tramite": "Qué trámites están activos",
   "admin-confirmacion-runt": "Radicados por confirmar",
+  "admin-contingencia-runt": "Proveedor ante una caída",
+  "admin-runt-persona-overrides": "Substituir respuesta RUNT por persona",
   "admin-mandatos": "Plantillas de mandato",
   "admin-fur": "Formulario único por trámite",
   "admin-notificaciones": "Correos y mensajes",

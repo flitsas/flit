@@ -141,6 +141,14 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
           icon: iconoComo("check"),
           ...navGatingFor("admin-confirmacion-runt"),
         },
+        // Épica #14644 (HU #14649) — por permiso (`runt_contingency.manage`); hijo de Plataforma, hereda su grupo del dock.
+        {
+          key: "admin-contingencia-runt",
+          label: "Contingencia RUNT",
+          href: "/admin/plataforma/contingencia-runt",
+          icon: iconoComo("alerta"),
+          ...navGatingFor("admin-contingencia-runt"),
+        },
         superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", iconoComo("firma")),
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", iconoComo("documento")),
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", iconoComo("campana")),
@@ -150,6 +158,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", iconoComo("correo")),
         // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
         superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", iconoComo("archivo")),
+        // HU #14642 — overrides de persona RUNT por tenant (solo SuperAdmin).
+        superAdmin("admin-runt-persona-overrides", "Overrides persona RUNT", "/admin/plataforma/runt-persona-overrides", iconoComo("persona")),
         superAdmin("admin-banners", "Banners", "/admin/banners", iconoComo("megafono")),
         // HU #14074 (Épica #14021) — tarifas, organismos y tipos, parámetros y contenido del portal de Persona Natural.
         // Solo SuperAdmin: la API exige el rol y el permiso `platform.persona_natural.manage` (el SuperAdmin pasa todo);

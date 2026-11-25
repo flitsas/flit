@@ -20,7 +20,7 @@ function failureMessage(err: unknown, ownClient: boolean, fallback: string): str
 
 export interface DomainRegisterFormProps {
   tenantId: string;
-  /** Sufijo del id del campo cuando hay varios formularios en la misma pantalla (p. ej. el portal del OT). */
+  /** Producto del dominio. Sin él, el dominio principal de la red. */
   purpose?: string;
   /** Texto de la etiqueta del campo. */
   label?: string;
@@ -73,7 +73,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
     setSaving(true);
     try {
       const body = { host: trimmed, rowVersion: domain?.rowVersion ?? null };
-      const updated = client ? await client.register(body) : await registerAdminDomain(tenantId, body);
+      const updated = client ? await client.register(body) : await registerAdminDomain(tenantId, body, purpose);
       setHost(updated.host);
       onRegistered(updated);
     } catch (err) {
@@ -87,7 +87,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
     setRemoving(true);
     setFormError(null);
     try {
-      await (client ? client.remove() : removeAdminDomain(tenantId));
+      await (client ? client.remove() : removeAdminDomain(tenantId, purpose));
       setHost("");
       setConfirmingRemove(false);
       onRemoved();
