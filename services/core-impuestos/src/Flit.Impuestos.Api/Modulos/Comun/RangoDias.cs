@@ -24,6 +24,12 @@ internal readonly record struct RangoDias(DateOnly Desde, DateOnly Hasta)
     public const string CodigoFiltroInvalido = "FILTRO_INVALIDO";
     public const string CodigoRangoInvalido = "RANGO_INVALIDO";
 
+    /// <summary>Literal de <c>FILTRO_INVALIDO</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml).</summary>
+    public const string LiteralFiltroInvalido = "Un filtro no es válido.";
+
+    /// <summary>Literal de <c>RANGO_INVALIDO</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml).</summary>
+    public const string LiteralRangoInvalido = "El rango de fechas no es válido.";
+
     public static readonly TimeSpan OffsetColombia = TimeSpan.FromHours(-5);
 
     public int Dias => Hasta.DayNumber - Desde.DayNumber + 1;
@@ -61,8 +67,15 @@ internal readonly record struct RangoDias(DateOnly Desde, DateOnly Hasta)
         return rango;
     }
 
-    public static ReglaException Invalido(string codigo, string mensaje, string campo) =>
-        new(codigo, mensaje, StatusCodes.Status400BadRequest) { Campo = campo };
+    /// <summary>
+    /// El 400 con el literal del contrato para su código: el <c>error</c> es siempre el de <c>x-flit-literales.errores</c> (el front lo
+    /// muestra tal cual). <paramref name="motivo"/> solo documenta la regla en el código; no sale en la respuesta.
+    /// </summary>
+    public static ReglaException Invalido(string codigo, string motivo, string campo)
+    {
+        _ = motivo;
+        return new(codigo, codigo == CodigoRangoInvalido ? LiteralRangoInvalido : LiteralFiltroInvalido, StatusCodes.Status400BadRequest) { Campo = campo };
+    }
 
     private static DateOnly? Dia(IQueryCollection query, string campo)
     {

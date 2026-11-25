@@ -80,6 +80,7 @@ public static class Program
         builder.Services.AddEjecucionImpuestos(builder.Configuration);
         builder.Services.AddLiquidacionesImpuestos();
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
+        Modulos.Reportes.ReportesEndpoints.AddEstadisticasYReportes(builder.Services); // M14: dashboard y reportes
         // M10: webhook del proveedor (anónimo con firma), aplicación del resultado y conciliación (respaldo GET e «Incierto»).
         builder.Services.AddAvisosYConciliacion(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
@@ -143,6 +144,8 @@ public static class Program
         Modulos.Liquidaciones.CerrarLiquidacion.Map(liquidaciones);
         Modulos.Liquidaciones.RelanzarItem.Map(liquidaciones);
         Modulos.Notificaciones.NotificacionesEndpoints.Map(api);
+        Modulos.Estadisticas.EstadisticasEndpoints.Map(api);
+        Modulos.Reportes.ReportesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).

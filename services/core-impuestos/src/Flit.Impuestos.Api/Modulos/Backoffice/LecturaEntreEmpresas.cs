@@ -12,6 +12,7 @@ namespace Flit.Impuestos.Api.Modulos.Backoffice;
 /// <code>
 /// var filas = await lectura.AprovisionamientosAsync(ct);                 // todas las compañías con Impuestos
 /// var (fila, historial) = await lectura.AprovisionamientoAsync(empresa, ct); // una, con su historial (más reciente primero)
+/// var lotes = lectura.LiquidacionesDe(empresas);                           // vista global del dashboard y los reportes (M14)
 /// </code>
 /// </example>
 public sealed class LecturaEntreEmpresas(ImpuestosDb db)
@@ -32,5 +33,38 @@ public sealed class LecturaEntreEmpresas(ImpuestosDb db)
             .OrderByDescending(h => h.En).ThenByDescending(h => h.Id)
             .ToListAsync(ct).ConfigureAwait(false);
         return (fila, historial);
+    }
+
+    /// <summary>
+    /// Vista global del Super Admin (M14, F4-CF5): las cabeceras de <paramref name="empresas"/> (las que ya auditó quien llama, nunca
+    /// otras). Consulta componible y sin seguimiento.
+    /// </summary>
+    public IQueryable<Liquidacion> LiquidacionesDe(IReadOnlyCollection<Guid> empresas)
+    {
+        var ids = Lista(empresas);
+        return db.Set<Liquidacion>().IgnoreQueryFilters().AsNoTracking().Where(l => ids.Contains(l.TenantId));
+    }
+
+    /// <summary>Las placas de <paramref name="empresas"/> (vista global, M14).</summary>
+    public IQueryable<LiquidacionItem> ItemsDe(IReadOnlyCollection<Guid> empresas)
+    {
+        var ids = Lista(empresas);
+        return db.Set<LiquidacionItem>().IgnoreQueryFilters().AsNoTracking().Where(i => ids.Contains(i.TenantId));
+    }
+
+    /// <summary>Las vigencias de <paramref name="empresas"/> (vista global, M14).</summary>
+    public IQueryable<LiquidacionPeriodo> PeriodosDe(IReadOnlyCollection<Guid> empresas)
+    {
+        var ids = Lista(empresas);
+        return db.Set<LiquidacionPeriodo>().IgnoreQueryFilters().AsNoTracking().Where(p => ids.Contains(p.TenantId));
+    }
+
+    /// <summary>El contexto de la petición (para las tablas globales, como la caché de <c>/fuentes</c>).</summary>
+    internal ImpuestosDb Contexto => db;
+
+    private static List<Guid> Lista(IReadOnlyCollection<Guid> empresas)
+    {
+        ArgumentNullException.ThrowIfNull(empresas);
+        return [.. empresas.Where(e => e != Guid.Empty).Distinct()];
     }
 }
