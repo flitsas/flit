@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -49,12 +50,19 @@ public sealed record ReenviarPrevalidacionResult(
 /// <c>Attempts</c>/<c>ReconcilePollCount</c> a 0. NO toca <c>ValidUntil</c> (se estampa solo al aprobar).
 /// Sin límite de reenvíos ni cooldown entre ellos (el guard D10 de HU #10943 se eliminó a pedido del
 /// producto).
+/// <para>
+/// Tope de rondas (configurador GLOBAL, <see cref="IIdentityRoundsPolicy"/>): un reenvío abre la siguiente RONDA de la misma fila, y el
+/// conteo es POR FILA (<c>1 + ResendCount</c>), no por persona ni documento. Con las rondas permitidas agotadas responde
+/// <see cref="IdentityRoundsErrors.LimiteRondasAlcanzado"/> ANTES de tocar la fila o el proveedor; la regla vale para los cuatro
+/// llamadores (reenvío standalone, edición de correo, reenvío admin y portal). Sin política (tests antiguos) no hay tope.
+/// </para>
 /// </summary>
 internal sealed class PrevalidacionResendService(
     IKyverumVerifyClient kyverum,
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
-    IIdentityValidationEventPublisher events)
+    IIdentityValidationEventPublisher events,
+    IIdentityRoundsPolicy? rounds = null)
 {
     /// <summary>HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum (409).</summary>
     internal const string IdentidadManualError = "identidad_manual";
@@ -72,6 +80,10 @@ internal sealed class PrevalidacionResendService(
         // (reenvío standalone, edición de correo y reenvío admin) y corre antes de tocar la fila o el proveedor.
         if (string.Equals(validation.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
             return (IdentidadManualError, false, null, string.Empty);
+
+        // Tope global de rondas: sin cupo no se crea ni se reemite nada (la fila queda intacta).
+        if (rounds is not null && await rounds.IsResendBlockedAsync(validation, ct))
+            return (IdentityRoundsErrors.LimiteRondasAlcanzado, false, null, string.Empty);
 
         return providerOptions.IsKyverum
             ? await ResendKyverumAsync(tenantId, validation, subject, now, ct)
@@ -275,9 +287,10 @@ public sealed class EditarPrevalidacionHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    IIdentityRoundsPolicy? rounds = null)
 {
-    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
+    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
 
     public async Task<(EditarPrevalidacionResult? Result, string? Error, int? CooldownMinutos)> HandleAsync(
         Guid tenantId,
@@ -432,9 +445,10 @@ public sealed class ReenviarPrevalidacionHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    IIdentityRoundsPolicy? rounds = null)
 {
-    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
+    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
 
     public async Task<(ReenviarPrevalidacionResult? Result, string? Error, int? CooldownMinutos)> HandleAsync(
         Guid tenantId,

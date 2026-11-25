@@ -1,6 +1,7 @@
 using Flit.Api.Authorization;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
@@ -570,6 +571,9 @@ internal static class BiometricaEndpoints
                 "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                // Configurador global de rondas: la fila ya usó todas las rondas permitidas.
+                IdentityRoundsErrors.LimiteRondasAlcanzado => Results.Problem(statusCode: 409, title: IdentityRoundsErrors.LimiteRondasAlcanzado,
+                    detail: IdentityRoundsErrors.LimiteRondasAlcanzadoMensaje),
                 "identidad_manual" => Results.Problem(statusCode: 409, title: "identidad_manual",
                     detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
@@ -612,6 +616,9 @@ internal static class BiometricaEndpoints
                 "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                // Configurador global de rondas: la fila ya usó todas las rondas permitidas.
+                IdentityRoundsErrors.LimiteRondasAlcanzado => Results.Problem(statusCode: 409, title: IdentityRoundsErrors.LimiteRondasAlcanzado,
+                    detail: IdentityRoundsErrors.LimiteRondasAlcanzadoMensaje),
                 "identidad_manual" => Results.Problem(statusCode: 409, title: "identidad_manual",
                     detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",

@@ -224,6 +224,10 @@ public static class DependencyInjection
         // Punto único de aplicación del resultado (webhook + reconciliación) y reconciliación por consulta
         // (fallback cuando el webhook se pierde): desatasca validaciones colgadas consultando a Kyverum.
         services.AddScoped<Identity.IdentityValidationResultApplier>();
+        // Configurador GLOBAL de rondas de identidad: tope de reenvíos (por fila) y alerta por correo al rechazo terminal.
+        services.AddScoped<Identity.Rounds.IIdentityRoundsPolicy, Identity.Rounds.IdentityRoundsPolicy>();
+        services.AddScoped<UseCases.IdentityRounds.GetIdentityRoundsConfigHandler>();
+        services.AddScoped<UseCases.IdentityRounds.UpdateIdentityRoundsConfigHandler>();
         services.AddScoped<ReconciliarIdentidadHandler>();
 
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los

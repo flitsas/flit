@@ -13835,6 +13835,71 @@ paths:
                 properties:
                   code: { type: string, example: HIERARCHY_SWITCH_NOT_FOUND }
 
+  # ── Admin · Plataforma · Rondas de validación de identidad (configurador GLOBAL) ──
+  /api/v1/admin/platform/identity-rounds:
+    get:
+      operationId: adminIdentityRoundsGet
+      tags: ["Admin · Plataforma · Rondas de identidad"]
+      security:
+        - bearerAuth: []
+      summary: "Configuración global de rondas de validación de identidad"
+      description: >
+        Fila única, global (no por empresa). Por defecto: 3 rondas, `al_maximo`, sin correos. Una ronda es una
+        validación con hasta 3 intentos de Kyverum en el mismo enlace; un reenvío abre la siguiente ronda y el
+        conteo es por fila de validación (`1 + reenvíos`). Requiere el permiso `identity_rounds.manage`, sembrado
+        solo para el Super Admin FLIT.
+      responses:
+        "200":
+          description: "Configuración vigente."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityRoundsConfig"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso `identity_rounds.manage`." }
+    put:
+      operationId: adminIdentityRoundsPut
+      tags: ["Admin · Plataforma · Rondas de identidad"]
+      security:
+        - bearerAuth: []
+      summary: "Guarda la configuración global de rondas de validación de identidad"
+      description: >
+        Al alcanzar el máximo, los reenvíos (admin, prevalidación y portal) responden 409 `limite_rondas_alcanzado`.
+        Cuando una ronda cierra en rechazo y el disparador lo pide, se envía una alerta por correo a `correosAlerta`
+        (una por ronda como máximo). Cada cambio queda en la auditoría de Plataforma (quién, cuándo, valores
+        anterior y nuevo).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveIdentityRoundsConfigRequest"
+      responses:
+        "200":
+          description: "Configuración guardada (correos normalizados)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityRoundsConfig"
+        "400":
+          description: >
+            Validación por campo en `errors`: `rondasMaximas` (1 a 10), `disparadorAlerta`, `correosAlerta`
+            (formato, repetidos, máximo 20).
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  title: { type: string }
+                  status: { type: integer }
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: string }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso `identity_rounds.manage`." }
+
   # ── Admin · Plataforma · Contingencia RUNT (Épica #14644, Feature #14645, HU #14648) ──
   /api/v1/admin/platform/runt-contingency:
     get:
@@ -23899,6 +23964,31 @@ components:
       required: [items, totalCount]
 
     # ── Admin · Plataforma · Jerarquía de clientes (HU #12323) ──────────────────
+    IdentityRoundsConfig:
+      type: object
+      required: [rondasMaximas, disparadorAlerta, correosAlerta]
+      properties:
+        rondasMaximas: { type: integer, minimum: 1, maximum: 10, example: 3 }
+        disparadorAlerta:
+          type: string
+          enum: [al_maximo, cada_ronda]
+          description: "`al_maximo`: alerta solo cuando la ronda rechazada es la última permitida. `cada_ronda`: en cualquier ronda rechazada."
+        correosAlerta:
+          type: array
+          maxItems: 20
+          items: { type: string, format: email }
+          description: "Correos válidos, sin repetir, normalizados a minúsculas."
+    SaveIdentityRoundsConfigRequest:
+      type: object
+      required: [rondasMaximas, disparadorAlerta]
+      properties:
+        rondasMaximas: { type: integer, minimum: 1, maximum: 10 }
+        disparadorAlerta: { type: string, enum: [al_maximo, cada_ronda] }
+        correosAlerta:
+          type: array
+          maxItems: 20
+          nullable: true
+          items: { type: string }
     RuntContingencyItem:
       type: object
       required: [kind, provider, reason, updatedByName, updatedAt]

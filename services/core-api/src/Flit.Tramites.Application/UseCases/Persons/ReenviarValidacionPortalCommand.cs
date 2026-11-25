@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -17,7 +18,7 @@ public sealed record ReenviarValidacionPortalResult(BiometricValidationDto Valid
 /// nuevo, el enlace sale a ese correo (correo sincronizado). Una aprobada no se reenvía. Los topes del portal (5 reenvíos y
 /// 60 s entre uno y otro) los aplica el BFF, que es quien cuenta los reenvíos de su solicitud.
 /// Errores: <c>not_found</c>, <c>identidad_aprobada</c>, <c>identidad_manual</c>, <c>proveedor_error</c>,
-/// <c>validacion_en_curso</c> (carrera con el índice único).
+/// <c>validacion_en_curso</c> (carrera con el índice único), <c>limite_rondas_alcanzado</c> (tope global de rondas, contado por fila).
 /// </summary>
 public sealed class ReenviarValidacionPortalHandler(
     IProcedureInstanceRepository repo,
@@ -25,9 +26,10 @@ public sealed class ReenviarValidacionPortalHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    IIdentityRoundsPolicy? rounds = null)
 {
-    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
+    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
 
     public async Task<(ReenviarValidacionPortalResult? Result, string? Error)> HandleAsync(
         Guid tenantId,

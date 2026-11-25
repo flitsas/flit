@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -104,7 +105,8 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
     IIdentityValidationAuditLog audit,
-    IniciarKyverumVerifyHandler kyverumVerify)
+    IniciarKyverumVerifyHandler kyverumVerify,
+    IIdentityRoundsPolicy? rounds = null)
 {
     /// <summary>Tipo del evento PROPIO de bitácora del trámite (historial visible en el dashboard admin).</summary>
     public const string EventoTipo = "reenvio_validacion_admin";
@@ -124,7 +126,7 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
     /// </summary>
     private const string RevocadoPendienteHu12165 = "revocado";
 
-    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
+    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
 
     public async Task<(AdminReenviarValidacionIdentidadResult? Result, string? Error, string? ErrorDetail, int? CooldownMinutos)> HandleAsync(
         AdminReenviarValidacionIdentidadCommand command,
