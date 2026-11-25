@@ -26,6 +26,20 @@ import {
   vistaDuplicado,
   textoCorreoAlAsociar,
   avisosAlAsociar,
+  avisoLoteEncolado,
+  avisoSinAvanceLote,
+  cerrarResumenLote,
+  colaReemplazos,
+  type LoteEnCurso,
+  resumenLoteCerrado,
+  textoAvanceLote,
+  textosResumenLote,
+  etiquetaAsociarLote,
+  leerCola,
+  resumenCola,
+  siguienteEnCola,
+  textosVistaPreviaLote,
+  urlCola,
   esEstadoFinalDocumento,
   vistaPorContentType,
   ESTADO_DOCUMENTO,
@@ -334,5 +348,147 @@ describe("estados finales del documento", () => {
   it("Asociado, Registrado y Descartado son de solo lectura; el resto sigue en revisión", () => {
     for (const e of ["Asociado", "Registrado", "Descartado"]) expect(esEstadoFinalDocumento(e)).toBe(true);
     for (const e of ["Completo", "Incompleto", "Duplicado", "Fallido", "EnCola"]) expect(esEstadoFinalDocumento(e)).toBe(false);
+  });
+});
+
+describe("asociar en lote (GDC-EVID §9)", () => {
+  const vista = (o: Partial<import("@/lib/ocr").VistaPreviaLote> = {}) => ({
+    asociables: 12,
+    correos: { saldran: 10, conductores: 7, omitidos: [{ motivo: "El conductor no tiene correo registrado", cantidad: 2 }] },
+    porRevisar: { reemplazos: 3, numeroDistinto: 1 },
+    ...o,
+  });
+
+  it("botón y textos de la vista previa, con singulares", () => {
+    expect(etiquetaAsociarLote(12)).toBe("Asociar los 12");
+    expect(etiquetaAsociarLote(1)).toBe("Asociar el documento");
+    const t = textosVistaPreviaLote(vista());
+    expect(t.documentos).toBe("Se asociarán 12 documentos a sus comparendos.");
+    expect(t.correos).toBe("Saldrán 10 correos a 7 conductores (cada conductor recibe uno por comparendo).");
+    expect(t.porRevisar).toEqual([
+      "Quedan 3 reemplazos para revisar uno por uno.",
+      "1 documento tiene el número distinto al del sistema: se revisa uno por uno.",
+    ]);
+    const uno = textosVistaPreviaLote(vista({ asociables: 1, correos: { saldran: 1, conductores: 1, omitidos: [] }, porRevisar: { reemplazos: 1, numeroDistinto: 0 } }));
+    expect(uno.documentos).toBe("Se asociará 1 documento a su comparendo.");
+    expect(uno.correos).toBe("Saldrá 1 correo a 1 conductor (cada conductor recibe uno por comparendo).");
+    expect(uno.porRevisar).toEqual(["Queda 1 reemplazo para revisar uno por uno."]);
+    expect(textosVistaPreviaLote(vista({ correos: { saldran: 0, conductores: 0, omitidos: [] }, porRevisar: { reemplazos: 0, numeroDistinto: 0 } }))).toMatchObject({
+      correos: "No saldrá ningún correo al conductor.",
+      porRevisar: [],
+    });
+  });
+
+});
+
+describe("lote en segundo plano (GDC-EVID §10)", () => {
+  const lote = (o: Partial<LoteEnCurso> = {}): LoteEnCurso => ({
+    loteId: "l1",
+    porAsociar: 36,
+    total: 48,
+    asociados: 12,
+    noAsociados: [],
+    correosEnCamino: 11,
+    sinCorreo: [],
+    solicitadoPor: "admin@empresa.local",
+    solicitadoEn: "2026-11-25T15:00:00Z",
+    terminadoEn: null,
+    ...o,
+  });
+
+  it("aviso al encolar y avance de la franja", () => {
+    expect(avisoLoteEncolado(48)).toBe("Asociando 48 documentos en segundo plano; puedes seguir trabajando.");
+    expect(avisoLoteEncolado(1)).toBe("Asociando 1 documento en segundo plano; puedes seguir trabajando.");
+    expect(textoAvanceLote(lote())).toBe("Asociando 12 de 48…");
+    expect(textoAvanceLote(lote({ porAsociar: 60 }))).toBe("Asociando 0 de 48…");
+  });
+
+  it("resumen: asociados y correos en camino, con singulares; sin correos no hay línea", () => {
+    expect(textosResumenLote(lote({ porAsociar: 0, asociados: 47, correosEnCamino: 45 }))).toEqual({
+      titulo: "Se asociaron 47 documentos a sus comparendos.",
+      correos: "45 correos con el documento van en camino a los conductores.",
+    });
+    expect(textosResumenLote(lote({ porAsociar: 0, asociados: 1, correosEnCamino: 1 }))).toEqual({
+      titulo: "Se asoció 1 documento a su comparendo.",
+      correos: "1 correo con el documento va en camino al conductor.",
+    });
+    expect(textosResumenLote(lote({ porAsociar: 0, correosEnCamino: 0 })).correos).toBeNull();
+  });
+
+  it("el resumen cerrado se recuerda por lote; si el almacenamiento falla, se muestra igual y no rompe", () => {
+    window.localStorage.clear();
+    expect(resumenLoteCerrado("l1")).toBe(false);
+    cerrarResumenLote("l1");
+    expect(resumenLoteCerrado("l1")).toBe(true);
+    expect(resumenLoteCerrado("l2")).toBe(false);
+    // Navegador con el almacenamiento bloqueado: acceder a localStorage lanza.
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("bloqueado");
+      },
+    });
+    try {
+      expect(resumenLoteCerrado("l1")).toBe(false);
+      expect(() => cerrarResumenLote("l3")).not.toThrow();
+    } finally {
+      Object.defineProperty(window, "localStorage", original);
+    }
+    expect(resumenLoteCerrado("l1")).toBe(true);
+  });
+});
+
+describe("cola de reemplazos (GDC-EVID §9)", () => {
+  const docs = [
+    { id: "a", estado: "Duplicado", revision: "reemplazo" as const },
+    { id: "b", estado: "Duplicado", revision: null },
+    { id: "c", estado: "Asociado", revision: "reemplazo" as const },
+    { id: "d", estado: "Duplicado", revision: "numeroDistinto" as const },
+    { id: "e", estado: "Duplicado", revision: "reemplazo" as const },
+  ];
+
+  it("solo los reemplazos pendientes, en el orden del listado", () => {
+    expect(colaReemplazos(docs)).toEqual(["a", "e"]);
+  });
+
+  it("la URL lleva el avance y se lee de vuelta", () => {
+    const paso = { paquete: "p1", hechos: 1, total: 7, reemplazados: 1, descartados: 0 };
+    const url = urlCola("e", paso);
+    expect(url.startsWith("/ocr/documentos/e?")).toBe(true);
+    expect(leerCola(new URLSearchParams(url.split("?")[1]))).toEqual(paso);
+    expect(leerCola(new URLSearchParams("paquete=p1"))).toBeNull();
+    expect(leerCola(new URLSearchParams("cola=reemplazos"))).toBeNull();
+    expect(leerCola(new URLSearchParams("cola=reemplazos&paquete=p1&hechos=-3&total=x"))).toEqual({ paquete: "p1", hechos: 0, total: 1, reemplazados: 0, descartados: 0 });
+  });
+
+  it("al decidir pasa al siguiente (total recalculado) y al final vuelve al paquete con el resumen", () => {
+    const paso = { paquete: "p1", hechos: 0, total: 2, reemplazados: 0, descartados: 0 };
+    const sig = siguienteEnCola(["a", "e"], "a", paso, "reemplazado");
+    expect(leerCola(new URLSearchParams(sig.split("?")[1]))).toEqual({ paquete: "p1", hechos: 1, total: 2, reemplazados: 1, descartados: 0 });
+    expect(sig.startsWith("/ocr/documentos/e?")).toBe(true);
+    const fin = siguienteEnCola(["e"], "e", { ...paso, hechos: 1, reemplazados: 1 }, "descartado");
+    expect(fin).toBe("/ocr/paquetes/p1?cola=terminada&reemplazados=1&descartados=1");
+    expect(resumenCola(new URLSearchParams(fin.split("?")[1]))).toBe("Terminaste la revisión de reemplazos: 1 reemplazado y 1 descartado.");
+    expect(resumenCola(new URLSearchParams("cola=terminada&reemplazados=5&descartados=0"))).toBe("Terminaste la revisión de reemplazos: 5 reemplazados.");
+    expect(resumenCola(new URLSearchParams(""))).toBeNull();
+  });
+});
+
+describe("lote estancado (GDC-EVID §10)", () => {
+  const base = {
+    loteId: "l1", porAsociar: 10, total: 20, asociados: 10, noAsociados: [], correosEnCamino: 10, sinCorreo: [],
+    solicitadoPor: null, solicitadoEn: "2026-11-25T15:00:00Z", terminadoEn: null,
+  };
+  const ahora = Date.parse("2026-11-25T15:30:00Z");
+  const hace = (min: number) => new Date(ahora - min * 60000).toISOString();
+
+  it("más de 5 minutos en curso: avisa con los minutos; 5 o menos, sin campo, fecha inválida o terminado: null", () => {
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(6) }, ahora)).toBe("Sin avance desde hace 6 minutos; se retomará automáticamente.");
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(5) }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(4) }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote(base, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: "no es fecha" }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, porAsociar: 0, ultimoAvanceEn: hace(30) }, ahora)).toBeNull();
   });
 });

@@ -87,6 +87,8 @@ export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> 
   Duplicado: { texto: "Duplicado", clase: "bg-[var(--badge-purple-bg)] text-[var(--badge-purple-fg)]" },
   Registrado: { texto: "Registrado", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)] font-semibold" },
   Asociado: { texto: "Asociado", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)] font-semibold" },
+  // §10: encolado en un lote; el trabajador de fondo lo asocia. Solo lectura mientras tanto.
+  PorAsociar: { texto: "Asociando", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]" },
   Descartado: { texto: "Descartado", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] opacity-70" },
 };
 
@@ -384,6 +386,8 @@ export interface DocumentoPaquete {
   /** GDC punto 14: el número tiene aviso y nadie lo ha corregido ni confirmado; no se registra. */
   numeroPorConfirmar?: boolean;
   reprocesos?: number;
+  /** GDC-EVID §9: por qué el documento no entra en «Asociar los N» y se revisa uno por uno. */
+  revision?: "reemplazo" | "numeroDistinto" | null;
 }
 
 /**
@@ -484,4 +488,176 @@ export function resumenEvaluacion(e: EvaluacionPrompt): string | null {
 /** La versión a la que se vuelve: la última que dejó de estar publicada. */
 export function versionAnterior<T extends { publicada: boolean; retiradaEn: string | null }>(versiones: T[]): T | null {
   return versiones.filter((v) => !v.publicada && v.retiradaEn).reduce<T | null>((mejor, v) => (!mejor || v.retiradaEn! > mejor.retiradaEn! ? v : mejor), null);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// GDC-EVID §9: asociar en lote («Asociar los N») y cola de revisión de reemplazos.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Vista previa del lote (`GET /ocr/paquetes/{id}/asociacion-lote`). La preselección la hace el servidor. */
+export interface VistaPreviaLote {
+  asociables: number;
+  correos: { saldran: number; conductores: number; omitidos: { motivo: string; cantidad: number }[] };
+  porRevisar: { reemplazos: number; numeroDistinto: number };
+  /** §10: el último lote del paquete (null si nunca hubo). */
+  enCurso?: LoteEnCurso | null;
+}
+
+/** Último lote del paquete: avance mientras `porAsociar > 0` y, al terminar, el resumen. */
+export interface LoteEnCurso {
+  loteId: string;
+  porAsociar: number;
+  total: number;
+  asociados: number;
+  noAsociados: { documentoId: string; nombreArchivo: string; motivo: string | null }[];
+  correosEnCamino: number;
+  sinCorreo: { motivo: string | null; cantidad: number }[];
+  solicitadoPor: string | null;
+  solicitadoEn: string;
+  terminadoEn: string | null;
+  /** Último documento procesado (o solicitadoEn si aún ninguno). Aditivo: puede no venir. */
+  ultimoAvanceEn?: string | null;
+}
+
+const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios.replace("{n}", String(n)));
+
+/** Etiqueta del botón primario del paquete. */
+export const etiquetaAsociarLote = (n: number) => plural(n, "Asociar el documento", "Asociar los {n}");
+
+/** Textos del modal de confirmación, a partir de la vista previa del servidor. */
+export function textosVistaPreviaLote(v: VistaPreviaLote): { documentos: string; correos: string; porRevisar: string[] } {
+  const { saldran, conductores } = v.correos;
+  const correos =
+    saldran === 0
+      ? "No saldrá ningún correo al conductor."
+      : `${plural(saldran, "Saldrá 1 correo", "Saldrán {n} correos")} a ${plural(conductores, "1 conductor", "{n} conductores")} (cada conductor recibe uno por comparendo).`;
+  const porRevisar: string[] = [];
+  if (v.porRevisar.reemplazos > 0)
+    porRevisar.push(plural(v.porRevisar.reemplazos, "Queda 1 reemplazo para revisar uno por uno.", "Quedan {n} reemplazos para revisar uno por uno."));
+  if (v.porRevisar.numeroDistinto > 0)
+    porRevisar.push(
+      plural(v.porRevisar.numeroDistinto, "1 documento tiene el número distinto al del sistema: se revisa uno por uno.", "{n} documentos tienen el número distinto al del sistema: se revisan uno por uno."),
+    );
+  return { documentos: plural(v.asociables, "Se asociará 1 documento a su comparendo.", "Se asociarán {n} documentos a sus comparendos."), correos, porRevisar };
+}
+
+/** Respuesta de `POST /ocr/paquetes/{id}/asociar-lote` (§10): el servidor encola y un trabajador asocia en segundo plano. */
+export interface LoteEncolado {
+  encolados: number;
+  /** null cuando no encoló nada (doble clic o nada elegible): no se crea lote. */
+  loteId: string | null;
+}
+
+/** Aviso tras confirmar: el lote ya no se espera frente a un modal. */
+export const avisoLoteEncolado = (n: number) => `${plural(n, "Asociando 1 documento", "Asociando {n} documentos")} en segundo plano; puedes seguir trabajando.`;
+
+/** Si el POST no encoló nada y tampoco hay un lote del paquete que mostrar en la franja. */
+export const AVISO_SIN_DOCUMENTOS_LOTE = "No había documentos por asociar.";
+
+/** Texto de la franja mientras el lote avanza (procesados = los que ya no están por asociar). */
+export function textoAvanceLote(l: LoteEnCurso): string {
+  const hechos = Math.max(0, l.total - l.porAsociar);
+  return `Asociando ${hechos} de ${l.total}…`;
+}
+
+/** Resumen del último lote, cuando terminó. */
+export function textosResumenLote(l: LoteEnCurso): { titulo: string; correos: string | null } {
+  const titulo = plural(l.asociados, "Se asoció 1 documento a su comparendo.", "Se asociaron {n} documentos a sus comparendos.");
+  const correos =
+    l.correosEnCamino === 0
+      ? null
+      : plural(l.correosEnCamino, "1 correo con el documento va en camino al conductor.", "{n} correos con el documento van en camino a los conductores.");
+  return { titulo, correos };
+}
+
+/** El servidor garantiza motivo; si algún día llega nulo o vacío, la franja no muestra «null» ni un hueco. */
+export const motivoLote = (m: string | null | undefined) => m?.trim() || "Sin motivo registrado";
+
+/** Minutos sin avance a partir de los cuales la franja lo avisa. */
+export const MINUTOS_SIN_AVANCE_AVISO = 5;
+
+/**
+ * Si el lote sigue en curso y lleva más de 5 minutos sin procesar un documento, el aviso para la franja (el servidor lo
+ * retoma solo). Sin `ultimoAvanceEn`, terminado o con fecha inválida: null.
+ */
+export function avisoSinAvanceLote(l: LoteEnCurso, ahora: number = Date.now()): string | null {
+  if (l.porAsociar <= 0 || !l.ultimoAvanceEn) return null;
+  const desde = Date.parse(l.ultimoAvanceEn);
+  if (Number.isNaN(desde)) return null;
+  const minutos = Math.floor((ahora - desde) / 60000);
+  if (minutos <= MINUTOS_SIN_AVANCE_AVISO) return null;
+  return `Sin avance desde hace ${minutos} minutos; se retomará automáticamente.`;
+}
+
+const CLAVE_RESUMEN_CERRADO = "comparendos.ocr.lote-resumen-cerrado:";
+
+/** ¿La gestora ya cerró el resumen de este lote? (por navegador; si el almacenamiento falla, se muestra). */
+export function resumenLoteCerrado(loteId: string): boolean {
+  try {
+    return window.localStorage.getItem(CLAVE_RESUMEN_CERRADO + loteId) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function cerrarResumenLote(loteId: string): void {
+  try {
+    window.localStorage.setItem(CLAVE_RESUMEN_CERRADO + loteId, "1");
+  } catch {
+    // Sin almacenamiento (privado, bloqueado): el resumen se cierra en esta vista y vuelve a salir al recargar.
+  }
+}
+
+/** Documentos del paquete que esperan revisión de reemplazo, en el orden del listado. */
+export function colaReemplazos(docs: { id: string; estado: string; revision?: DocumentoPaquete["revision"] }[]): string[] {
+  return docs.filter((d) => d.revision === "reemplazo" && d.estado === "Duplicado").map((d) => d.id);
+}
+
+/** Dónde va la revisión de reemplazos: viaja en la URL del documento (`?cola=reemplazos&paquete=…`). */
+export interface PasoCola {
+  paquete: string;
+  hechos: number;
+  total: number;
+  reemplazados: number;
+  descartados: number;
+}
+
+const entero = (v: string | null) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+};
+
+export function leerCola(q: URLSearchParams): PasoCola | null {
+  const paquete = q.get("paquete");
+  if (q.get("cola") !== "reemplazos" || !paquete) return null;
+  const hechos = entero(q.get("hechos"));
+  return { paquete, hechos, total: Math.max(entero(q.get("total")), hechos + 1), reemplazados: entero(q.get("reemplazados")), descartados: entero(q.get("descartados")) };
+}
+
+export function urlCola(documentoId: string, c: PasoCola): string {
+  const q = new URLSearchParams({ cola: "reemplazos", paquete: c.paquete, hechos: String(c.hechos), total: String(c.total), reemplazados: String(c.reemplazados), descartados: String(c.descartados) });
+  return `/ocr/documentos/${documentoId}?${q.toString()}`;
+}
+
+/**
+ * Tras reemplazar, descartar o saltar el actual (saltar: ya no estaba por revisar, p. ej. otra persona lo resolvió): el siguiente pendiente (el total se recalcula con lo que queda, por si otra
+ * persona avanzó la cola) o, si no queda ninguno, el paquete con el resumen.
+ */
+export function siguienteEnCola(pendientes: string[], actual: string, c: PasoCola, decision: "reemplazado" | "descartado" | "saltado"): string {
+  const hechos = c.hechos + 1;
+  const reemplazados = c.reemplazados + (decision === "reemplazado" ? 1 : 0);
+  const descartados = c.descartados + (decision === "descartado" ? 1 : 0);
+  const resto = pendientes.filter((p) => p !== actual);
+  if (resto.length > 0) return urlCola(resto[0], { paquete: c.paquete, hechos, total: hechos + resto.length, reemplazados, descartados });
+  const q = new URLSearchParams({ cola: "terminada", reemplazados: String(reemplazados), descartados: String(descartados) });
+  return `/ocr/paquetes/${c.paquete}?${q.toString()}`;
+}
+
+/** Resumen al volver al paquete. */
+export function resumenCola(q: URLSearchParams): string | null {
+  if (q.get("cola") !== "terminada") return null;
+  const r = entero(q.get("reemplazados"));
+  const d = entero(q.get("descartados"));
+  const partes = [r ? plural(r, "1 reemplazado", "{n} reemplazados") : null, d ? plural(d, "1 descartado", "{n} descartados") : null].filter(Boolean);
+  return `Terminaste la revisión de reemplazos${partes.length ? `: ${partes.join(" y ")}` : ""}.`;
 }
