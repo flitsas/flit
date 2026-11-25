@@ -633,7 +633,9 @@ export function OtMandatosSection({
               documentNumber: input.documentNumber,
               email: input.email,
               companyTenantIds: editingSigner.companyTenantIds,
-              transitOfficeIds: [transitOfficeId],
+              // Sin lista de organismos: el backend conserva los que ya tiene. Mandar solo este organismo
+              // reemplazaba el conjunto y, con Super Admin, retiraba al mandatario de todos los demás.
+              transitOfficeIds: undefined,
               // Solo el mandatario del propio OT gestiona aquí su firma del baúl (el formulario no la manda para otros).
               signatureVaultId: input.signatureVaultId ?? undefined,
               signerModel: input.signerModel,

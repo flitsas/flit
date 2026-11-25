@@ -17,7 +17,9 @@ internal static class ConsultationConfigValidator
     {
         ["vehicle_vin"] = ["kyverum_runt", "verifik"],
         ["vehicle_plate"] = ["kyverum_runt", "verifik"],
-        ["conductor"] = ["kyverum_runt_conductor", "verifik_conductor"],
+        // HU #14642: tenant_manual_conductor es un proveedor local (cortocircuito en core-api),
+        // incluido para que la config del tenant pueda ponerlo como primario explícito.
+        ["conductor"] = ["tenant_manual_conductor", "kyverum_runt_conductor", "verifik_conductor"],
     };
 
     /// <summary>

@@ -240,17 +240,43 @@ public sealed class AdminCargarDocumentoBug14604Tests
     }
 
     [Fact]
-    public async Task TipoMultiple_Otro_AnadeSinRetirarNada()
+    public async Task TipoMultiple_Otro_TambienReemplaza_NoAcumulaEnElConsolidado()
     {
+        // Novedad QA 2026-11-19: "Otros documentos" es tipo «bolsa» para la subida del gestor (añade sin
+        // retirar, Bug #14570), pero «Actualizar documento» del admin siempre reemplaza, sin importar el
+        // tipo — el modal le promete al admin «El documento actual quedará como versión anterior» para
+        // cualquier tipo. No choca con #14570: esa bolsa visible solo gobierna UploadAttachmentHandler.
         var existente = Adjunto("otro");
         var instance = Instance(TramiteEstado.Aprobado, existente);
 
         var (result, error) = await Handler().HandleAsync(_id, _tenant, Input(tipo: "otro"), _userId, _ct);
 
         error.Should().BeNull();
-        result!.PreviousAttachmentIds.Should().BeEmpty();
+        result!.PreviousAttachmentIds.Should().ContainSingle().Which.Should().Be(existente.Id);
+        existente.IsHistorico.Should().BeTrue();
+        instance.Attachments.Count(a => a.Tipo == "otro" && !a.IsHistorico).Should().Be(1);
+        // El histórico queda excluido del consolidado (Efectivos() lo filtra porque ya hay un vigente de ese tipo).
+        instance.AdjuntosEfectivos().Count(a => a.Tipo == "otro").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TipoMultiple_SubidaDelGestor_SigueAcumulandoSinRetirarNada()
+    {
+        // La regla «bolsa» (AttachmentRules.TiposMultiples, Bug #14570) NO cambia para el flujo del
+        // gestor: solo el admin reemplaza. UploadAttachmentHandler nunca marca histórico a nada, y los
+        // varios "otro" vigentes siguen siendo efectivos (van todos al consolidado, como siempre).
+        var existente = Adjunto("otro");
+        var instance = Instance(TramiteEstado.Borrador, existente);
+        var upload = new UploadAttachmentHandler(_repo, _storage);
+
+        var (dto, error) = await upload.HandleAsync(
+            _id, _tenant, new UploadAttachmentInput("otro", "nuevo.pdf", "application/pdf", 10, new MemoryStream([1, 2, 3])), _userId, _ct);
+
+        error.Should().BeNull();
+        dto!.IsHistorico.Should().BeFalse();
         existente.IsHistorico.Should().BeFalse();
         instance.Attachments.Count(a => a.Tipo == "otro" && !a.IsHistorico).Should().Be(2);
+        instance.AdjuntosEfectivos().Count(a => a.Tipo == "otro").Should().Be(2);
     }
 
     [Fact]

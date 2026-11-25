@@ -6,6 +6,7 @@ using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
@@ -86,6 +87,8 @@ public static class Program
         builder.Services.AddRedactorDictamen(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
+        // Contrato ia-consumo v1 (ADR-0090): cada llamada del redactor queda en diagnostico.ia_consumo_log.
+        builder.Services.AddFlitIaConsumo<DiagnosticoDb>(builder.Configuration, aplicativo: "flit", servicio: "core-diagnostico");
         builder.Services.AddExceptionHandler<ManejadorReglas>();
         builder.Services.AddProblemDetails();
         AddTokensDeServicio(builder.Services, builder.Configuration);

@@ -135,9 +135,6 @@ export const OT_ARTICLES: ManualArticle[] = [
       "por aprobar",
       "por preasignar",
       "transformaciones",
-      "linea de tiempo",
-      "modificaciones",
-      "borrador",
     ],
     summary: "Revisar, filtrar y decidir trámites radicados por compañías cliente; asignar, corregir y liberar placas.",
     blocks: [
@@ -172,9 +169,8 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "3. Revisión y decisión",
         paragraphs: [
           "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
-          "«Línea de Tiempo del Trámite», o el chip de estado, muestra cada cambio en tarjetas, también lo ocurrido cuando el trámite todavía estaba en borrador. El título de la tarjeta es el dato. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. Dentro van gestor, correo, empresa, rol, fecha y hora de Colombia, y el detalle con el valor anterior y el nuevo. La de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice. Solo lo ves en un trámite que ya puedes abrir: un borrador que no te corresponde no llega a esta bandeja.",
           "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
-          "Si el equipo FLIT actualizó un documento, en la línea de tiempo verás «Documento actualizado por el administrador» con la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». En los documentos del trámite, el reemplazado aparece como «Versión anterior».",
+          "Si el equipo FLIT actualizó un documento, en los documentos del trámite el reemplazado aparece como «Versión anterior» y el nuevo es el que cuenta.",
           "Los documentos y el consolidado se abren en una pestaña nueva del navegador, a pantalla completa; el documento que abres queda marcado como revisado igual que antes. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar».",
         ],
         bullets: [
@@ -277,8 +273,6 @@ export const OT_ARTICLES: ManualArticle[] = [
       "permisos individuales",
       "fuera de tu tope",
       "auditoria de permisos",
-      "filtrar usuarios",
-      "buscar usuario",
       "clientes que gestiona",
       "clientes especificos",
       "todos los clientes",
@@ -364,7 +358,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "auditoria-permisos",
         title: "5. Auditoría de permisos",
         paragraphs: [
-          "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas, con buscador, selectores de perfil, rol y estado, un embudo en cada columna para filtrarla, y el botón «Invitar usuario»; ver «Tablas: cómo leerlas y moverte entre páginas») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+          "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
           "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
         ],
       },
@@ -770,229 +764,6 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "3. Llaves operativas del organismo",
         paragraphs: [
           "Interruptores de comportamiento propios del organismo (por ejemplo, exigencias en la decisión). Se activan y desactivan aquí y quedan registrados; documenta el motivo antes de cambiar una llave que no reconozcas, porque el organismo la siente en su bandeja sin saber que cambió.",
-        ],
-      },
-    ],
-  },
-  {
-    slug: "2-ot/14-portal-persona-natural",
-    title: "Portal Persona Natural del organismo: reportes, cobro, diseño y dominios",
-    audience: "Organismo de Tránsito",
-    sectionId: "ot",
-    keywords: [
-      "portal persona natural",
-      "punto de atencion",
-      "marca blanca",
-      "logo del portal",
-      "colores del portal",
-      "banner del portal",
-      "banners del portal",
-      "varios banners",
-      "publicar diseno",
-      "retirar diseno",
-      "precios del portal",
-      "medios de pago",
-      "pasarela de pago",
-      "pin en caja",
-      "valor del tramite",
-      "valor de la gestion",
-      "reportes del portal",
-      "descargar excel portal",
-      "dominio propio",
-      "varios dominios",
-      "dominio principal",
-      "comprobar dominio",
-      "registros dns",
-      "enlace y qr",
-      "caja",
-      "usuarios de caja",
-      "cobros de caja",
-      "anular cobro",
-    ],
-    summary:
-      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, maneja su caja, le pone su marca y lo publica en sus propios dominios.",
-    blocks: [
-      {
-        id: "entrada",
-        title: "1. Dónde está",
-        paragraphs: [
-          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene cuatro secciones: «Reportes», «Cobro», «Caja» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
-          "Los cambios de cobro, de diseño publicado y de dominios llegan al portal sin pasos adicionales: quien lo abra después del cambio ya lo ve. Un trámite ya radicado conserva el valor con el que se radicó.",
-        ],
-      },
-      {
-        id: "reportes",
-        title: "2. Reportes",
-        paragraphs: [
-          "«Trámites del portal Persona Natural» lista los trámites que llegaron por el portal de tu organismo, con su canal, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Solo ves los de tu organismo.",
-          "Filtra por los campos de la barra y descarga el resultado en Excel: el archivo trae las mismas filas y columnas que ves en pantalla. Si nada coincide, verás «No hay trámites del portal en FLIT 2.0 con esos filtros.».",
-        ],
-      },
-      {
-        id: "cobro",
-        title: "3. Cobro: medios de pago y precios",
-        paragraphs: [
-          "La subpestaña «Cobro» tiene dos pasos, que ves como pestañas: «1 · Precios» (cuánto cuesta cada trámite) y «2 · Medios de pago» (en qué medio se cobra). Empieza por el paso 1 y sigue con el 2; solo ves una tabla a la vez.",
-          "«Medios de pago» (paso 2) muestra una tarjeta por medio («Pasarela de pago» y «PIN en caja») con su interruptor y cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», que son los mismos en todos los medios y se definen en Precios. Al lado, por cada medio, eliges si cada valor se cobra y ves el total de ese medio y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican.",
-          "«Precios» (paso 1) muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general.",
-        ],
-        bullets: [
-          "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
-          "Dejar de cobrar un valor en un medio: apaga su interruptor en la columna de ese medio; pasa a «No se cobra» solo ahí. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
-          "Cambiar el tiempo para anular un cobro de caja: debajo de las dos tarjetas de medios está la franja «Anulación de cobros en caja», con el campo «Tiempo para anular» (en minutos; se habilita si «PIN en caja» está activado). Escribe un número entero entre 0 y el máximo que indica el mensaje (hasta 60) y pulsa «Guardar» (se habilita cuando cambias el valor). Mientras corre ese tiempo, el administrador del organismo puede anular el cobro; después, el trámite se envía al organismo. Si no lo has cambiado, verás «Valor por defecto» (15 minutos). Con 0, el trámite se envía en el momento de cobrar y el cobro ya no se puede anular. El cambio aplica solo a los cobros nuevos, no a los que ya se hicieron. Con «Ver historial» ves quién cambió el tiempo, cuándo y de cuántos minutos a cuántos. Lo cambian el administrador del organismo y el Super Admin; la persona de caja no ve este campo.",
-          "Encender un valor sin monto: no se guarda. Junto a ese valor aparece «Definir precio», que abre el formulario del trámite en Precios; al guardar o cerrar, vuelves a Medios de pago con el monto ya cargado.",
-        ],
-        callouts: [
-          {
-            variant: "info",
-            text: "El valor de la gestión (servicio FLIT y envío) solo lo cambia el superadministrador de FLIT.",
-          },
-        ],
-      },
-      {
-        id: "caja",
-        title: "4. Caja: usuarios y cobros",
-        paragraphs: [
-          "En el punto, la persona paga en la caja de tu organismo con el ID de su trámite. La pestaña «Caja» tiene dos partes: «Usuarios de caja», para decidir quién cobra, y «Cobros de caja», para revisar lo cobrado y corregir errores.",
-          "Un usuario de caja entra a FLIT 2 con su correo y su contraseña y solo ve el módulo «Caja» del menú: no ve los demás módulos ni los trámites de otros organismos. Tú, como administrador, también ves «Caja» en el menú y puedes cobrar desde ahí. Crea un usuario por cada persona que cobra, así queda registrado quién hizo cada cobro.",
-        ],
-        bullets: [
-          "Crear un usuario de caja: pulsa «Crear usuario», escribe el nombre y el correo y guarda. Le llega una invitación para definir su contraseña; mientras no la use, aparece como «Invitación pendiente» y puedes reenviarla desde «Acciones».",
-          "Desactivar o reactivar: en «Acciones» de la fila. Un usuario desactivado ya no puede cobrar desde su siguiente intento.",
-          "Ver los cobros: «Cobros de caja» muestra los del día elegido con el ID, el valor, el medio, la hora y quién cobró, y el total del día sin contar los anulados.",
-          "Anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Solo se puede durante los 15 minutos siguientes al cobro, antes de que el trámite pase a FLIT 2; después, la opción aparece deshabilitada con el motivo. El trámite anulado vuelve a quedar pendiente de pago. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
-        ],
-        callouts: [
-          {
-            variant: "info",
-            text: "Si la caja no está habilitada para tu organismo, la pestaña lo indica. Pide al administrador de FLIT que la habilite.",
-          },
-        ],
-      },
-      {
-        id: "diseno",
-        title: "5. Diseño: tu marca en el portal",
-        paragraphs: [
-          "Aquí le pones al portal el nombre, el logo, los banners y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
-        ],
-        bullets: [
-          "Colores: elige el principal y el secundario. Si con ellos el portal no se leería bien, un mensaje lo dice y no deja publicar; «Ajustar automáticamente» los corrige por ti.",
-          "Logo: cárgalo desde su recuadro, donde se indican los formatos y el tamaño máximo. Es opcional.",
-          "Banners: es el banner principal que ve la persona arriba de tu portal; si agregas varios, rotan como carrusel. Puedes tener hasta 6. Usa «Agregar banner», elige el archivo (PNG, JPEG o WebP, máximo 2 MB cada uno) y escribe el texto alternativo, que describe el banner para quien no puede verlo. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 1600 × 366 px (proporción cercana a 4,4:1); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados. Si la proporción es muy distinta, te avisamos, pero puedes subirlo igual.",
-          "Orden y cambios de los banners: en el botón «Acciones» de cada banner puedes editarlo, subirlo, bajarlo o quitarlo (pide confirmación). Si no hay banners, el portal usa el banner de FLIT. Estos cambios van al borrador y se ven en el portal cuando publiques.",
-          "Carrusel de imágenes: se muestra en la columna derecha del portal, en lugar de «Servicios Adicionales». Puedes tener hasta 6 imágenes. Usa «Agregar imagen», elige el archivo (JPG, PNG o WebP, máximo 512 KB) y escribe el texto alternativo, que describe la imagen para quien no puede verla. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 900 × 600 px (proporción 3:2); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados.",
-          "Orden y cambios del carrusel: en el botón «Acciones» de cada imagen puedes editarla, subirla, bajarla o quitarla (pide confirmación). Si no hay imágenes, el portal muestra los servicios de siempre. Estos cambios van al borrador y se ven en el portal cuando publicas.",
-          "Publicar: el portal muestra tu marca desde la siguiente carga. La vista previa y la confirmación de publicar solo dicen que se usa lo de FLIT para lo que te falte (logo o banners).",
-          "Retirar: el portal vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez.",
-        ],
-        callouts: [
-          {
-            variant: "warning",
-            title: "Si otra persona editó al mismo tiempo",
-            text: "El borrador no se guarda sobre el cambio de la otra persona. Vuelve a cargar la pantalla y aplica de nuevo tus cambios.",
-          },
-        ],
-      },
-      {
-        id: "dominios",
-        title: "6. Dominios del organismo",
-        paragraphs: [
-          "En «Diseño» también están los dominios: las direcciones web propias por las que se abre tu portal. Un organismo puede tener varios, hasta 10, y todos llevan al mismo portal. Por estas direcciones solo se abre el portal: no hay inicio de sesión de FLIT.",
-          "Cada dominio tiene su propio estado. Si uno falla, los demás siguen funcionando. Uno de los activos es el principal: el enlace y el QR del punto usan ese.",
-        ],
-        bullets: [
-          "Agregar un dominio: escribe la dirección y regístrala. Queda pendiente de comprobación y la pantalla muestra los registros DNS que debes crear con tu proveedor del dominio.",
-          "Comprobar: cuando crees los registros, pulsa «Comprobar ahora». Si no se puede confirmar, verás el motivo y podrás intentarlo de nuevo.",
-          "Principal: el primero que se activa queda como principal. Para cambiarlo, usa «Hacer principal» en otro dominio activo.",
-          "Retirar: pulsa «Retirar» y confirma. El portal sigue en tus otros dominios y en el enlace del punto. Si retiras el principal, otro dominio activo toma su lugar.",
-        ],
-        callouts: [
-          {
-            variant: "tip",
-            text: "Si no tienes ningún dominio activo, el portal sigue disponible en el enlace del punto de atención.",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    slug: "2-ot/15-portal-de-caja",
-    title: "Caja: cobrar un trámite del punto desde FLIT 2.0",
-    audience: "Organismo de Tránsito",
-    sectionId: "ot",
-    keywords: [
-      "caja",
-      "modulo caja",
-      "portal de caja",
-      "caja del organismo",
-      "usuario de caja",
-      "cobrar tramite",
-      "id del tramite",
-      "confirmar cobro",
-      "pago registrado",
-      "prefactura",
-      "cobros del dia",
-      "anular cobro",
-      "este tramite ya fue pagado",
-      "no encontramos ese tramite",
-      "la caja no esta habilitada",
-    ],
-    summary:
-      "Cómo el organismo cobra desde FLIT 2.0 un trámite que la persona inició en el punto: quién entra, qué ve, cómo cobra, cómo revisa los cobros del día y cómo anula el administrador del organismo.",
-    blocks: [
-      {
-        id: "entrar",
-        title: "1. Quién entra y qué ve",
-        paragraphs: [
-          "En el menú de abajo, «Administración» tiene «Portal Persona Natural», que se despliega en cuatro opciones: Reportes, Cobro, Caja y Diseño. La caja está en Administración → Portal Persona Natural → Caja, con tres pestañas: «Cobrar», «Cobros del día» y «Usuarios de caja». No es un ítem aparte del menú ni un portal distinto: la persona de caja entra a FLIT 2.0 por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. El administrador del organismo la crea en la subpestaña «Usuarios de caja» y le llega una invitación para definir su contraseña.",
-          "Si tu único rol es el de caja, el menú muestra solo Administración → Portal Persona Natural → Caja y al entrar a FLIT 2.0 llegas directo a ella, con las pestañas «Cobrar» y «Cobros del día»: no ves Reportes, Cobro ni Diseño, ni «Usuarios de caja». El administrador del organismo ve las tres subpestañas y, en «Cobros del día», puede elegir el día y anular. El Super Admin entra al organismo que elija y administra «Usuarios de caja» y «Cobros de caja» (con anulación); no cobra.",
-        ],
-        callouts: [
-          {
-            variant: "info",
-            text: "Si ves «La caja no está habilitada para tu organismo», pide al administrador de FLIT que la habilite.",
-          },
-        ],
-      },
-      {
-        id: "cobrar",
-        title: "2. Cobrar un trámite",
-        paragraphs: ["En la subpestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
-        bullets: [
-          "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y pulsa «Buscar».",
-          "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
-          "Elige el medio con que pagó: efectivo, datáfono, transferencia u otro (en «Otro», escribe cuál).",
-          "Si tienes la prefactura, adjúntala (PDF, JPG o PNG de hasta 5 MB). Es opcional.",
-          "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre. Para seguir, pulsa «Cobrar otro trámite».",
-        ],
-        callouts: [
-          {
-            variant: "warning",
-            title: "Si el total cambió",
-            text: "Si el precio cambió desde que buscaste el trámite, la pantalla muestra el total nuevo y te pide confirmar otra vez. Cobra siempre el total que muestra la pantalla.",
-          },
-        ],
-      },
-      {
-        id: "mensajes",
-        title: "3. Mensajes frecuentes",
-        paragraphs: ["Si la búsqueda no deja cobrar, la pantalla dice por qué:"],
-        bullets: [
-          "«No encontramos ese trámite.»: revisa el ID con la persona.",
-          "«Este trámite ya fue pagado.» (en amarillo): no lo cobres otra vez.",
-          "«Este trámite no es de este organismo.»: la persona debe pagar en el organismo donde lo inició.",
-          "«El pago en caja de este trámite venció.»: el ID vale solo el día en que se generó; la persona debe generarlo de nuevo en el punto.",
-          "«Este trámite no tiene el pago en caja habilitado.»: el trámite no se paga en caja.",
-          "«Demasiadas búsquedas sin resultado. Espere N minutos.»: si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar.",
-        ],
-      },
-      {
-        id: "cobros-dia",
-        title: "4. Cobros del día y anulaciones",
-        paragraphs: [
-          "La subpestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
-          "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Un cobro se puede anular solo durante un tiempo después de cobrarlo: mientras corre, el cobro dice «Anulable hasta» con la hora (por ejemplo, «Anulable hasta 9:41 p. m.»); cuando esa hora pasa, la opción «Anular» desaparece y el trámite se envía al organismo. Ese tiempo lo define el administrador del organismo en Cobro → Medios de pago (15 minutos si no lo cambia). Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
-          "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo.",
         ],
       },
     ],

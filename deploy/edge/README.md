@@ -33,9 +33,8 @@ CORS dinámico del Gateway (caché 60 s sobre `GET /internal/domains/active`) ha
    El host no puede estar en la lista de reservados (`Domains:Reserved` = `*.flitsas.online`,
    `*.flitsas.com`; pendiente añadir el dominio del portal de organismos de tránsito cuando se
    confirme — ver contratos-api.md hecho 18) ni repetirse entre redes.
-2. **DNS del cliente** — el cliente crea un `CNAME` (o `A`, según su proveedor) desde su dominio
-   hacia el `EdgeTarget` de la plataforma (`Domains:EdgeTarget = edge.flitsas.online`,
-   configuración de `Flit.Api`, no de este repo). Sin esto, aunque el dominio esté registrado y
+2. **DNS del cliente** — el cliente crea un registro `A` desde su dominio hacia la IP del borde del
+   ambiente (`Domains:EdgeIp`, variable `FLIT_EDGE_IP`). Sin esto, aunque el dominio esté registrado y
    verificado, ninguna petición llega al borde.
 3. **Verificación** — HU #12425 (pendiente): comprobación por TXT DNS, ciclo
    `pending → verified → active`. Hasta que #12425 esté desplegada, la activación es manual

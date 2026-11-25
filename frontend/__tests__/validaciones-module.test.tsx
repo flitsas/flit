@@ -1646,7 +1646,7 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
     await waitFor(() =>
       expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
         'inst-3',
-        [{ validationId: 'v-4', email: null }],
+        [{ validationId: 'v-4', partyRole: 'vendedor', ordinal: 1, email: null }],
         undefined,
       ),
     );

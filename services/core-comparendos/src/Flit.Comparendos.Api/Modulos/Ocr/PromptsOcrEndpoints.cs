@@ -1,3 +1,4 @@
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
@@ -173,7 +174,20 @@ public static class PromptsOcrEndpoints
         await using var s = archivo.OpenReadStream();
         using var m = new MemoryStream();
         await s.CopyToAsync(m, ct).ConfigureAwait(false);
-        var r = await proveedor.ExtraerAsync(m.ToArray(), tipo, p.Texto, p.Modelo, ct).ConfigureAwait(false);
+        ResultadoOcr r;
+        // ADR-0090: prueba manual de una versión del prompt (origen prueba_prompt); el usuario sale de la petición.
+        using (IaCallContext.Instancia.Iniciar(new IaAmbito
+               {
+                   Modulo = IaProcesosFlit.ModuloComparendos,
+                   Proceso = IaProcesosFlit.ProbarPrompt,
+                   TipoTarea = IaTiposTarea.Ocr,
+                   Origen = IaOrigenes.PruebaPrompt,
+                   PromptCodigo = IaProcesosFlit.OcrComparendo,
+                   PromptVersion = p.NumeroVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+               }))
+        {
+            r = await proveedor.ExtraerAsync(m.ToArray(), tipo, p.Texto, p.Modelo, ct).ConfigureAwait(false);
+        }
         return Results.Ok(new
         {
             exitoso = r.Exitoso, modelo = r.Modelo, tipoFallo = r.TipoFallo?.ToString(), r.Mensaje,

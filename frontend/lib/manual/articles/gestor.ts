@@ -187,13 +187,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
           "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT.",
         ],
-        callouts: [
-          {
-            variant: "info",
-            title: "Si el expediente tarda en generarse",
-            text: "Al enviar, la plataforma genera el expediente consolidado (FUR y documentos). Si tarda o falla por un problema momentáneo, el trámite se envía igual al organismo y verás «Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.». No tienes que volver a enviarlo. Si en cambio falta un documento obligatorio, verás «No se puede radicar: Expediente incompleto» con lo que falta, y el trámite no se envía hasta que lo cargues.",
-          },
-        ],
       },
     ],
   },
@@ -213,9 +206,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "necesito para",
       "matricula documentos",
       "traspaso documentos",
-      "otros documentos",
-      "varios archivos",
-      "eliminar documento",
     ],
     summary: "Cómo conocer los documentos exigidos, dónde cargarlos y buenas prácticas.",
     blocks: [
@@ -244,8 +234,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
           "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
-          "En casi todas las casillas cabe un solo archivo: «Reemplazar archivo» cambia el que había por el nuevo.",
-          "Las casillas «Otro» y «Anexos generales» admiten varios archivos. Cada archivo aparece en su propia fila, con su fecha, el ojo para verlo y «Eliminar». Para sumar uno, pulsa «Agregar otro documento»: el nuevo se añade y los anteriores se quedan. Si cargaste uno por error, elimínalo en su fila; agregar el correcto no lo quita. Todos los archivos de estas casillas van en el consolidado que recibe el organismo.",
           "Impronta: si tu compañía tiene deshabilitada la generación de improntas, el sistema no la genera ni ofrece «Generar impronta». En la casilla de la impronta verás «Cargue la impronta; no se genera automáticamente» y debes adjuntarla tú. Si es obligatoria, no podrás radicar hasta cargarla.",
         ],
         callouts: [
@@ -263,7 +251,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Documento ilegible → vuelve a escanear o fotografiar con buena luz.",
           "Persona equivocada en el mandato → verifica actores antes de adjuntar.",
           "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes.",
-          "El organismo rechazó un archivo de «Otro» → en la subsanación, elimina el archivo errado en su fila y agrega el corregido; si solo agregas el nuevo, el errado sigue en el expediente.",
         ],
       },
     ],
@@ -354,18 +341,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "subsanacion",
       "entregado",
       "anulado",
-      "modificaciones del tramite",
-      "expediente",
-      "trazabilidad",
-      "reenviar validacion",
-      "reenviar validacion de identidad",
-      "copiar enlace",
-      "corregir correo",
-      "no le llego el correo",
-      "copropietarios",
     ],
     summary:
-      "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado, qué hacer en cada uno y cómo reenviar la validación de identidad a quien falta por firmar.",
+      "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado y qué hacer en cada uno.",
     blocks: [
       {
         id: "buscar",
@@ -413,12 +391,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "3. El detalle del trámite",
         paragraphs: [
           "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
-          "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
-          "Si el equipo FLIT actualizó un documento del trámite, la línea de tiempo muestra «Documento actualizado por el administrador» con el estado en que estaba el trámite, la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». El archivo reemplazado no se pierde: aparece como «Versión anterior» en «Ver documentos».",
+          "Si el equipo FLIT actualizó un documento del trámite, la línea de tiempo muestra «Documento actualizado por el administrador» con el documento, el archivo, el estado en que estaba el trámite y la observación. El archivo reemplazado no se pierde: aparece como «Versión anterior» en «Ver documentos».",
           "Los documentos se abren en una pestaña nueva del navegador, a pantalla completa. Si el documento trae un aviso (por ejemplo «Documento final» del consolidado), aparece unos segundos en la pantalla donde estabas. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar». Si tu navegador bloquea las ventanas emergentes, el documento se muestra en la misma pantalla.",
           "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
           "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite.",
-          "Si el trámite llegó del punto de atención ya pagado, el mismo panel muestra «Pagado en caja» con el valor, el medio (efectivo, datáfono, transferencia u otro) y la fecha, o «Sin cobro» si el total era $0. Ese trámite no se vuelve a cobrar.",
         ],
       },
       {
@@ -426,38 +402,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "4. Búsqueda con DR. FLIT",
         paragraphs: [
           "Abre el chat flotante y elige buscar por placa, VIN, trámite (radicado) o cliente (nombre o documento). Cada resultado muestra radicado, fecha de radicación, estado con una pista de qué sigue, y abre el detalle. Al buscar por placa también te ofrece el historial completo de esa placa.",
-        ],
-      },
-      {
-        id: "reenviar-validacion",
-        title: "5. Reenviar la validación de identidad",
-        paragraphs: [
-          "Si una persona del trámite no recibió el correo de validación de identidad, o el correo estaba mal escrito, puedes reenviárselo desde el menú de la fila (tres rayas) → «Reenviar validación». La opción aparece si tu rol tiene el permiso «Reenviar validación de identidad»; el administrador de tu compañía puede asignarlo.",
-          "Validar la identidad es firmar el trámite. Por eso el cuadro solo muestra a las personas que todavía no han firmado: si el comprador ya validó y el vendedor no, solo verás al vendedor.",
-        ],
-        bullets: [
-          "Paso 1: abre las tres rayas del trámite y elige «Reenviar validación».",
-          "Paso 2: marca a quién reenviar. Hay una casilla por persona («Vendedor · nombre», «Comprador · nombre»); si hay varios propietarios, cada uno aparece por separado. Puedes marcar una o varias.",
-          "Paso 3 (opcional): si el correo registrado está mal, escribe el correcto en «Nuevo correo» de esa persona. Se guarda en el trámite y en Validaciones de Identidad, y el enlace sale a ese correo. Si lo dejas vacío, se envía al correo de siempre.",
-          "Paso 4: pulsa «Reenviar». El cuadro no se cierra: te muestra el resultado de cada persona y el enlace nuevo con «Copiar enlace», por si prefieres enviárselo tú.",
-          "Si la persona ya tiene un enlace vigente, puedes copiarlo con «Copiar enlace» sin reenviar.",
-          "Matrícula: solo aparece el comprador. Otros trámites: aparecen las personas que ese trámite pide validar.",
-          "Cada reenvío queda en el seguimiento del trámite: quién lo hizo, a qué persona y, si se corrigió, el correo anterior y el nuevo.",
-        ],
-        callouts: [
-          {
-            variant: "info",
-            title: "Mensajes que puedes ver",
-            text: "«El comprador ya firmó…» (matrícula y otros trámites, que tienen un solo actor) o «Comprador y vendedor ya firmaron…» (traspaso): todas las personas ya validaron. «Correo inválido.»: revisa el correo escrito. «El reenvío quedó en cola…»: el proveedor tuvo una falla momentánea y se reintenta solo; el enlace aparecerá después. «En validación manual…»: esa persona está en captura manual y su enlace se regenera desde la revisión manual.",
-          },
-          {
-            variant: "tip",
-            text: "Si una persona ya validó su identidad en otro trámite y sigue vigente, no aparece para reenviar: para este trámite ya cuenta como firmada.",
-          },
-          {
-            variant: "warning",
-            text: "Un trámite aprobado, anulado o revocado no admite reenviar la validación.",
-          },
         ],
       },
     ],
@@ -635,13 +579,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "red",
       "toda la red",
       "solo lectura",
-      "vencer identidad",
-      "vencer validacion",
-      "repetir validacion",
-      "quitar vigencia",
     ],
     summary:
-      "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias, desatascar una validación y quién puede vencer una identidad aprobada.",
+      "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias y desatascar una validación.",
     blocks: [
       {
         id: "que-es",
@@ -670,17 +610,11 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
           "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
           "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una.",
-          "«Vencer» (solo Super Admin de FLIT, en el menú «Acciones» de una validación aprobada y vigente): termina la vigencia en ese momento para que la persona repita la validación. En el mismo paso se le envía un enlace nuevo, que queda en pantalla con «Copiar enlace». El certificado anterior se conserva en el historial.",
         ],
         callouts: [
           {
             variant: "info",
             text: "Una validación aprobada tiene vigencia. Al acercarse la fecha, el sistema la marca; una validación vencida no sirve para firmar y hay que repetirla.",
-          },
-          {
-            variant: "warning",
-            title: "Qué pasa al vencer una identidad",
-            text: "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar, salvo la matrícula inicial radicada directamente ante el organismo que todavía no tiene placa. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT.",
           },
         ],
       },
@@ -920,8 +854,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "permisos individuales",
       "fuera de tu tope",
       "auditoria de permisos",
-      "filtrar usuarios",
-      "buscar usuario",
     ],
     summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
@@ -932,7 +864,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:",
         ],
         bullets: [
-          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía. Para encontrar a alguien usa el buscador, los selectores de perfil, rol y estado, o el embudo del encabezado de cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha); ver «Tablas: cómo leerlas y moverte entre páginas».",
+          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
           "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
           "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7).",
         ],
@@ -978,7 +910,6 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
           "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
-          "«Reenviar validación de identidad» (módulo de gestión avanzada de trámites) lo puedes dar a cualquier persona o rol de tu compañía: con él ve la opción «Reenviar validación» en las tres rayas del trámite, corrige el correo y copia el enlace. Las demás acciones avanzadas (cambiar estado, anular, consolidado, reasignar gestor) siguen siendo del Super Admin. La persona ve el permiso al volver a ingresar.",
         ],
         callouts: [
           {

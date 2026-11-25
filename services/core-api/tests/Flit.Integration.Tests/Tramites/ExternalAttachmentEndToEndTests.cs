@@ -257,6 +257,54 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         conMatriz.GetProperty("enMatriz").GetBoolean().Should().BeTrue();
     }
 
+    // ── Bug #14660 (ADR-0087): invalidación transaccional de los consolidados (wizard Y maestro) ───────────
+
+    [PostgresFact]
+    public async Task Bug14660_SiElTipoLlenaUnaCasillaDeLaMatriz_BajanLasDosBanderasDeVigencia()
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("asignado");
+        await EjecutarAsync(
+            "INSERT INTO tramites.procedure_document_requirements (procedure_type_id, document_type_id, is_mandatory, default_sort_order) "
+            + "SELECT pi.procedure_type_id, d.id, false, 1 FROM tramites.procedure_instances pi, tramites.document_types d "
+            + "WHERE pi.id = @id AND d.code = 'liquidacion_impuesto'",
+            ("id", tramite));
+        await EjecutarAsync(
+            "UPDATE tramites.procedure_instances SET consolidado_wizard_vigente = true, consolidado_maestro_vigente = true WHERE id = @id",
+            ("id", tramite));
+        await using var almacen = new AlmacenFactory(Fixture);
+
+        var response = await Post(almacen, tramite, "%PDF-1.4 bug14660"u8.ToArray());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("enMatriz").GetBoolean().Should().BeTrue();
+        var (wizard, maestro) = await BanderasConsolidadoAsync(tramite);
+        wizard.Should().BeFalse("el escritor SQL crudo del adjunto de Flito invalida igual que ConsolidadoVigenciaTracker");
+        maestro.Should().BeFalse("el trámite ya está radicado: el expediente que mira el OT es el maestro");
+    }
+
+    [PostgresFact]
+    public async Task Bug14660_AunqueElTipoNoEsteEnLaMatriz_BajanLasDosBanderas_PorqueElConsolidadoFusionaTodosLosAdjuntos()
+    {
+        await SembrarAsync();
+        var tramite = await RadicadoAsync("asignado");
+        await EjecutarAsync(
+            "DELETE FROM tramites.procedure_document_requirements WHERE procedure_type_id = (SELECT procedure_type_id FROM tramites.procedure_instances WHERE id = @id)",
+            ("id", tramite));
+        await EjecutarAsync(
+            "UPDATE tramites.procedure_instances SET consolidado_wizard_vigente = true, consolidado_maestro_vigente = true WHERE id = @id",
+            ("id", tramite));
+        await using var almacen = new AlmacenFactory(Fixture);
+
+        var response = await Post(almacen, tramite, "%PDF-1.4 bug14660-sin-matriz"u8.ToArray());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await Json(response)).GetProperty("enMatriz").GetBoolean().Should().BeFalse();
+        var (wizard, maestro) = await BanderasConsolidadoAsync(tramite);
+        wizard.Should().BeFalse();
+        maestro.Should().BeFalse();
+    }
+
     // ── HU #13264 / Bug #14625: impuesto pagado marcado por FLITO ────────────
 
     [PostgresTheory]
@@ -601,6 +649,17 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
         (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue("la marca existe");
         return (reader.GetString(0), reader.GetString(1));
+    }
+
+    private async Task<(bool Wizard, bool Maestro)> BanderasConsolidadoAsync(Guid tramite)
+    {
+        await using var conn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(
+            "SELECT consolidado_wizard_vigente, consolidado_maestro_vigente FROM tramites.procedure_instances WHERE id = @id", conn);
+        cmd.Parameters.AddWithValue("id", tramite);
+        await using var reader = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        await reader.ReadAsync(TestContext.Current.CancellationToken);
+        return (reader.GetBoolean(0), reader.GetBoolean(1));
     }
 
     private async Task<long> ContarMarcasAsync(Guid tramite) =>

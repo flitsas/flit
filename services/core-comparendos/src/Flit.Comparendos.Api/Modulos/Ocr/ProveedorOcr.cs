@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Domain.Modelo;
+using Flit.Platform.Sdk.IaConsumo;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Comparendos.Api.Modulos.Ocr;
@@ -142,15 +143,53 @@ public sealed class OpcionesAnthropic
 /// <summary>
 /// Anthropic Messages API, sin streaming (la salida es un JSON corto). La llave solo viaja en el encabezado y nunca se
 /// registra. Clasifica el fallo para que el procesador decida si reintenta (respeta <c>Retry-After</c> en un 429).
+/// Cada llamada HTTP deja una fila en <c>comparendos.ia_consumo_log</c> (contrato ia-consumo v1, ADR-0090) con los
+/// tokens que reporta el proveedor y el ámbito que abrió quien llama.
 /// </summary>
-public sealed class ProveedorOcrAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones) : IProveedorOcr
+public sealed class ProveedorOcrAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, IIaConsumoRegistrador? consumo = null) : IProveedorOcr
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    private readonly IIaConsumoRegistrador _consumo = consumo ?? NullIaConsumoRegistrador.Instancia;
 
     public async Task<ResultadoOcr> ExtraerAsync(byte[] contenido, string contentType, string prompt, string modelo, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contenido);
         var o = opciones.Value;
+        var inicio = DateTimeOffset.UtcNow;
+        var status = 0;
+        JsonElement? cuerpoRespuesta = null;
+        string? salidaTexto = null;
+        void Registrar(string resultado, string? codigo, string? mensaje)
+        {
+            if (!_consumo.Activo)
+                return;
+            var u = Uso(cuerpoRespuesta);
+            _consumo.Registrar(new IaLlamada
+            {
+                Proveedor = IaProveedores.Anthropic,
+                TipoTareaPorDefecto = IaTiposTarea.Ocr,
+                FechaInicio = inicio,
+                Resultado = resultado,
+                HttpStatus = status,
+                ModeloSolicitado = modelo,
+                ModeloRespondido = Cadena(cuerpoRespuesta, "model"),
+                IdRespuestaProveedor = Cadena(cuerpoRespuesta, "id"),
+                MaxTokens = o.MaxTokens,
+                StopReason = Cadena(cuerpoRespuesta, "stop_reason"),
+                ErrorCodigo = codigo,
+                ErrorMensaje = mensaje,
+                TokensEntrada = u.Entrada,
+                TokensSalida = u.Salida,
+                TokensCacheLectura = u.Lectura,
+                TokensCacheEscritura = u.Escritura,
+                PromptTexto = prompt,
+                RespuestaTexto = _consumo.DetalleActivo ? salidaTexto : null,
+                ArchivoMime = contentType,
+                ArchivoBytes = contenido.LongLength,
+            });
+        }
+
         var bloque = contentType == "application/pdf" ? "document" : "image";
         var cuerpo = new
         {
@@ -178,7 +217,13 @@ public sealed class ProveedorOcrAnthropic(HttpClient http, IOptions<OpcionesAnth
             pedido.Headers.TryAddWithoutValidation("x-api-key", o.ApiKey);
             pedido.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
             using var respuesta = await http.SendAsync(pedido, limite.Token).ConfigureAwait(false);
+            status = (int)respuesta.StatusCode;
             var texto = await respuesta.Content.ReadAsStringAsync(limite.Token).ConfigureAwait(false);
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                var (codigo, detalle) = ErrorDe(texto, status);
+                Registrar(IaResultados.DesdeHttp(status), codigo, detalle);
+            }
             if (respuesta.StatusCode == HttpStatusCode.TooManyRequests)
                 return ResultadoOcr.Fallo(modelo, TipoFalloOcr.RateLimit, "El proveedor limitó las peticiones (429).", RetryAfter(respuesta.Headers.RetryAfter));
             if ((int)respuesta.StatusCode >= 500)
@@ -187,33 +232,75 @@ public sealed class ProveedorOcrAnthropic(HttpClient http, IOptions<OpcionesAnth
                 return ResultadoOcr.Fallo(modelo, TipoFalloOcr.ArchivoInvalido, $"El proveedor rechazó el archivo ({(int)respuesta.StatusCode}).", crudo: Recortar(texto));
 
             using var doc = JsonDocument.Parse(texto);
+            cuerpoRespuesta = doc.RootElement.Clone();
             switch (doc.RootElement.TryGetProperty("stop_reason", out var parada) ? parada.GetString() : null)
             {
                 case "max_tokens":
+                    Registrar(IaResultados.RespuestaInvalida, "max_tokens", null);
                     return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens).");
                 case "refusal":
+                    Registrar(IaResultados.RespuestaInvalida, "refusal", null);
                     return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "El modelo no quiso leer el documento.");
             }
 
             var salida = string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
                 .Where(b => b.GetProperty("type").GetString() == "text").Select(b => b.GetProperty("text").GetString()));
+            salidaTexto = salida;
             var campos = RespuestaOcr.Interpretar(salida);
+            Registrar(campos is null ? IaResultados.RespuestaInvalida : IaResultados.Exito, campos is null ? "json_de_campos_invalido" : null, null);
             return campos is null
                 ? ResultadoOcr.Fallo(modelo, TipoFalloOcr.Ilegible, "La respuesta del modelo no es un JSON de campos.", crudo: Recortar(salida))
                 : new ResultadoOcr(campos, salida, modelo);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            Registrar(IaResultados.Timeout, "timeout", null);
             return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Timeout, $"El proveedor no respondió en {o.TimeoutSegundos} s.");
+        }
+        catch (OperationCanceledException)
+        {
+            Registrar(IaResultados.Cancelado, "cancelado", null);
+            throw;
         }
         catch (HttpRequestException ex)
         {
+            Registrar(IaResultados.Red, ex.GetType().Name, ex.Message);
             return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Red, $"Error de red: {ex.Message}");
         }
         catch (JsonException)
         {
+            Registrar(IaResultados.RespuestaInvalida, "json_invalido", null);
             return ResultadoOcr.Fallo(modelo, TipoFalloOcr.Http5xx, "Respuesta del proveedor no interpretable.");
         }
+    }
+
+    /// <summary>Tokens del <c>usage</c> de la respuesta (0 si no llegó).</summary>
+    internal static (int Entrada, int Salida, int Lectura, int Escritura) Uso(JsonElement? cuerpo)
+    {
+        if (cuerpo is not { ValueKind: JsonValueKind.Object } c || !c.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object)
+            return (0, 0, 0, 0);
+        return (Entero(u, "input_tokens"), Entero(u, "output_tokens"), Entero(u, "cache_read_input_tokens"), Entero(u, "cache_creation_input_tokens"));
+    }
+
+    private static int Entero(JsonElement e, string nombre) =>
+        e.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : 0;
+
+    private static string? Cadena(JsonElement? cuerpo, string nombre) =>
+        cuerpo is { ValueKind: JsonValueKind.Object } c && c.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    /// <summary>Tipo y mensaje del error del proveedor (<c>{"error":{"type","message"}}</c>), o <c>http_&lt;status&gt;</c>.</summary>
+    private static (string Codigo, string? Mensaje) ErrorDe(string? texto, int status)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(texto ?? string.Empty);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object)
+                return (Cadena(e, "type") ?? $"http_{status}", Cadena(e, "message"));
+        }
+        catch (JsonException)
+        {
+        }
+        return ($"http_{status}", null);
     }
 
     private static TimeSpan? RetryAfter(RetryConditionHeaderValue? h) =>
