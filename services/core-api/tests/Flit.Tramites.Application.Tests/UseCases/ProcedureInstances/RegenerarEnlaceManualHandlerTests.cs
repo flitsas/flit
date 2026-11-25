@@ -54,7 +54,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
     }
 
     [Fact]
-    public async Task AC3_Regenera_ConTokenNuevoDe24h_YElViejoDejaDeEncontrarsePorHash()
+    public async Task AC3_Regenera_ConTokenNuevoDe30Dias_YElViejoDejaDeEncontrarsePorHash()
     {
         var v = Fila();
         var hashViejo = v.TokenHash;
@@ -66,7 +66,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
         error.Should().BeNull();
         result!.Status.Should().Be("manual_activo");
         result.Provider.Should().Be("manual");
-        result.ExpiresAt.Should().Be(Now.AddHours(24));
+        result.ExpiresAt.Should().Be(Now.AddDays(30));
         result.TenantId.Should().Be(v.TenantId);
         result.EmailEnviado.Should().BeTrue();
         await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -77,7 +77,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
         // HU #14305 (AC1): el token cifrado sustituye al anterior.
         v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token);
         BiometricToken.Hash("token-viejo").Should().NotBe(v.TokenHash);
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
         v.ResendCount.Should().Be(1);
         v.LastResentAt.Should().Be(Now);
     }
@@ -91,7 +91,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
 
         await _notifier.Received(1).NotifyAsync(
             Arg.Is<ManualCaptureLink>(l => l.RecipientEmail == "persona@example.test" && l.ValidationId == v.Id
-                && l.TenantId == v.TenantId && l.ExpiresAt == Now.AddHours(24)),
+                && l.TenantId == v.TenantId && l.ExpiresAt == Now.AddDays(30)),
             Arg.Any<CancellationToken>());
     }
 
@@ -149,7 +149,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
 
         error.Should().BeNull();
         result!.Status.Should().Be("rechazado");
-        result.ExpiresAt.Should().Be(Now.AddHours(24));
+        result.ExpiresAt.Should().Be(Now.AddDays(30));
         v.TokenHash.Should().NotBe(hashViejo);
         v.RejectionReasonCode.Should().Be("imagen_borrosa");
         await _notifier.Received(1).NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>());
@@ -194,7 +194,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
 
         error.Should().BeNull();
         result!.EmailEnviado.Should().BeFalse();
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
     }
 
     [Fact]

@@ -342,7 +342,7 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>
     /// HU #13284 — activa el flujo manual SOBRE ESTA MISMA FILA (una sola fuente de vigencia, ADR-0050): pasa a
     /// <see cref="BiometricProviders.Manual"/> / <see cref="BiometricEstados.ManualActivo"/>, deja el enlace de captura
-    /// vigente <see cref="BiometricRules.TokenTtlHoras"/> horas (<paramref name="tokenHash"/> es el SHA-256 hex del
+    /// vigente <see cref="BiometricRules.TokenTtlManualDias"/> días (<paramref name="tokenHash"/> es el SHA-256 hex del
     /// token; el crudo jamás entra a la entidad) y estampa quién y cuándo lo activó.
     /// <para>
     /// Cancela la verificación Kyverum para FLIT: limpia <see cref="KyverumVerificationId"/>, <see cref="CaptureUrl"/>
@@ -366,7 +366,7 @@ public sealed class ProcedureInstanceBiometricValidation
         Status = BiometricEstados.ManualActivo;
         TokenHash = tokenHash;
         ManualCaptureTokenEncrypted = tokenEncrypted;
-        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ExpiresAt = now.AddDays(BiometricRules.TokenTtlManualDias);
         ManualActivatedBy = userId;
         ManualActivatedAt = now;
         UpdatedAt = now;
@@ -396,14 +396,14 @@ public sealed class ProcedureInstanceBiometricValidation
     /// HU #13287 (Feature #13280 A5) — ¿se puede regenerar el enlace de captura? Solo con el flujo manual esperando captura
     /// (<see cref="EsperaCapturaManual"/>: <see cref="BiometricEstados.ManualActivo"/> o <c>rechazado</c> con motivo, HU #13299: el
     /// Super Admin puede reenviar el enlace si el cliente no lo recibió). Un enlace vencido (más de
-    /// <see cref="BiometricRules.TokenTtlHoras"/> h) sí se regenera: es el caso de uso principal.
+    /// <see cref="BiometricRules.TokenTtlManualDias"/> días) sí se regenera: es el caso de uso principal.
     /// </summary>
     public bool PuedeRegenerarEnlaceManual => EsperaCapturaManual;
 
     /// <summary>
     /// HU #13287 — emite un enlace de captura NUEVO que REEMPLAZA al anterior: <paramref name="tokenHash"/> (SHA-256 hex del
     /// token nuevo; el crudo jamás entra a la entidad) sustituye a <see cref="TokenHash"/>, así el token viejo deja de
-    /// encontrarse por hash, y la vigencia se reinicia a <see cref="BiometricRules.TokenTtlHoras"/> horas desde
+    /// encontrarse por hash, y la vigencia se reinicia a <see cref="BiometricRules.TokenTtlManualDias"/> días desde
     /// <paramref name="now"/>. Cuenta el reenvío (<see cref="ResendCount"/>, <see cref="LastResentAt"/>). No toca el estado,
     /// quién ni cuándo se activó, ni las fotos o el consentimiento (en <c>rechazado</c> sigue <c>rechazado</c>).
     /// </summary>
@@ -419,7 +419,7 @@ public sealed class ProcedureInstanceBiometricValidation
 
         TokenHash = tokenHash;
         ManualCaptureTokenEncrypted = tokenEncrypted; // sustituye al cifrado anterior (HU #14305)
-        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ExpiresAt = now.AddDays(BiometricRules.TokenTtlManualDias);
         ResendCount++;
         LastResentAt = now;
         UpdatedAt = now;
@@ -550,7 +550,7 @@ public sealed class ProcedureInstanceBiometricValidation
     /// como «Rechazada»; NO vuelve a <c>manual_activo</c>): registra <see cref="RejectionReasonCode"/>, <see cref="ReviewedBy"/> y
     /// <see cref="ReviewedAt"/> (se conservan hasta que la siguiente captura los limpie, ver <see cref="RegistrarCapturaManual"/>) y
     /// deja el enlace nuevo (<paramref name="tokenHash"/>, SHA-256 hex; el crudo jamás entra a la entidad) vigente
-    /// <see cref="BiometricRules.TokenTtlHoras"/> horas. Con ese enlace la sesión de captura cuenta como vigente
+    /// <see cref="BiometricRules.TokenTtlManualDias"/> días. Con ese enlace la sesión de captura cuenta como vigente
     /// (<see cref="EsperaCapturaManual"/>). Sin tope de intentos.
     /// <para>
     /// Abre un CICLO nuevo: <see cref="ManualActivatedAt"/> pasa a <paramref name="now"/> (como una activación), así el consentimiento
@@ -581,7 +581,7 @@ public sealed class ProcedureInstanceBiometricValidation
 
         TokenHash = tokenHash;
         ManualCaptureTokenEncrypted = tokenEncrypted;
-        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ExpiresAt = now.AddDays(BiometricRules.TokenTtlManualDias);
         ManualActivatedAt = now;
         UpdatedAt = now;
     }
@@ -784,6 +784,13 @@ public static class BiometricRules
 
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
+
+    /// <summary>
+    /// Vigencia (días calendario) del enlace de captura del FLUJO MANUAL de identidad: activación, regeneración y enlace nuevo
+    /// tras un rechazo. Es más larga que <see cref="TokenTtlHoras"/> porque la persona puede tardar en tomar sus fotos y su
+    /// firma; el resto de enlaces (Kyverum, prevalidación, biometría) sigue con horas.
+    /// </summary>
+    public const int TokenTtlManualDias = 30;
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";

@@ -758,7 +758,7 @@ internal static class BiometricaEndpoints
         .Produces(StatusCodes.Status409Conflict);
 
         // POST regenerar el enlace de captura manual (HU #13287, Feature #13280, Épica #13202). SOLO Super Admin (misma policy
-        // que activate-manual). Emite un token nuevo de 24 h (solo su hash en BD) que REEMPLAZA al anterior: el viejo deja de
+        // que activate-manual). Emite un token nuevo de 30 días (solo su hash en BD) que REEMPLAZA al anterior: el viejo deja de
         // encontrarse por hash (el público recibe 404, igual que ante un enlace inválido). Cross-tenant: el tenant sale de la
         // fila, no de X-Tenant-Id. El token NO viaja en la respuesta: se entrega por correo; `emailEnviado` avisa si no salió.
         group.MapPost("/biometric-validations/{id:guid}/regenerate-manual-link", async (

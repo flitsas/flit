@@ -65,7 +65,7 @@ export interface ManualDetail extends ManualListItem {
   reviewedBy: string | null;
   rejectionReasonCode: string | null;
   /**
-   * Vencimiento del enlace de captura vigente (24 h): solo con `manual_activo` (el cliente aún no capturó) o `rechazado`
+   * Vencimiento del enlace de captura vigente (30 días): solo con `manual_activo` (el cliente aún no capturó) o `rechazado`
    * (enlace NUEVO para repetir la captura, HU #13299); `null` en los demás. Espejo de `ManualDetail.linkExpiresAt`.
    */
   linkExpiresAt?: string | null;
@@ -99,7 +99,7 @@ export interface ManualRejectResult {
   status: 'rechazado';
   rejectionReasonCode: string;
   reviewedAt: string;
-  /** Vencimiento del enlace NUEVO (24 h). */
+  /** Vencimiento del enlace NUEVO (30 días). */
   linkExpiresAt: string;
   /** `false`: el correo con el motivo y el enlace no salió (el rechazo sí quedó). */
   emailEnviado: boolean;

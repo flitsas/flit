@@ -66,7 +66,7 @@ public enum NotificationTrigger
 
     /// <summary>
     /// Rechazo de la captura de la validación de identidad MANUAL (plantilla <c>identidad.captura-manual-rechazo</c>). HU #13299
-    /// (Feature #13282, Épica #13202) — motivo de la lista cerrada y enlace nuevo de 24 horas.
+    /// (Feature #13282, Épica #13202) — motivo de la lista cerrada y enlace nuevo de 30 díasoras.
     /// </summary>
     ManualCaptureRejected,
 

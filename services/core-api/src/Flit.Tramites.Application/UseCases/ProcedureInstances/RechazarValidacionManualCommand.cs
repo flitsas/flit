@@ -114,7 +114,7 @@ public sealed class RechazarValidacionManualHandler(
             IdentityValidationAuditStages.ManualRechazado, IdentityValidationAuditOutcomes.Rejected,
             TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id, PartyRole: v.PartyRole,
             Message: $"El usuario {command.ReviewedByUserId} rechazó la validación manual (motivo {reasonCode}); "
-                + $"se emitió un enlace nuevo para repetir la captura, de {BiometricRules.TokenTtlHoras} h.",
+                + $"se emitió un enlace nuevo para repetir la captura, de {BiometricRules.TokenTtlManualDias} días.",
             Detail: $"usuario={command.ReviewedByUserId}; motivo={reasonCode}; expira_at={v.ExpiresAt:O}"), ct).ConfigureAwait(false);
 
         // El token en claro sale de aquí solo hacia el puerto. Si el correo no sale, el rechazo ya confirmado NO se revierte.

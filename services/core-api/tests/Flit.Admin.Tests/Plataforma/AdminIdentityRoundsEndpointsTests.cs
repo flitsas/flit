@@ -176,6 +176,10 @@ public sealed class AdminIdentityRoundsEndpointsTests : IClassFixture<AdminIdent
 
         public Task<IdentityRoundsConfig> GetConfigAsync(CancellationToken ct = default) => Task.FromResult(Config);
 
+        /// <summary>Endpoints de configuración: el conteo por persona no se ejercita aquí; devuelve cero.</summary>
+        public Task<int> CountRoundsForPersonAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
+            Task.FromResult(0);
+
         public Task SaveConfigAsync(IdentityRoundsConfig config, Guid? updatedBy, DateTimeOffset now, CancellationToken ct = default)
         {
             Config = config;

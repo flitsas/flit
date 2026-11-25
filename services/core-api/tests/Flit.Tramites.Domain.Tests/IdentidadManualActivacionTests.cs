@@ -8,7 +8,7 @@ namespace Flit.Tramites.Domain.Tests;
 
 /// <summary>
 /// HU #13284 (Feature #13280 A2, Épica #13202) — <see cref="ProcedureInstanceBiometricValidation.ActivarFlujoManual"/>
-/// concentra las invariantes de la activación: matriz de estado origen x resultado, token solo como hash, TTL de 24 h y
+/// concentra las invariantes de la activación: matriz de estado origen x resultado, token solo como hash, TTL de 30 días y
 /// cancelación de lo operativo de Kyverum.
 /// <para>Uso: <c>v.ActivarFlujoManual(userId, now, BiometricTokenHashFixture)</c> sobre una fila no aprobada y vigente.</para>
 /// </summary>
@@ -93,8 +93,8 @@ public sealed class IdentidadManualActivacionTests
         v.ActivarFlujoManual(User, Now, Hash);
 
         v.TokenHash.Should().Be(Hash);
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
-        BiometricRules.TokenTtlHoras.Should().Be(24);
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
+        BiometricRules.TokenTtlManualDias.Should().Be(30);
         v.ManualActivatedBy.Should().Be(User);
         v.ManualActivatedAt.Should().Be(Now);
         v.UpdatedAt.Should().Be(Now);

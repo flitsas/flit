@@ -59,7 +59,7 @@ public sealed class RechazarValidacionManualHandlerTests
     private static RechazarValidacionManualCommand Cmd(Guid id, string? motivo = "imagen_borrosa") => new(id, User, motivo);
 
     [Fact]
-    public async Task AC1_AC4_Rechaza_registra_motivo_y_revisor_queda_rechazado_con_token_nuevo_de_24h()
+    public async Task AC1_AC4_Rechaza_registra_motivo_y_revisor_queda_rechazado_con_token_nuevo_de_30_dias()
     {
         var v = Fila();
         var hashViejo = v.TokenHash;
@@ -71,7 +71,7 @@ public sealed class RechazarValidacionManualHandlerTests
         error.Should().BeNull();
         result!.Status.Should().Be("rechazado");
         result.RejectionReasonCode.Should().Be("rostro_no_coincide");
-        result.LinkExpiresAt.Should().Be(Now.AddHours(24));
+        result.LinkExpiresAt.Should().Be(Now.AddDays(30));
         result.ReviewedAt.Should().Be(Now);
         result.EmailEnviado.Should().BeTrue();
         v.Status.Should().Be(BiometricEstados.Rechazado);
@@ -84,7 +84,7 @@ public sealed class RechazarValidacionManualHandlerTests
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado!.Token)).And.NotBe(hashViejo).And.NotBe(enviado.Token);
         // HU #14305 (AC1): el token cifrado sustituye al anterior.
         v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token);
-        enviado.ExpiresAt.Should().Be(Now.AddHours(24));
+        enviado.ExpiresAt.Should().Be(Now.AddDays(30));
     }
 
     [Fact]

@@ -101,7 +101,7 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<ActivarI
         v.ManualActivatedBy.Should().Be(_superAdmin);
         v.ManualActivatedAt.Should().NotBeNull();
         v.TokenHash.Should().HaveLength(64).And.NotBe(new string('0', 64));
-        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(24), TimeSpan.FromMinutes(2));
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddDays(30), TimeSpan.FromMinutes(2));
         v.KyverumVerificationId.Should().BeNull();
         v.WebhookSecretEncrypted.Should().BeNull();
         v.CaptureUrl.Should().BeNull();
@@ -230,7 +230,7 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<ActivarI
         v.ProcedureInstanceId.Should().BeNull();
         v.PersonId.Should().BeNull();
         v.Status.Should().Be(BiometricEstados.ManualActivo);
-        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(24), TimeSpan.FromMinutes(2));
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddDays(30), TimeSpan.FromMinutes(2));
         var audit = await db.IdentityValidationAudits.AsNoTracking().Where(a => a.ValidationId == id).ToListAsync(Ct);
         audit.Should().OnlyContain(a => a.PartyRole == "mandatario" && a.TenantId == _dueno);
     }
