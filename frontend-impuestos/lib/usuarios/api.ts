@@ -1,7 +1,8 @@
-// Usuarios de Impuestos de la compañía (contracts/openapi/impuestos.v1.yaml 1.0.0, tag Usuarios; plan §5.1). Delegados en
+// Usuarios de Impuestos de la compañía (contracts/openapi/impuestos.v1.yaml 1.1.0, tag Usuarios; plan §5.1). Delegados en
 // la plataforma con la forma de Diagnóstico (ADR-0089). Todas las rutas admiten `empresa` (solo Super Admin). Las
 // acciones responden 204 sin la fila: quien llama relee la lista.
 import { apiFetch } from "@/lib/api";
+import type { EmpresaIdentificada } from "@/lib/backoffice/api";
 import { ERRORES_EMPRESA } from "@/lib/errores";
 import { rotular } from "@/lib/rotulos";
 
@@ -14,11 +15,27 @@ export interface UsuarioImpuestos {
   email: string;
   rol: RolImpuestos | string;
   estado: EstadoUsuario | string;
+  /**
+   * AdminCompany de la compañía (1.1.0, delta 6; D-ROL-ADMIN): es Administrador Impuestos por la plataforma y cambiar rol,
+   * suspender o reactivar responde 403 OBJETIVO_PROTEGIDO, así que la fila no ofrece esas acciones.
+   */
+  protegido?: boolean;
 }
 
 export interface PaginaUsuarios {
   items: UsuarioImpuestos[];
   total: number;
+  page: number;
+  pageSize: number;
+  /** Compañía elegida por el Super Admin con `empresa` (1.1.0, delta 7); null o ausente para los demás. */
+  empresa?: EmpresaIdentificada | null;
+}
+
+/** Filtros de GET /usuarios: `q`, y desde la 1.1.0 `rol` y `estado` (enum EstadoUsuarioImpuestos). Null o ausente = todos. */
+export interface FiltrosUsuarios {
+  q: string;
+  rol?: RolImpuestos | null;
+  estado?: EstadoUsuario | null;
   page: number;
   pageSize: number;
 }
@@ -43,6 +60,9 @@ export const DESCRIPCION_ROL: Readonly<Record<RolImpuestos, string>> = {
   admin_impuestos: "Todo en su compañía: liquidar, cerrar lotes, usuarios y configuración.",
   gestor_impuestos: "Ve toda la compañía y liquida por placa o masivo. No gestiona usuarios ni configuración.",
 };
+
+/** Valores de EstadoUsuarioImpuestos en el orden del contrato (filtro «Estado»). */
+export const ESTADOS_USUARIO: readonly EstadoUsuario[] = ["ACTIVO", "INVITADO", "SUSPENDIDO"];
 
 /** x-flit-etiquetas del estado del usuario. */
 export const ETIQUETA_ESTADO_USUARIO: Readonly<Record<string, string>> = { ACTIVO: "Activo", INVITADO: "Invitado", SUSPENDIDO: "Suspendido" };
@@ -84,9 +104,11 @@ export const TAMANO_PAGINA_USUARIOS = 50;
 const BASE = "/usuarios";
 const deUsuario = (id: string, accion: "rol" | "suspender" | "reactivar") => `${BASE}/${encodeURIComponent(id)}/${accion}`;
 
-export function listarUsuarios(filtros: { q: string; page: number; pageSize: number }, empresa: string | null, signal?: AbortSignal): Promise<PaginaUsuarios> {
+export function listarUsuarios(filtros: FiltrosUsuarios, empresa: string | null, signal?: AbortSignal): Promise<PaginaUsuarios> {
   const params = new URLSearchParams();
   if (filtros.q.trim()) params.set("q", filtros.q.trim());
+  if (filtros.rol) params.set("rol", filtros.rol);
+  if (filtros.estado) params.set("estado", filtros.estado);
   params.set("page", String(filtros.page));
   params.set("pageSize", String(filtros.pageSize));
   return apiFetch<PaginaUsuarios>(`${BASE}?${params.toString()}`, { signal, empresa });

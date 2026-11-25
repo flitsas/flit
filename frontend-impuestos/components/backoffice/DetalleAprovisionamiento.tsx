@@ -33,13 +33,13 @@ import {
   ERRORES_BACKOFFICE,
   ESTADOS_REINTENTABLES,
   ETIQUETA_ACTOR,
-  buscarEmpresaBackoffice,
   etiquetaEstadoAprovisionamiento,
   etiquetaMotivoAprovisionamiento,
+  nitVisibleEmpresa,
+  nombreVisibleEmpresa,
   obtenerAprovisionamiento,
   reintentarAprovisionamiento,
   type AprovisionamientoDetalle,
-  type EmpresaBackoffice,
 } from "@/lib/backoffice/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
 import { mensajeErrorFijo } from "@/lib/errores";
@@ -52,14 +52,15 @@ const FECHA = new Intl.DateTimeFormat("es-CO", { day: "2-digit", month: "2-digit
 const fecha = (iso: string) => FECHA.format(new Date(iso)).replace(",", "");
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 
-type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "no-encontrada" } | { tipo: "listo"; detalle: AprovisionamientoDetalle; empresa: EmpresaBackoffice | null };
+type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "no-encontrada" } | { tipo: "listo"; detalle: AprovisionamientoDetalle };
 type Reintento = { tipo: "ok" } | { tipo: "error"; mensaje: string } | null;
 
 /**
  * /backoffice/empresas/[tenantId] (spec-visual §3.10; plan §6.1): solo Super Admin. Estado de la conexión con el
  * proveedor (chip, motivo legible del contrato y «Reintentar aprovisionamiento» en ERROR, INCIERTO y
- * REQUIERE_REVISION_NIT), credenciales protegidas, enlace al contrato e historial. El nombre de la compañía sale de la
- * lista del backoffice: el detalle del contrato no lo trae. 404 ⇒ notFound().
+ * REQUIERE_REVISION_NIT), credenciales protegidas, enlace al contrato e historial. El nombre y el NIT salen de
+ * `empresa` del detalle (EmpresaIdentificada, contrato 1.1.0, delta 7); si el nombre llega vacío (compañía suspendida)
+ * o falta `empresa`, el título es el id. 404 ⇒ notFound().
  */
 export function DetalleAprovisionamiento({ tenantId }: { tenantId: string }) {
   const router = useRouter();
@@ -80,9 +81,9 @@ export function DetalleAprovisionamiento({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (!puede) return;
     const controller = new AbortController();
-    Promise.all([obtenerAprovisionamiento(tenantId, controller.signal), buscarEmpresaBackoffice(tenantId, controller.signal)]).then(
-      ([detalle, empresa]) => {
-        if (!controller.signal.aborted) setCarga({ tipo: "listo", detalle, empresa });
+    obtenerAprovisionamiento(tenantId, controller.signal).then(
+      (detalle) => {
+        if (!controller.signal.aborted) setCarga({ tipo: "listo", detalle });
       },
       (e: unknown) => {
         if (controller.signal.aborted) return;
@@ -96,7 +97,7 @@ export function DetalleAprovisionamiento({ tenantId }: { tenantId: string }) {
   /** Relee el estado sin volver al «cargando»: el aviso del reintento o de las credenciales sigue a la vista. */
   const releerEstado = useCallback(() => {
     obtenerAprovisionamiento(tenantId).then(
-      (detalle) => setCarga((c) => (c.tipo === "listo" ? { ...c, detalle } : c)),
+      (detalle) => setCarga((c) => (c.tipo === "listo" ? { ...c, detalle: { ...detalle, empresa: detalle.empresa ?? c.detalle.empresa } } : c)),
       () => {},
     );
   }, [tenantId]);
@@ -145,8 +146,8 @@ export function DetalleAprovisionamiento({ tenantId }: { tenantId: string }) {
       </InlineAlert>
     );
 
-  const { detalle, empresa } = carga;
-  const nombre = empresa?.nombre ?? "Compañía";
+  const { detalle } = carga;
+  const nombre = nombreVisibleEmpresa(detalle.empresa, tenantId);
   const motivo = etiquetaMotivoAprovisionamiento(detalle.motivo);
   const etiquetaDe = (estado: string | null) => (estado ? etiquetaEstadoAprovisionamiento(estado) : "Sin dato");
 
@@ -156,7 +157,7 @@ export function DetalleAprovisionamiento({ tenantId }: { tenantId: string }) {
         titulo={nombre}
         icono="empresas"
         miga={[{ etiqueta: "Backoffice", href: hrefConEmpresa("/backoffice/empresas", empresaUrl) }, { etiqueta: nombre }]}
-        descripcion={empresa?.nit ? `NIT ${empresa.nit}` : undefined}
+        descripcion={nitVisibleEmpresa(detalle.empresa)}
       />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section role="group" aria-labelledby={estadoId} className={`${TARJETA_CLS} flex flex-col gap-3`}>

@@ -34,17 +34,28 @@ import {
   TARJETA_CLS,
   TEXTO_SECUNDARIO_CLS,
 } from "@/components/comun/estilos";
-import { listarEmpresasBackoffice, useEmpresaBackoffice, type PaginaEmpresasBackoffice } from "@/lib/backoffice/api";
+import {
+  ETIQUETA_USUARIOS_EMPRESA,
+  listarEmpresasBackoffice,
+  nitVisibleEmpresa,
+  nombreVisibleEmpresa,
+  type EmpresaIdentificada,
+  type PaginaEmpresasBackoffice,
+} from "@/lib/backoffice/api";
 import { useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
 import { mensajeErrorFijo } from "@/lib/errores";
 import { PERMISOS, tienePermiso, type SesionImpuestos } from "@/lib/sesion";
 import {
   ERRORES_USUARIOS,
+  ESTADOS_USUARIO,
+  ROLES_IMPUESTOS,
   TAMANO_PAGINA_USUARIOS,
   etiquetaEstadoUsuario,
   etiquetaRol,
   listarUsuarios,
   rolesAsignables,
+  type EstadoUsuario,
+  type FiltrosUsuarios,
   type PaginaUsuarios,
   type RolImpuestos,
   type UsuarioImpuestos,
@@ -70,7 +81,9 @@ const TONO_ESTADO: Readonly<Record<string, StatusBadgeTone>> = { ACTIVO: "succes
  * /usuarios (spec-visual §3.8; plan §6.1; D-ROL-ADMIN, D-GESTOR). Una sola ruta:
  * - Administrador Impuestos: los usuarios de su compañía (GET /usuarios, compañía del token).
  * - Super Admin sin ?empresa=: la tabla de compañías con Impuestos; elegir una fija ?empresa= (también en el selector).
- * - Super Admin con ?empresa=: los usuarios de esa compañía, con la miga «Usuarios › {Compañía}».
+ * - Super Admin con ?empresa=: los usuarios de esa compañía, con la miga «Usuarios › {Compañía}» y su NIT, tomados de
+ *   PaginaUsuarios.empresa (contrato 1.1.0, delta 7).
+ * Filtros Rol y Estado (1.1.0, delta 6) junto a la búsqueda; el AdminCompany (`protegido`) no tiene acciones.
  * Sin impuestos.usuarios.gestionar, la 403. La API vuelve a exigir el permiso en cada ruta.
  */
 export function Usuarios() {
@@ -98,23 +111,28 @@ type Dialogo =
   | { tipo: "estado"; accion: AccionEstado; usuario: UsuarioImpuestos; disparador: HTMLElement | null };
 
 function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos; empresa: string | null; onVolver: () => void }) {
-  const [filtros, setFiltros] = useState({ q: "", page: 1, pageSize: TAMANO_PAGINA_USUARIOS });
+  const [filtros, setFiltros] = useState<FiltrosUsuarios>({ q: "", rol: null, estado: null, page: 1, pageSize: TAMANO_PAGINA_USUARIOS });
   const [texto, setTexto] = useState("");
   const [carga, setCarga] = useState<Carga<PaginaUsuarios>>({ tipo: "cargando" });
+  // Última compañía identificada por la API: sigue en la cabecera mientras se relee la lista con otros filtros.
+  const [identificada, setIdentificada] = useState<EmpresaIdentificada | null>(null);
   const [intento, setIntento] = useState(0);
   const [dialogo, setDialogo] = useState<Dialogo | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const regionRef = useRef<HTMLElement>(null);
   const focoPendiente = useRef<{ destino: HTMLElement | null } | null>(null);
   const roles = rolesAsignables(sesion.esSuperAdmin === true);
-  const elegida = useEmpresaBackoffice(empresa);
   const buscarId = useId();
+  const rolId = useId();
+  const estadoId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
     listarUsuarios(filtros, empresa, controller.signal).then(
       (datos) => {
-        if (!controller.signal.aborted) setCarga({ tipo: "listo", datos });
+        if (controller.signal.aborted) return;
+        setCarga({ tipo: "listo", datos });
+        if (datos.empresa) setIdentificada(datos.empresa);
       },
       (e: unknown) => {
         if (!controller.signal.aborted) setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "Revisa tu conexión e intenta de nuevo.", ERRORES_USUARIOS) });
@@ -134,7 +152,7 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
   };
   const limpiar = () => {
     setTexto("");
-    aplicar({ q: "" });
+    aplicar({ q: "", rol: null, estado: null });
   };
 
   /** Cierra el diálogo y, ya pintado, devuelve el foco al disparador; si salió del DOM, a la región de usuarios. */
@@ -168,7 +186,13 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
     else setDialogo({ tipo: "estado", accion, usuario, disparador });
   };
 
-  const hayFiltro = filtros.q !== "";
+  const hayFiltro = filtros.q !== "" || Boolean(filtros.rol) || Boolean(filtros.estado);
+  const nombreEmpresa = empresa && identificada ? nombreVisibleEmpresa(identificada, empresa) : null;
+  const descripcion = empresa
+    ? nombreEmpresa
+      ? [nombreEmpresa, nitVisibleEmpresa(identificada)].filter(Boolean).join(" · ")
+      : undefined
+    : sesion.empresa.nombre || undefined;
   let contenido: ReactNode;
   if (carga.tipo === "cargando") contenido = <EsqueletoTabla etiqueta="Cargando usuarios…" />;
   else if (carga.tipo === "error")
@@ -242,8 +266,8 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
       <CabeceraModulo
         titulo="Usuarios"
         icono="colaboradores"
-        miga={empresa && elegida ? [{ etiqueta: "Usuarios", onClick: onVolver }, { etiqueta: elegida.nombre }] : undefined}
-        descripcion={empresa ? elegida?.nombre : sesion.empresa.nombre || undefined}
+        miga={nombreEmpresa ? [{ etiqueta: "Usuarios", onClick: onVolver }, { etiqueta: nombreEmpresa }] : undefined}
+        descripcion={descripcion}
         acciones={
           <Button onClick={abrirInvitar} className="gap-1.5">
             <IconoMas className="h-4 w-4" aria-hidden="true" />
@@ -270,6 +294,42 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
           <button type="submit" className={BOTON_SECUNDARIO_CLS}>
             Buscar
           </button>
+          <div className="flex flex-col gap-1">
+            <label htmlFor={rolId} className={ETIQUETA_CLS}>
+              Rol
+            </label>
+            <select
+              id={rolId}
+              value={filtros.rol ?? ""}
+              onChange={(e) => aplicar({ rol: (e.target.value || null) as RolImpuestos | null })}
+              className={`${CAMPO_CLS} w-60`}
+            >
+              <option value="">Todos</option>
+              {ROLES_IMPUESTOS.map((r) => (
+                <option key={r} value={r}>
+                  {etiquetaRol(r)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor={estadoId} className={ETIQUETA_CLS}>
+              Estado
+            </label>
+            <select
+              id={estadoId}
+              value={filtros.estado ?? ""}
+              onChange={(e) => aplicar({ estado: (e.target.value || null) as EstadoUsuario | null })}
+              className={`${CAMPO_CLS} w-44`}
+            >
+              <option value="">Todos</option>
+              {ESTADOS_USUARIO.map((e) => (
+                <option key={e} value={e}>
+                  {etiquetaEstadoUsuario(e)}
+                </option>
+              ))}
+            </select>
+          </div>
         </form>
         <div>{contenido}</div>
       </section>
@@ -313,8 +373,9 @@ interface TablaUsuariosProps {
 
 /**
  * Tabla por defecto: Nombre · Correo · Rol · Estado · Acciones. Las acciones salen del estado (Activo: Cambiar rol si hay
- * otro rol que dar, y Suspender; Suspendido: Reactivar). La fila propia dice «Eres tú» y la invitación pendiente su
- * literal del contrato, sin menú. Por debajo de 1024 px cada usuario es una tarjeta con su nombre de título.
+ * otro rol que dar, y Suspender; Suspendido: Reactivar). La fila propia dice «Eres tú»; la del AdminCompany (`protegido`,
+ * 1.1.0) el literal OBJETIVO_PROTEGIDO del contrato, y la invitación pendiente el suyo, todas sin menú. Por debajo de
+ * 1024 px cada usuario es una tarjeta con su nombre de título.
  */
 function TablaUsuarios({ usuarios, propio, roles, onAccion }: TablaUsuariosProps) {
   return (
@@ -360,6 +421,7 @@ function TablaUsuarios({ usuarios, propio, roles, onAccion }: TablaUsuariosProps
 
 function AccionesUsuario({ usuario, propio, roles, onAccion }: { usuario: UsuarioImpuestos; propio: boolean; roles: readonly RolImpuestos[]; onAccion: TablaUsuariosProps["onAccion"] }) {
   if (propio) return <span className={TEXTO_SECUNDARIO_CLS}>Eres tú</span>;
+  if (usuario.protegido === true) return <span className={TEXTO_SECUNDARIO_CLS}>{ERRORES_USUARIOS.OBJETIVO_PROTEGIDO}</span>;
   if (usuario.estado === "INVITADO") return <span className={TEXTO_SECUNDARIO_CLS}>{ERRORES_USUARIOS.INVITACION_PENDIENTE}</span>;
   const items: ActionsMenuItem[] = [];
   if (usuario.estado === "ACTIVO") {
@@ -390,8 +452,8 @@ function EsqueletoTabla({ etiqueta, filas = 5 }: { etiqueta: string; filas?: num
 }
 
 /**
- * Super Admin sin compañía elegida: las compañías con Impuestos (GET /backoffice/empresas) con «Ver usuarios», que fija
- * ?empresa=. El contrato no trae el número de usuarios por compañía: la columna «Usuarios» del spec queda fuera.
+ * Super Admin sin compañía elegida: las compañías con Impuestos (GET /backoffice/empresas) con su número de usuarios
+ * (`usuarios`, 1.1.0; celda vacía si no llega) y «Ver usuarios», que fija ?empresa=.
  */
 function CompaniasConImpuestos({ onElegir }: { onElegir: (id: string) => void }) {
   const [page, setPage] = useState(1);
@@ -444,7 +506,7 @@ function CompaniasConImpuestos({ onElegir }: { onElegir: (id: string) => void })
           <table aria-label="Compañías con Impuestos" className={`w-full min-w-[560px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
             <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
-                {["Compañía", "NIT", "Acción"].map((t) => (
+                {["Compañía", "NIT", ETIQUETA_USUARIOS_EMPRESA, "Acción"].map((t) => (
                   <th key={t} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
                     {t}
                   </th>
@@ -459,6 +521,9 @@ function CompaniasConImpuestos({ onElegir }: { onElegir: (id: string) => void })
                   </td>
                   <td data-label="NIT" className={`${CELDA_CLS} tabular-nums`}>
                     {e.nit ?? <span className={TEXTO_SECUNDARIO_CLS}>Sin dato</span>}
+                  </td>
+                  <td data-label={ETIQUETA_USUARIOS_EMPRESA} className={`${CELDA_CLS} tabular-nums`}>
+                    {typeof e.usuarios === "number" ? e.usuarios : null}
                   </td>
                   <td data-label="Acción" className={CELDA_CLS}>
                     <button type="button" className={ENLACE_ACCION_CLS} onClick={() => onElegir(e.id)}>
