@@ -196,3 +196,13 @@ describe("empresa seleccionada en los fetchers", () => {
     ]);
   });
 });
+
+describe("recetas del selector en components/comun/estilos.ts (spec-visual §0.2)", () => {
+  it("QUITAR_24PX_CLS y el Reintentar de la barra salen de las recetas comunes", async () => {
+    const estilos = await import("@/components/comun/estilos");
+    expect(estilos.QUITAR_24PX_CLS).toBe("[&_button[aria-label^='Quitar']]:min-w-6 [&_button[aria-label^='Quitar']]:min-h-6");
+    expect(estilos.BOTON_REINTENTAR_BARRA_CLS).toContain(estilos.BOTON_REINTENTAR_CLS);
+    expect(estilos.BOTON_REINTENTAR_BARRA_CLS).toContain("min-h-8");
+    expect(estilos.BOTON_REINTENTAR_BARRA_CLS).toContain("text-[color:var(--di-warning)]");
+  });
+});

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SearchableSelect, type SearchableSelectOption } from "@flit/ui/SearchableSelect";
 import { RUTAS, apiFetch } from "@/lib/api";
+import { BOTON_REINTENTAR_BARRA_CLS as BOTON_REINTENTAR_CLS, QUITAR_24PX_CLS } from "@/components/comun/estilos";
 import { useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
 
 /** Compañía del selector (plan §5.1, lista del backoffice: `{items:[{id, nombre, nit, …}], total, page, pageSize}`). */
@@ -33,14 +34,6 @@ async function cargarEmpresas(signal: AbortSignal): Promise<EmpresaOpcion[]> {
 }
 
 type Listado = { tipo: "cargando" } | { tipo: "error" } | { tipo: "listo"; empresas: EmpresaOpcion[] };
-
-// WCAG 2.2 · 2.5.8: el botón «Quitar selección» del SearchableSelect del kit mide 22 px; se le da 24 × 24 px desde aquí,
-// como `SelectorCompania` de Diagnóstico. El hueco real es del kit (spec-visual §5, H-6).
-const QUITAR_24PX_CLS = "[&_button[aria-label^='Quitar']]:min-w-6 [&_button[aria-label^='Quitar']]:min-h-6";
-
-// Receta de Reintentar del molde (BOTON_REINTENTAR_CLS) con 32 px de alto, en tono warning: la vista global sigue sirviendo.
-const BOTON_REINTENTAR_CLS =
-  "inline-flex min-h-8 shrink-0 items-center rounded-full border border-current px-3 py-1 text-xs font-semibold text-[color:var(--di-warning)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /**
  * Selector de compañía del Super Admin en la barra (plan §6.1, AC-FE-23 y AC-FE-33). «Todas las compañías» es la vista
