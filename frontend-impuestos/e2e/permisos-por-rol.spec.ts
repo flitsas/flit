@@ -114,13 +114,13 @@ test.describe("Administrador Impuestos", () => {
     for (const col of ["Nombre", "Correo", "Rol", "Estado", "Acciones"]) await expect(tabla.getByRole("columnheader", { name: col, exact: true })).toBeVisible();
     await expect(tabla.getByText("Eres tú", { exact: true })).toHaveCount(1);
 
+    // Los filtros viven en el estado del componente (spec-visual §3.8 no los lleva a la URL): se comprueba el contenido.
     await page.getByRole("combobox", { name: "Rol" }).selectOption({ label: "Administrador Impuestos" });
-    await expect(page).toHaveURL(/[?&]rol=admin_impuestos/);
     await expect(filasDatos(tabla, page).first()).toBeVisible();
     for (const fila of await filasDatos(tabla, page).all()) await expect(fila.getByRole("cell").nth(2)).toHaveText("Administrador Impuestos");
 
     await page.getByRole("combobox", { name: "Estado" }).selectOption({ label: "Activo" });
-    await expect(page).toHaveURL(/[?&]estado=ACTIVO/);
+    await expect(filasDatos(tabla, page).first()).toBeVisible();
     for (const fila of await filasDatos(tabla, page).all()) await expect(fila.getByRole("cell").nth(3)).toContainText("Activo");
     await revisarTemas(page, "usuarios-admin", "PR-2");
     await revisar360(page, "usuarios-admin", "PR-2");
