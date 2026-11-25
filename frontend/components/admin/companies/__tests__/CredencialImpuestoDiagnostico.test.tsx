@@ -420,4 +420,29 @@ describe("CredencialImpuestoDiagnostico · Obtener del proveedor (HU #14711)", (
     resolverPut();
     await screen.findByText("API key de impuesto guardada.");
   });
+
+  // M-3 (code review): el alta y la relectura del listado son pasos distintos; un fallo de la relectura no niega el alta.
+  it("si la relectura del listado falla tras obtener, el éxito se mantiene con un aviso no alarmante y sin role=alert", async () => {
+    const user = userEvent.setup();
+    onChanged.mockRejectedValue(new Error("fallo de red al releer"));
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    await user.click(obtener());
+    expect(
+      await screen.findByText("Llave obtenida del proveedor. No se pudo actualizar el listado; recarga la página para verlo."),
+    ).toHaveAttribute("role", "status");
+    expect(screen.getByText("Llave configurada · prefijo AbCdEfGh…")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/No se pudo obtener la llave/)).toBeNull();
+    expect(obtener()).not.toHaveAttribute("aria-busy");
+  });
+
+  it("el chip dice «Configurada» tras obtener aunque el listado aún no se haya refrescado", async () => {
+    const user = userEvent.setup();
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    expect(screen.getByText("No configurada")).toBeInTheDocument();
+    await user.click(obtener());
+    await screen.findByText("Llave configurada · prefijo AbCdEfGh…");
+    expect(screen.getByText("Configurada")).toBeInTheDocument();
+    expect(screen.queryByText("No configurada")).toBeNull();
+  });
 });

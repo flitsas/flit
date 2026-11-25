@@ -44,7 +44,9 @@ const MENSAJES_OBTENER: Record<string, string> = {
 const MSG_LIMITE = "Se hicieron demasiadas solicitudes al proveedor; espera un momento e intenta de nuevo";
 const MSG_OBTENER_DEFECTO = "No se pudo obtener la llave del proveedor; intenta de nuevo";
 const MSG_VACIO = "Sin credencial del proveedor. Se obtiene del proveedor de impuesto con el NIT de la empresa.";
-const MSG_ROTADA = "El proveedor reemplazó la llave anterior; Impuestos se actualiza automáticamente";
+const MSG_OBTENIDA = "Llave obtenida del proveedor.";
+const MSG_RELECTURA = "No se pudo actualizar el listado; recarga la página para verlo.";
+const MSG_ROTADA ="El proveedor reemplazó la llave anterior; Impuestos se actualiza automáticamente";
 
 /** El mensaje del servidor no se muestra (puede traer detalle técnico): solo los literales por código. */
 function mensajeObtener(e: unknown): string {
@@ -184,10 +186,18 @@ export function CredencialImpuestoDiagnostico({
         changed: r.changed,
         updatedAt: r.updatedAt,
       });
-      setExito("Llave obtenida del proveedor.");
-      await onChanged();
+      setExito(MSG_OBTENIDA);
     } catch (e) {
       setError(mensajeObtener(e));
+      setObteniendo(false);
+      return;
+    }
+    // M-3: la relectura va aparte. El alta ya se hizo y su estado local manda; si el listado no se refresca, se avisa en la
+    // misma región de estado (sin role=alert) en vez de mostrar el error de obtener junto al éxito.
+    try {
+      await onChanged();
+    } catch {
+      setExito(`${MSG_OBTENIDA} ${MSG_RELECTURA}`);
     } finally {
       setObteniendo(false);
     }
@@ -213,10 +223,10 @@ export function CredencialImpuestoDiagnostico({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">API key de impuesto:</span>
         <StatusBadge
-          tone={configurada ? "success" : "neutral"}
-          icono={rutaKit(configurada ? ICONO_TONO.ok : ICONO_TONO[""])}
-          ariaLabel={`API key de impuesto: ${configurada ? "Configurada" : "No configurada"}`}
-          label={configurada ? "Configurada" : "No configurada"}
+          tone={llaveConfigurada ? "success" : "neutral"}
+          icono={rutaKit(llaveConfigurada ? ICONO_TONO.ok : ICONO_TONO[""])}
+          ariaLabel={`API key de impuesto: ${llaveConfigurada ? "Configurada" : "No configurada"}`}
+          label={llaveConfigurada ? "Configurada" : "No configurada"}
         />
         <Button size="sm" className="ml-auto" cargando={obteniendo} disabled={ocupado} onClick={() => void obtener()}>
           Obtener del proveedor
