@@ -112,7 +112,9 @@ public static class IdentityVerificationEmailLayout
             .Append(Enc(content.RequestedByLabel)).Append("<br/><strong style=\"font-size:14px;color:").Append(Ink).Append(";\">")
             .Append(product).Append("</strong></td></tr></table>");
 
-        // Pasos.
+        // Pasos (solo si hay pasos: la alerta de operación no los trae).
+        if (content.Steps.Count > 0)
+        {
         sb.Append("<p style=\"margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.06em;color:").Append(Muted)
             .Append(";\">").Append(Enc(content.StepsHeading)).Append("</p>");
         sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 24px;\">");
@@ -127,6 +129,7 @@ public static class IdentityVerificationEmailLayout
                 .Append(Enc(content.Steps[i])).Append("</td></tr>");
         }
         sb.Append("</table>");
+        }
 
         // Botón (ancho según contenido) y enlace de respaldo.
         sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 18px;\"><tr>")

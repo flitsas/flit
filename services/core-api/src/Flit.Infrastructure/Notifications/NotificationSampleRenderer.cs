@@ -63,7 +63,7 @@ public static class NotificationSampleRenderer
                 new Flit.Tramites.Application.Identity.Rounds.IdentityRoundsAlertMessage(
                     Guid.Empty, Guid.Empty, null, "Trámite de ejemplo", "Persona de ejemplo", "CC", "0000000000",
                     "Imagen borrosa", 3, 3, "al_maximo", DateTimeOffset.UnixEpoch),
-                baseUrl,
+                "http://localhost:3000", // vista previa: enlace al frontend local (no es la base de imágenes)
                 effectiveTheme ?? Flit.Modules.Security.Domain.Auth.EmailTheme.Flit,
                 baseUrl),
             _ => throw new InvalidOperationException(
