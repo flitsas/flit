@@ -13,22 +13,26 @@ public sealed class TenantProductProvisioningEntity
 
     public string ProductCode { get; set; } = string.Empty;
 
-    /// <summary>Estado que define el producto (en impuestos, los del plan §3.1).</summary>
-    public string Estado { get; set; } = string.Empty;
+    /// <summary>Estado que define el producto (en impuestos, los del plan §3.1). Columna <c>status</c>.</summary>
+    public string Status { get; set; } = string.Empty;
 
-    public string? MotivoCodigo { get; set; }
+    /// <summary>Código estable del motivo. Columna <c>reason_code</c>.</summary>
+    public string? ReasonCode { get; set; }
 
-    public string? Mensaje { get; set; }
+    /// <summary>Motivo legible. Columna <c>message</c>.</summary>
+    public string? Message { get; set; }
 
-    public string? Accion { get; set; }
+    /// <summary>Acción del SuperAdmin. Columna <c>action</c>.</summary>
+    public string? Action { get; set; }
 
-    /// <summary>Solo en LISTO: false = «Firma sin confirmar». Null en los demás estados.</summary>
-    public bool? FirmaConfirmada { get; set; }
+    /// <summary>Solo en LISTO: false = «Firma sin confirmar». Null en los demás estados. Columna <c>signature_confirmed</c>.</summary>
+    public bool? SignatureConfirmed { get; set; }
 
-    /// <summary>Versión monotónica del estado en el servicio del producto (no es <see cref="RowVersion"/>).</summary>
-    public long Version { get; set; }
+    /// <summary>Versión monotónica del estado en el servicio del producto (no es <see cref="RowVersion"/>). Columna <c>reported_version</c>.</summary>
+    public long ReportedVersion { get; set; }
 
-    public DateTimeOffset ActualizadoEn { get; set; }
+    /// <summary>Momento del estado. Columna <c>reported_at</c>.</summary>
+    public DateTimeOffset ReportedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

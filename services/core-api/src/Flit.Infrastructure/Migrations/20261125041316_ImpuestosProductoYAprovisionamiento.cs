@@ -19,18 +19,27 @@ namespace Flit.Infrastructure.Migrations;
 /// </summary>
 public partial class ImpuestosProductoYAprovisionamiento : Migration
 {
+    /// <summary>
+    /// Actor de sistema con que el paso 3a del DDL 205 cierra (<c>deleted_by</c>) los <c>gestor_impuestos</c> que asciende a
+    /// <c>admin_impuestos</c>. No es un usuario (la columna no tiene FK): marca qué cierres son del DDL para que el
+    /// <see cref="Down"/> reabra solo esos. El valor está repetido en el DDL; si cambia, cambia en los dos.
+    /// </summary>
+    public const string ActorAscensoDdl205 = "00000000-0000-4000-8000-000000000205";
+
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder) =>
         migrationBuilder.Sql(EmbeddedDdl.LoadUp("205-impuestos-producto-y-aprovisionamiento.sql"));
 
     /// <inheritdoc />
     /// <remarks>
-    /// Vuelve al espejo del DDL 126, retira admin_impuestos con sus asignaciones, reabre el último gestor_impuestos cerrado
-    /// de quien queda sin rol de Impuestos y borra el producto solo si nada lo referencia (el manifiesto pudo crear módulos,
+    /// Vuelve al espejo del DDL 126, retira admin_impuestos con sus asignaciones y sus invitaciones
+    /// (<c>security.user_invitations.role_id</c> es FK RESTRICT; las filas de <c>invitation_roles</c> caen en cascada), reabre
+    /// solo los gestor_impuestos que cerró el paso 3a del DDL (<c>deleted_by</c> = <see cref="ActorAscensoDdl205"/>) si su
+    /// usuario quedó sin rol de Impuestos, y borra el producto solo si nada lo referencia (el manifiesto pudo crear módulos,
     /// permisos y gestor_impuestos, que no son de esta migración).
     /// </remarks>
     protected override void Down(MigrationBuilder migrationBuilder) =>
-        migrationBuilder.Sql("""
+        migrationBuilder.Sql($"""
             DROP TABLE IF EXISTS platform.tenant_product_provisioning;
 
             CREATE OR REPLACE FUNCTION security.trg_ura_mirror_product_admins()
@@ -80,6 +89,8 @@ public partial class ImpuestosProductoYAprovisionamiento : Migration
 
             DELETE FROM security.user_role_assignments
              WHERE role_id IN (SELECT id FROM security.roles WHERE code = 'admin_impuestos' AND tenant_id IS NULL);
+            DELETE FROM security.user_invitations
+             WHERE role_id IN (SELECT id FROM security.roles WHERE code = 'admin_impuestos' AND tenant_id IS NULL);
             DELETE FROM security.roles WHERE code = 'admin_impuestos' AND tenant_id IS NULL;
 
             UPDATE security.user_role_assignments g
@@ -89,6 +100,7 @@ public partial class ImpuestosProductoYAprovisionamiento : Migration
                      FROM security.user_role_assignments c
                      JOIN security.roles r ON r.id = c.role_id AND r.code = 'gestor_impuestos' AND r.tenant_id IS NULL
                     WHERE c.deleted_at IS NOT NULL
+                      AND c.deleted_by = '{ActorAscensoDdl205}'::uuid
                       AND NOT EXISTS (
                           SELECT 1 FROM security.user_role_assignments x
                            WHERE x.user_id = c.user_id AND x.tenant_id = c.tenant_id

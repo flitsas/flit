@@ -27,13 +27,13 @@ internal sealed class TenantProductProvisioningConfiguration : IEntityTypeConfig
 
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.ProductCode).HasColumnName("product_code").HasMaxLength(40).IsRequired();
-        builder.Property(x => x.Estado).HasColumnName("estado").HasMaxLength(32).IsRequired();
-        builder.Property(x => x.MotivoCodigo).HasColumnName("motivo_codigo").HasMaxLength(64);
-        builder.Property(x => x.Mensaje).HasColumnName("mensaje").HasMaxLength(300);
-        builder.Property(x => x.Accion).HasColumnName("accion").HasMaxLength(32);
-        builder.Property(x => x.FirmaConfirmada).HasColumnName("firma_confirmada");
-        builder.Property(x => x.Version).HasColumnName("version").IsRequired();
-        builder.Property(x => x.ActualizadoEn).HasColumnName("actualizado_en").IsRequired();
+        builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(32).IsRequired();
+        builder.Property(x => x.ReasonCode).HasColumnName("reason_code").HasMaxLength(64);
+        builder.Property(x => x.Message).HasColumnName("message").HasMaxLength(300);
+        builder.Property(x => x.Action).HasColumnName("action").HasMaxLength(32);
+        builder.Property(x => x.SignatureConfirmed).HasColumnName("signature_confirmed");
+        builder.Property(x => x.ReportedVersion).HasColumnName("reported_version").IsRequired();
+        builder.Property(x => x.ReportedAt).HasColumnName("reported_at").IsRequired();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()").IsRequired();
         builder.Property(x => x.RowVersion).HasColumnName("row_version").HasDefaultValue(0L).IsConcurrencyToken();
 
