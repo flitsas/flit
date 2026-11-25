@@ -15,7 +15,7 @@ public sealed record CargaCredencialesPeticion(string? ApiKey, string? WebhookSe
 /// <c>EMPRESA_SOLO_SUPER_ADMIN</c> para otro usuario, 400 <c>EMPRESA_REQUERIDA</c> si no es un uuid):
 /// <list type="bullet">
 ///   <item><c>PUT</c> (<c>impuestos.credenciales.cargar</c>): <c>{apiKey, webhookSecret?}</c> → 204 sin cuerpo; 422
-///   <c>CREDENCIAL_INVALIDA</c>; 409 si el estado no admite carga; 503 <c>PROVEEDOR_NO_DISPONIBLE</c> si el proveedor no permite
+///   <c>CREDENCIAL_INVALIDA</c> o <c>CREDENCIAL_REQUERIDA</c>; 409 <c>ESTADO_NO_ADMITE_CARGA</c>; 503 <c>PROVEEDOR_NO_DISPONIBLE</c> si el proveedor no permite
 ///   validar.</item>
 ///   <item><c>GET</c> (<c>impuestos.backoffice.ver</c>): <c>{tieneApiKey, tieneWebhookSecret, origen, apiKeyPrefijo,
 ///   actualizadoEn}</c>; la lectura queda auditada.</item>

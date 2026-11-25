@@ -308,6 +308,7 @@ public sealed class ConfiguracionTests(ApiConfiguracionFixture fixture) : IClass
         var ct = TestContext.Current.CancellationToken;
         Assert.SkipWhen(Api.Omitir is not null, Api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
+        await AlmacenCredencialesTests.SembrarAprovisionamientoAsync(Api, empresa, ct);
         var sa = Api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(Api));
 
         using var deAdmin = await Api.Cliente(TokenAdmin(Api, Guid.NewGuid())).GetAsync($"{Ruta}?empresa={empresa}", ct);
@@ -351,6 +352,24 @@ public sealed class ConfiguracionTests(ApiConfiguracionFixture fixture) : IClass
         fila.MaxRegistrosLoteOperativo.Should().Be(120);
         fila.CorreosAviso.Should().Equal("sa@empresa.test");
         fila.ActualizadoPor.Should().Be(CargaManualCredencialesTests.ActorSuperAdmin);
+    }
+
+    [Fact]
+    public async Task El_Super_Admin_con_empresa_sin_Impuestos_recibe_404_en_GET_y_PUT_sin_sembrar_ni_auditar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipWhen(Api.Omitir is not null, Api.Omitir ?? string.Empty);
+        var inexistente = Guid.NewGuid();
+        var sa = Api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(Api));
+
+        using var lectura = await sa.GetAsync($"{Ruta}?empresa={inexistente}", ct);
+        using var escritura = await sa.PutAsJsonAsync($"{Ruta}?empresa={inexistente}", new { maxRegistrosLote = 10, correosAviso = Array.Empty<string>() }, ct);
+
+        await DebeSerRegla(lectura, HttpStatusCode.NotFound, "EMPRESA_NO_ENCONTRADA", "La compañía no existe o no tiene Impuestos.", null, ct);
+        await DebeSerRegla(escritura, HttpStatusCode.NotFound, "EMPRESA_NO_ENCONTRADA", "La compañía no existe o no tiene Impuestos.", null, ct);
+        await using var db = Api.Contexto(inexistente);
+        (await db.Set<ConfiguracionEmpresa>().CountAsync(ct)).Should().Be(0, "no se siembra la fila de una compañía sin Impuestos");
+        (await db.Set<LecturaBackoffice>().CountAsync(ct)).Should().Be(0, "no se audita la lectura de una compañía sin Impuestos");
     }
 
     [Fact]

@@ -13,7 +13,8 @@ namespace Flit.Impuestos.Api.Modulos.Configuracion;
 ///   <c>EMPRESA_SOLO_SUPER_ADMIN</c> (regla de <see cref="EmpresaExplicita"/>, delta 8 de la 1.1.0).</item>
 ///   <item><c>PUT /configuracion</c> (<c>impuestos.configuracion.editar</c>): <c>{maxRegistrosLote, correosAviso[]}</c> de la
 ///   compañía del token o, para el Super Admin, de <c>?empresa</c> con la misma regla que el GET (delta 3 de la 1.1.0) → 200
-///   con la configuración completa; 422 <c>TOPE_SUPERA_CONTRACTUAL</c> (con <c>tope</c>), <c>TOPE_INVALIDO</c> o
+///   con la configuración completa; 404 <c>EMPRESA_NO_ENCONTRADA</c> si la compañía elegida no tiene Impuestos (en el GET
+///   también; delta 14), sin sembrar la fila; 422 <c>TOPE_SUPERA_CONTRACTUAL</c> (con <c>tope</c>), <c>TOPE_INVALIDO</c> o
 ///   <c>CORREO_INVALIDO</c>.</item>
 /// </list>
 /// </summary>
@@ -44,26 +45,35 @@ internal static class ConfiguracionEndpoints
     private static async Task<IResult> LeerAsync(
         HttpContext http, ServicioConfiguracion servicio, UsuarioActual usuario, AuditoriaLecturaBackoffice auditoria, CancellationToken ct)
     {
-        var empresa = await EmpresaDeLecturaAsync(http.Request.Query[EmpresaExplicita.Parametro], usuario, auditoria, ct).ConfigureAwait(false);
+        var empresa = await EmpresaDeLecturaAsync(http.Request.Query[EmpresaExplicita.Parametro], usuario, servicio, auditoria, ct).ConfigureAwait(false);
         return Results.Ok(await servicio.LeerAsync(empresa, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> GuardarAsync(
         HttpContext http, ConfiguracionOperativaEntrada entrada, ServicioConfiguracion servicio, UsuarioActual usuario, CancellationToken ct)
     {
-        var empresa = EmpresaExplicita.Opcional(usuario.EsSuperAdmin, http.Request.Query[EmpresaExplicita.Parametro]) ?? usuario.EmpresaPropia();
+        var empresa = usuario.EmpresaPropia();
+        if (EmpresaExplicita.Opcional(usuario.EsSuperAdmin, http.Request.Query[EmpresaExplicita.Parametro]) is { } elegida)
+        {
+            await servicio.ExigirConImpuestosAsync(elegida, ct).ConfigureAwait(false);
+            empresa = elegida;
+        }
+
         return Results.Ok(await servicio.GuardarOperativaAsync(empresa, entrada, Actor(usuario), ct).ConfigureAwait(false));
     }
 
     /// <summary>
     /// La compañía de una lectura con <c>empresa</c> opcional (contrato: parámetro <c>Empresa</c>; regla de
     /// <see cref="EmpresaExplicita.Opcional"/>): sin él, la del token (el Super Admin debe elegirla); con él, solo el Super
-    /// Admin, con un único uuid válido, y la lectura se audita antes de leer.
+    /// Admin, con un único uuid válido y de una compañía con Impuestos (404 <c>EMPRESA_NO_ENCONTRADA</c>, delta 14), y la
+    /// lectura se audita antes de leer.
     /// </summary>
-    internal static async Task<Guid> EmpresaDeLecturaAsync(StringValues consulta, UsuarioActual usuario, AuditoriaLecturaBackoffice auditoria, CancellationToken ct)
+    internal static async Task<Guid> EmpresaDeLecturaAsync(
+        StringValues consulta, UsuarioActual usuario, ServicioConfiguracion servicio, AuditoriaLecturaBackoffice auditoria, CancellationToken ct)
     {
         if (EmpresaExplicita.Opcional(usuario.EsSuperAdmin, consulta) is not { } empresa)
             return usuario.EmpresaPropia();
+        await servicio.ExigirConImpuestosAsync(empresa, ct).ConfigureAwait(false);
         await auditoria.RegistrarAsync(empresa, Recurso, ct).ConfigureAwait(false);
         return empresa;
     }

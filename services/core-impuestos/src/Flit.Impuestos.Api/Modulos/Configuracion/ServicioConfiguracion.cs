@@ -37,6 +37,17 @@ public sealed class ServicioConfiguracion(AlmacenCredenciales almacen, Sincroniz
     private const string CampoCorreos = "correosAviso";
     private const string CampoDepartamentos = "departamentosHabilitados";
 
+    /// <summary>
+    /// 404 <c>EMPRESA_NO_ENCONTRADA</c> si la compañía no tiene Impuestos (sin fila de aprovisionamiento). Lo usan las rutas en
+    /// las que el Super Admin elige la compañía, antes de auditar, leer o sembrar nada.
+    /// </summary>
+    public async Task ExigirConImpuestosAsync(Guid empresa, CancellationToken ct)
+    {
+        await using var db = almacen.ContextoDe(empresa);
+        if (await SincronizacionFuentes.EstadoAsync(db, empresa, ct).ConfigureAwait(false) is null)
+            throw ErroresConfiguracion.NoEncontrada();
+    }
+
     public async Task<ConfiguracionDto> LeerAsync(Guid empresa, CancellationToken ct)
     {
         await using var db = almacen.ContextoDe(empresa);

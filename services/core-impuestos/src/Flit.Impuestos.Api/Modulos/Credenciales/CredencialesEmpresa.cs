@@ -1,6 +1,7 @@
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
+using Flit.Impuestos.Domain;
 using Flit.Impuestos.Domain.Aprovisionamiento;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +13,7 @@ public sealed record VistaCredenciales(bool TieneApiKey, bool TieneWebhookSecret
 /// <summary>
 /// Servicio de las credenciales de una compañía (D-409, DA-2=b, plan §3.1 y §5.1). <see cref="CargarAsync"/> es la carga
 /// manual del Super Admin: valida la forma, comprueba con la máquina de estados que el aprovisionamiento la admite
-/// (<c>REQUIERE_CREDENCIALES</c> o <c>LISTO_SIN_WEBHOOK</c>; si no, 409 <c>TRANSICION_INVALIDA</c> sin llamar al API), valida la
+/// (<c>REQUIERE_CREDENCIALES</c> o <c>LISTO_SIN_WEBHOOK</c>; si no, 409 <c>ESTADO_NO_ADMITE_CARGA</c> sin llamar al API), valida la
 /// api_key con <c>GET /fuentes</c> y, en una sola transacción, guarda la credencial cifrada, aplica la transición
 /// (<c>LISTO</c> con secreto, <c>LISTO_SIN_WEBHOOK</c> sin él), sube la versión y escribe el historial. Un secreto nuevo apaga el
 /// modo respaldo de firma (F2b-CF3). El reporte a la plataforma lo hace el reportador de M07 por la versión. Nunca registra ni
@@ -27,6 +28,14 @@ public sealed record VistaCredenciales(bool TieneApiKey, bool TieneWebhookSecret
 public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, ClienteApiLiquidacion api, TimeProvider reloj, ILogger<CredencialesEmpresa> log)
 {
     public const string CodigoInvalida = "CREDENCIAL_INVALIDA";
+    public const string CodigoRequerida = "CREDENCIAL_REQUERIDA";
+    public const string CodigoEstadoNoAdmiteCarga = "ESTADO_NO_ADMITE_CARGA";
+
+    /// <summary>Literal de <c>CREDENCIAL_REQUERIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralRequerida = "Escribe la API key o el secreto del webhook.";
+
+    /// <summary>Literal de <c>ESTADO_NO_ADMITE_CARGA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralEstadoNoAdmiteCarga = "En el estado actual de la compañía no se pueden cargar credenciales.";
     public const string CodigoApiNoDisponible = "PROVEEDOR_NO_DISPONIBLE";
 
     /// <summary>Literal de <c>CREDENCIAL_INVALIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
@@ -50,8 +59,19 @@ public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, Cli
             : new SituacionAprovisionamiento(
                 aprovisionamiento.Estado, aprovisionamiento.EstadoPrevio, aprovisionamiento.IntentosAutomaticos, aprovisionamiento.FirmaConfirmada, aprovisionamiento.ErrorTipo);
         var evento = secreto is null ? EventoAprovisionamiento.CargaManualSinSecreto : EventoAprovisionamiento.CargaManualConSecreto;
-        // Antes de llamar al API: un estado que no admite carga es 409 (TransicionInvalida) y no gasta la llamada.
-        var nueva = TransicionesAprovisionamiento.Aplicar(situacion, evento).Nueva;
+        // Antes de llamar al API: un estado que no admite carga es 409 ESTADO_NO_ADMITE_CARGA y no gasta la llamada. El dominio
+        // responde con TransicionInvalida; el código del contrato se pone aquí, en el borde.
+        ResultadoAprovisionamiento resultado;
+        try
+        {
+            resultado = TransicionesAprovisionamiento.Aplicar(situacion, evento);
+        }
+        catch (TransicionInvalida)
+        {
+            throw ReglaException.Conflicto(CodigoEstadoNoAdmiteCarga, LiteralEstadoNoAdmiteCarga);
+        }
+
+        var nueva = resultado.Nueva;
 
         var validacion = await api.ObtenerFuentesAsync(llave, ct).ConfigureAwait(false);
         if (!validacion.Exitoso)
@@ -112,13 +132,14 @@ public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, Cli
     }
 
     /// <summary>
-    /// Texto visible (ASCII 0x21–0x7E) y, si se da, con el prefijo; si no, 422 <see cref="CodigoInvalida"/> con el campo y el
-    /// literal del contrato (el campo indica cuál de los dos valores revisar).
+    /// Texto visible (ASCII 0x21–0x7E) y, si se da, con el prefijo. Vacío o en blanco: 422 <see cref="CodigoRequerida"/>; mal
+    /// formado: 422 <see cref="CodigoInvalida"/>. Los dos con el campo y el literal del contrato.
     /// </summary>
     private static string Validar(string? valor, string campo, string? prefijo = null)
     {
-        if (string.IsNullOrEmpty(valor)
-            || valor.Any(c => c is < '!' or > '~')
+        if (string.IsNullOrWhiteSpace(valor))
+            throw new ReglaException(CodigoRequerida, LiteralRequerida) { Campo = campo };
+        if (valor.Any(c => c is < '!' or > '~')
             || (prefijo is not null && (!valor.StartsWith(prefijo, StringComparison.Ordinal) || valor.Length == prefijo.Length)))
             throw new ReglaException(CodigoInvalida, LiteralInvalida) { Campo = campo };
         return valor;

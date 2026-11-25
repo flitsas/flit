@@ -101,7 +101,7 @@ public sealed class UsuarioActual(IHttpContextAccessor http, IPlatformTenantAcce
 
     /// <summary>Compañía del token; 403 <c>SIN_EMPRESA</c> si no tiene.</summary>
     public Guid EmpresaPropia() =>
-        EmpresaId ?? throw ReglaException.Prohibido("SIN_EMPRESA", "Tu usuario no tiene una empresa asignada.");
+        EmpresaId ?? throw ReglaException.Prohibido("SIN_EMPRESA", "Tu usuario no tiene una compañía asociada.");
 
     /// <summary>La compañía del token es FLIT (<c>tenant_type=FLIT</c>).</summary>
     internal static bool EsDeFlit(ClaimsPrincipal user) =>
