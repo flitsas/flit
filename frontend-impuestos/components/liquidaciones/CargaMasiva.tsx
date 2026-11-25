@@ -10,10 +10,11 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { PasosHorizontal, type EstadoPaso } from "@flit/ui/PasosHorizontal";
 import { ZonaArrastre } from "@flit/ui/ZonaArrastre";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/comun/estilos";
+import { EligeCompania } from "@/components/liquidaciones/EligeCompania";
 import { ResumenAnalisis } from "@/components/liquidaciones/ResumenAnalisis";
 import { ApiError } from "@/lib/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { ERRORES_EMPRESA, mensajeErrorFijo } from "@/lib/errores";
 import { analizarCarga, crearMasiva, descargarPlantilla } from "@/lib/liquidaciones/api";
 import { ERRORES_LIQUIDACIONES, PANTALLA } from "@/lib/liquidaciones/estados";
 import type { AnalisisCarga } from "@/lib/liquidaciones/tipos";
@@ -37,11 +38,15 @@ type Fallo = { tipo: "regla"; texto: string } | { tipo: "otro"; al: "analizar" |
  * consulta el RUNT ni el proveedor. Paso 2: resumen (ResumenAnalisis). Paso 3: «Iniciar liquidación de N placas» crea el
  * lote con el mismo archivo y navega a su detalle. Con `superaTope` el CTA queda deshabilitado con el literal
  * LIMITE_SUPERADO asociado y no se llama a la API. Errores con los literales del contrato (413, 415, 422, 409); otro,
- * «No se pudo analizar el archivo» + Reintentar sobre el mismo archivo.
+ * «No se pudo analizar el archivo» + Reintentar sobre el mismo archivo. Super Admin sin ?empresa (contrato 1.1.0: la carga
+ * es de una compañía): «Elige una compañía.» (EligeCompania) y todas las acciones deshabilitadas con ese motivo; no se
+ * analiza, no se crea y no se descarga la plantilla.
  */
-export function CargaMasiva({ bloqueo }: { bloqueo: string | null }) {
+export function CargaMasiva({ bloqueo: bloqueoSesion, esSuperAdmin = false }: { bloqueo: string | null; esSuperAdmin?: boolean }) {
   const router = useRouter();
   const { empresa } = useEmpresaSeleccionada();
+  const faltaEmpresa = esSuperAdmin && !empresa;
+  const bloqueo = faltaEmpresa ? ERRORES_EMPRESA.EMPRESA_REQUERIDA : bloqueoSesion;
   const base = useId();
   const idMotivo = `${base}-motivo`;
   const idTope = `${base}-tope`;
@@ -114,6 +119,7 @@ export function CargaMasiva({ bloqueo }: { bloqueo: string | null }) {
           {bloqueo}
         </p>
       ) : null}
+      {faltaEmpresa ? <EligeCompania /> : null}
       <section aria-label="Archivo de placas" className={`${TARJETA_CLS} flex flex-col gap-4`}>
         {ocupado === "analizando" ? (
           <VehicleLoader label="Analizando el archivo…" />
@@ -155,8 +161,11 @@ export function CargaMasiva({ bloqueo }: { bloqueo: string | null }) {
               </Button>
               <button
                 type="button"
-                className={BOTON_SECUNDARIO_CLS}
+                className={`${BOTON_SECUNDARIO_CLS} disabled:opacity-60`}
+                disabled={faltaEmpresa}
+                aria-describedby={faltaEmpresa ? idMotivo : undefined}
                 onClick={() => {
+                  if (faltaEmpresa) return;
                   setErrorPlantilla(null);
                   descargarPlantilla(empresa).catch((e: unknown) => setErrorPlantilla(mensajeErrorFijo(e, "No se descargó la plantilla. Intenta de nuevo.", ERRORES_LIQUIDACIONES)));
                 }}

@@ -119,6 +119,7 @@ function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: 
   const { lote, items } = carga.dato;
   const hechas = terminadas(lote);
   const abierto = loteAbierto(lote.estado);
+  const actorCierre = lote.cerradaPor?.nombre?.trim() || null;
   const filtrado = Boolean(estado || placa);
   const filtrar = (e: EstadoItem | null) => {
     setEstado(e);
@@ -198,8 +199,9 @@ function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: 
       {lote.estado === "CERRADO_MANUALMENTE" ? (
         <InlineAlert tone="info" vivo={false}>
           <p>
-            {lote.cerradaPor?.nombre
-              ? `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)} por ${lote.cerradaPor.nombre}.`
+            {/* Un nombre solo de espacios es lo mismo que no tener actor: nunca «por  .». */}
+            {actorCierre
+              ? `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)} por ${actorCierre}.`
               : `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)}.`}
           </p>
           {/* motivoCierre (contrato 1.1.0, delta 5): texto del usuario, siempre como texto plano. */}

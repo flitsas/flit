@@ -460,6 +460,21 @@ describe("Contrato 1.1.0 — compañía del Super Admin (delta 7) y conteo de us
     expect(document.body).not.toHaveTextContent("NIT null");
   });
 
+  it("PaginaUsuarios sin `empresa` (campo opcional): la miga y la descripción caen al id, como con el nombre vacío", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=e-1");
+    vi.stubGlobal("fetch", api({ usuarios: () => Response.json(pagina([ANA])) }));
+
+    render(<Usuarios />);
+    await screen.findByText("Ana Demo");
+
+    const miga = await screen.findByRole("navigation", { name: /miga/i });
+    expect(miga.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe("e-1");
+    expect(within(miga).getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getAllByText("e-1").length).toBeGreaterThanOrEqual(2);
+    expect(document.body).not.toHaveTextContent("Compañía Demo");
+  });
+
   it("la tabla de compañías del Super Admin trae la columna «Usuarios» con el conteo y la deja vacía si no llega", async () => {
     conSesion("superadmin");
     vi.stubGlobal("fetch", api());

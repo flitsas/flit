@@ -89,8 +89,6 @@ function urlPantalla(f: FiltrosLiquidaciones, empresa: string | null): string {
 export interface GridLiquidacionesProps {
   /** impuestos.liquidaciones.crear: tarjetas «Liquidar placa» y «Carga masiva». */
   puedeCrear: boolean;
-  /** Super Admin en vista global: columna «Compañía». */
-  mostrarCompania: boolean;
   /** Literal del contrato por el que no se puede crear (suspendido / no listo); null = se puede. */
   bloqueo: string | null;
   /**
@@ -106,7 +104,7 @@ export interface GridLiquidacionesProps {
  * y la tabla paginada. Cuatro estados: cargando (las tarjetas siguen usables), error con Reintentar, vacío sin datos y
  * vacío por filtro, y lleno. La compañía elegida por el Super Admin (?empresa=) viaja a la API y a cada enlace.
  */
-export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo: bloqueoSesion, esSuperAdmin = false }: GridLiquidacionesProps) {
+export function GridLiquidaciones({ puedeCrear, bloqueo: bloqueoSesion, esSuperAdmin = false }: GridLiquidacionesProps) {
   const router = useRouter();
   const params = useSearchParams();
   const { empresa } = useEmpresaSeleccionada();
@@ -227,7 +225,7 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo: bloque
     );
   } else {
     const { pagina } = carga;
-    const columnas = ["ID", ...(columnaTipo ? ["Tipo"] : []), "Creada", "Placas", "Avance", "Estado", "Creada por", ...(mostrarCompania ? ["Compañía"] : [])];
+    const columnas = ["ID", ...(columnaTipo ? ["Tipo"] : []), "Creada", "Placas", "Avance", "Estado", "Creada por"];
     contenido = (
       <div className="flex flex-col gap-3">
         <div className={CONTENEDOR_TABLA_CLS}>
@@ -294,11 +292,6 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo: bloque
                     <td data-label="Creada por" className={CELDA_CLS}>
                       {l.creadaPor?.nombre}
                     </td>
-                    {mostrarCompania ? (
-                      <td data-label="Compañía" className={CELDA_CLS}>
-                        {l.empresa?.nombre}
-                      </td>
-                    ) : null}
                   </tr>
                 );
               })}
