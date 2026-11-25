@@ -4,6 +4,7 @@
 > Revisado: 2026-11-25 (HEAD 5860c5e40) · alineada con los contratos `impuestos.v1.yaml` y `platform.v1.yaml` 1.1.0 tras M16, M18 y M19 (§0 «Precedencia del contrato») y cerrado el dashboard M17 (D-UI-GRAFICAS).
 > Revisado: 2026-11-25 (HEAD 3396655bc) · alineada con `impuestos.v1.yaml` 1.1.0 (deltas 4 a 7) y con el front ya integrado: chip y enlace de la fila `INDIVIDUAL`, motivo del cierre, Super Admin sin compañía en Liquidaciones, filtros y fila protegida de Usuarios, columna «Usuarios» y compañía identificada en el backoffice. Lo que espera al contrato 1.2.0 va marcado «en 1.2.0».
 > Revisado: 2026-11-25 (HEAD cfffcab89) · alineada con `impuestos.v1.yaml` 1.2.1 y `platform.v1.yaml` 1.1.1: lo marcado «en 1.2.0» quedó **entregado** (Reintentar en `LISTO_SIN_WEBHOOK`, motivos nuevos, `CLAVE_ROTADA` en el historial, línea de `modoRespaldoFirma`, enlace «Ver la original»); H-14 y H-17 cerrados; literal nuevo de `pantalla.avisoRotacionCredenciales`.
+> Revisado: 2026-11-25 (HEAD 2404ba1bf) · auditoría final M21 (§7). §3.1 y §3.7 alineadas con `impuestos.v1.yaml` 1.2.1 (deltas 9 a 13): series «Individuales»/«Masivas», «Monto liquidado» por departamento, `montoTotal` nullable, marcas «Parcial», filtros desde `/catalogos/reportes`, columna «Compañía» solo en la vista global, exportación con los mismos filtros y literal `TOPE_EXPORTACION` con `{tope}`.
 > Insumo del `frontend-agent` para M16–M19 y del `ui-agent` para auditarlos. HU FE #14695.
 > Plan de referencia: `docs/impuestos/plan-implementacion.md` §3 (estados), §5.1 (contrato), §6 (rutas), §9 M15–M19. Decisiones: `.claude/state/producto-impuestos/decisiones-usuario.md` (D-DASH, D-REPORTES, D-CONFIG, D-GESTOR, D-ROL-ADMIN, DA-6b, DA-7, DA-9).
 
@@ -186,11 +187,11 @@ Cada pantalla abre con `CabeceraModulo` de `@flit/ui/CabeceraModulo` (tarjeta t�
 
 **Gráficas (D-UI-GRAFICAS, decisión cerrada):** se **copian localmente** en `frontend-impuestos/components/estadisticas/` (`Figura.tsx`, `BarrasSerie.tsx`, `ListaBarras.tsx`, `TablaAlternativa.tsx`, `RegionDesplazable.tsx`), con la forma del molde y cabecera de comentario que cite D-UI-GRAFICAS. **No** se mueven a `packages/ui` en esta ola ni se importan de Diagnóstico (lo vigila `independencia.test.ts`). La copia conserva: `<figure aria-labelledby>` con `figcaption` visible, leyenda en texto, «Ver datos» con la tabla alternativa, colores solo `--chart-1..5` y `prefers-reduced-motion`. La deuda queda en H-1.
 
-**Literales del contrato** (`DashboardImpuestos.x-flit-etiquetas`): etiquetas de KPI («Liquidaciones», «Lotes en proceso», «Exitosas», «Con error», «Placas con deuda», «Placas al día», «Inciertas»…), «Monto total liquidado», `pantalla.liquidacionesSinMonto` y `pantalla.marcaParcial`. Lo que el contrato no nombra («Pendientes de resultado», títulos de las gráficas) es de esta spec.
+**Literales del contrato** (`Dashboard.x-flit-etiquetas` de `contadores`, `resultados`, `deuda`, `serie[]` y `porDepartamento[]`, 1.2.1): etiquetas de KPI («Liquidaciones», «Lotes en proceso», «Exitosas», «Con error», «Placas con deuda», «Placas al día», «Inciertas»…), «Individuales» y «Masivas» (`contadores` y `serie[]`), «Monto liquidado» (`porDepartamento[].monto`), «Monto total liquidado», `pantalla.montoSinDato` («Sin dato»), `pantalla.liquidacionesSinMonto` y `pantalla.marcaParcial`. Lo que el contrato no nombra («Pendientes de resultado», títulos y subtítulos de las gráficas) es de esta spec.
 
 ```
 ┌ CabeceraModulo: icono pagos · «Dashboard» · «Resumen de {Compañía | todas las compañías}» ── [Desde ▢][Hasta ▢] ┐
-│   chip neutral «Vista global» (solo SA sin compañía)                                                           │
+│   chip «Vista global» (solo SA sin compañía; CHIP_GLOBAL_CLS de acento, igual que el molde)                    │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 [KPI×6]  grid-cols-2 md:grid-cols-3 xl:grid-cols-6 (TarjetaMetrica)
 [Liquidaciones por día (lg:col-span-2)]      [Monto total liquidado]        grid-cols-1 lg:grid-cols-3
@@ -204,25 +205,29 @@ Cada pantalla abre con `CabeceraModulo` de `@flit/ui/CabeceraModulo` (tarjeta t�
 
 | # | `etiqueta` | `cifra` | `pie` | `icono` (MAPA_ICONO) | `href` |
 |---|---|---|---|---|---|
-| 1 | Liquidaciones | total | «{n} por placa · {m} masivas» | `reportes-detallados` | `/liquidaciones?desde&hasta` |
+| 1 | Liquidaciones | total | «{n} individuales · {m} masivas» (etiquetas de `contadores`, las mismas de la leyenda de la gráfica) | `reportes-detallados` | `/liquidaciones?desde&hasta` |
 | 2 | Lotes en proceso | n | — | `en-curso` | `/liquidaciones?tipo=MASIVA&estado=EN_PROCESO` |
 | 3 | Exitosas | n | — | `finalizados` | — |
 | 4 | Con error | n | — | `errores` | `/reportes?reporte=errores&desde&hasta` |
 | 5 | Pendientes de resultado | n | «{i} inciertas» si i > 0 | `pendientes` | — |
 | 6 | Placas con deuda | n | «{a} al día» | `pagos` | `/reportes?reporte=deuda&desde&hasta` |
 
-- **Monto total liquidado** (`components/estadisticas/MontoTotal.tsx`): tarjeta `TARJETA_CLS` con `h2` «Monto total liquidado» y la cifra en `text-[length:var(--di-text-cifra)] font-bold tabular-nums`.
-  - `montoTotal === null`: «Sin dato».
+- **Monto total liquidado** (`components/estadisticas/MontoTotal.tsx`): tarjeta de sección con `h2` «Monto total liquidado» y la cifra en `text-[length:var(--di-text-cifra)] font-bold tabular-nums`. Comparte fila con «Liquidaciones por día», así que usa la misma receta de sección (`SECCION_CLS` de `Figura.tsx`) y no `TARJETA_CLS`.
+  - `montoTotal === null` (delta 13: ninguna liquidación del rango trae monto): `pantalla.montoSinDato`, «Sin dato», en `--di-text-tertiary`. Nunca `$ 0`. Un `0` es un dato real y se pinta `$ 0`.
   - `liquidacionesSinMonto > 0`: pie con `pantalla.liquidacionesSinMonto` («{n} liquidaciones sin monto») y la marca «Parcial».
-  - `parcial === true`: `StatusBadge tone="purple" label="Parcial"` + «Incluye resultados parciales del proveedor».
-- **Liquidaciones por día:** barras por cubeta, con la forma de `BarrasSerie`. Dos series: por placa en `--chart-1` y masivas en `--chart-2`. Leyenda en texto y «Ver datos» con la tabla alternativa.
-- **Por departamento:** lista de barras con la forma de `ListaBarras`: nombre del departamento, cantidad y monto (si hay). Barra en `--chart-1`.
+  - `parcial === true`: la marca «Parcial» + la nota «Incluye resultados parciales del proveedor».
+  - La marca es **una sola** aunque se cumplan las dos condiciones: `StatusBadge tone="purple" label={pantalla.marcaParcial}` junto al título. La nota solo sale con `parcial === true`; el pie de «sin monto», solo con N > 0.
+- **Liquidaciones por día:** barras por cubeta, con la forma de `BarrasSerie`. Dos series con las etiquetas de `serie[].x-flit-etiquetas` (delta 10): **«Individuales»** en `--chart-1` y **«Masivas»** en `--chart-2`. Esos mismos nombres van en la leyenda, en el `title` de cada barra y en las columnas de «Ver datos» («Periodo · Individuales · Masivas»). Si algún día de la serie llega sin `individuales` o `masivas` (back anterior a la 1.1.0), se pinta una sola serie «Liquidaciones» con `total` en `--chart-1`, para no inventar ceros.
+- **Por departamento:** lista de barras con la forma de `ListaBarras`: nombre del departamento, cantidad (`porDepartamento[].total`, «Liquidaciones») y monto. Barra en `--chart-1`.
+  - Monto (delta 10): línea secundaria «Monto liquidado: {monto}» y columna «Monto liquidado» en la tabla alternativa («Departamento · Liquidaciones · Monto liquidado»). Un `monto` `null` dice «Monto liquidado: Sin dato», nunca `$ 0`.
+  - Si ningún departamento trae la propiedad `monto` (back anterior), no se pintan ni la línea ni la columna.
+  - Lista vacía: «No hay liquidaciones con departamento en este periodo.».
 - **Últimos 5 lotes:** lista. Cada fila: «Masiva · {fecha}», chip de estado (§1.1), `BarraProgreso` («{t} de {n} placas») y enlace `ENLACE_ACCION_CLS` «Ver lote».
 - **Ranking (solo SA global):** `ListaBarras` con `onElegir`, cada fila es un botón con nombre accesible «Ver {Compañía}».
 
 | Estado | Contenido |
 |---|---|
-| Cargando | Skeleton por bloque: `animate-pulse rounded-[9px] bg-[var(--di-surface-sunken)] motion-reduce:animate-none`, `role="status" aria-busy` + `sr-only` «Cargando el resumen…». KPIs con cifra «—». |
+| Cargando | Skeleton por bloque, con la misma rejilla del lleno (las dos filas `lg:grid-cols-3`, para que la página no salte al llegar los datos): `animate-pulse rounded-[9px] bg-[var(--di-surface-sunken)] motion-reduce:animate-none`, `role="status" aria-busy` + `sr-only` «Cargando el resumen…». KPIs con cifra «—». |
 | Vacío | `EstadoVacio`: título «Aún no hay liquidaciones en este periodo»; mensaje «Cambia el rango de fechas o liquida una placa.»; acciones [«Liquidar por placa»] (solo con `liquidaciones.crear` y producto no suspendido) y [«Ver los últimos 90 días»]. |
 | Error | Por bloque: `InlineAlert tone="error"` «No se pudo cargar {bloque}» + «Reintentar». Error total: «No se pudo cargar el resumen» + «Reintentar». Un bloque `null` muestra «Sin datos para este bloque» (`BloqueSinDatos` de `Dashboard.tsx:87`), nunca ceros. |
 | Lleno | Lo descrito arriba. |
@@ -416,30 +421,44 @@ Pagination
 **Molde:** `frontend-diagnostico/components/reportes/ModuloReportes.tsx`, `FiltrosReporte.tsx`, `TablaReporte.tsx`, `BotonesExportar.tsx` y `lib/reportes/useDescarga.ts`; spec previa §5.
 
 ```
-CabeceraModulo: icono reportes · «Reportes» · «Descarga la información de tus liquidaciones»
+CabeceraModulo: icono reportes · «Reportes» · «Descarga la información de tus liquidaciones» (SA: «Todas las compañías» o el nombre de la elegida, §3)
 InlineAlert aviso PII (persistente, sin cerrar; id para aria-describedby de Exportar)
 Pestanas: Detalle de liquidaciones · Resumen por lote · Placas con deuda · Errores de liquidación   (?reporte=)
 Filtros: Desde · Hasta · Tipo · Estado · Departamento · Usuario · Placa              [Limpiar filtros]
-Resultados «{N} registros» ─────────────────────────────── [Exportar Excel] [Exportar PDF]
+Resultados «{N} registros» («1 registro») ─────────────────────────────── [Exportar Excel] [Exportar PDF]
 DataTable + Pagination
 ```
 
 - Aviso PII (`InlineAlert tone="warning" vivo={false}`):
   - En `detalle`, `deuda` y `errores`: «Este reporte contiene datos personales (documentos y nombres) protegidos por la Ley 1581 de 2012. Úsalos solo para la finalidad autorizada. Cada descarga queda registrada con tu usuario.»
   - En `lotes`: `tone="info"` «Cada descarga queda registrada con tu usuario.»
-- Filtros:
+- Filtros (`role="search"`, `aria-label="Filtros de {reporte}"`):
   - Fechas como en §3.1.
-  - «Tipo» con `SelectorSegmentado` de `@flit/ui/SelectorSegmentado`: Todas, Por placa y Masivas.
-  - «Estado» y «Departamento»: `select` nativo con `CAMPO_CLS`.
-  - «Usuario»: `SearchableSelect` con los usuarios del producto.
-  - «Placa»: texto en mayúscula.
-  - Solo se pintan los filtros que aplican al reporte activo.
-- Tabla: `DataTable` de `@flit/ui/DataTable` (`ariaLabel` = nombre del reporte, `status` según la carga) + `Pagination`. En SA global, la primera columna es «Compañía». Los montos siguen §0.1, también «Sin dato».
+  - «Tipo» con `SelectorSegmentado` de `@flit/ui/SelectorSegmentado`: Todas, Por placa y Masivas (viaja `tipoLiquidacion`).
+  - «Estado»: `select` nativo con `CAMPO_CLS`, «Todos» + `EstadoItem.x-flit-etiquetas` en el orden del contrato (el parámetro `estado` es de `EstadoItem`).
+  - «Departamento»: `select` nativo con `CAMPO_CLS`, «Todos» + `GET /catalogos/reportes` → `departamentos` (delta 12). Se listan **todos los que trae el catálogo, también los inactivos** (`activa=false`): el reporte es histórico y una liquidación vieja puede ser de un departamento que hoy está apagado. Sin marca extra: el nombre basta. Viaja `codigo`.
+  - «Usuario»: `SearchableSelect` de `@flit/ui` con `label="Usuario"` y `defaultLabel="Todos"`, sobre `catalogos.usuarios` (quienes crearon liquidaciones, también los suspendidos; solo id y nombre). **Se muestra el nombre y viaja el id** (`usuario`, uuid). Nunca se pinta el correo. Lleva el parche de 24 px del botón «Quitar selección» (H-6).
+  - «Placa»: texto en mayúscula, sin espacios, `maxLength=10`; se aplica con Enter o al salir del campo.
+  - El catálogo es de la compañía elegida (`?empresa=`) o, para el SA en la vista global, de todas. **No pide `/fuentes` ni `/usuarios`**, así que también lo ve el Gestor. Mientras carga, o si falla o llega vacío, «Departamento» y «Usuario» no se pintan y el reporte sigue: no hay error visible por el catálogo.
+  - Solo se pintan los filtros que aplican al reporte activo, y solo esos viajan:
+
+| Reporte | Tipo | Estado | Departamento | Usuario | Placa |
+|---|---|---|---|---|---|
+| Detalle de liquidaciones | sí | sí | sí | sí | sí |
+| Resumen por lote | sí | — (su estado es de lote, no de ítem) | — | sí | — |
+| Placas con deuda | sí | — | sí | — | sí |
+| Errores de liquidación | sí | sí | sí | sí | sí |
+
+  - «Limpiar filtros» (secundario) deja el periodo y quita el resto. Cada cambio vuelve a la página 1.
+- Tabla: `DataTable` de `@flit/ui/DataTable` (`ariaLabel` = nombre del reporte, `status` según la carga) + `Pagination`, con las columnas en el orden y con la etiqueta de `columnas` de la respuesta. Los montos siguen §0.1, también «Sin dato» en `--di-text-tertiary`. `parcial=true` va como chip `purple` «Parcial» (`pantalla.marcaParcial`). Los enums, con su `x-flit-etiquetas` («Sin clasificar» si es desconocido).
+  - **Columna «Compañía»** (delta 11, etiqueta `x-flit-etiquetas.empresa` de las cuatro filas): **solo en la vista global del Super Admin** (sin `?empresa=`), y siempre como primera columna, la traiga o no `columnas`. Celda = `empresa.nombre`; si llega vacío (compañía suspendida), el id. Con una compañía elegida, o para un usuario de compañía, la columna no se pinta aunque la API la mande.
 - Exportar: dos `Button variant="secondary" size="sm"` con `iconoComo("nube-bajar")`, «Exportar Excel» y «Exportar PDF».
-  - Ayuda: «Se exportan los {N} registros del filtro».
-  - Tope: Excel 5.000 y PDF 1.000. Si `total` lo supera, el botón de ese formato queda deshabilitado con el motivo visible «Acota el filtro: máximo {L} registros en {Excel|PDF}». Un 422 `TOPE_EXPORTACION` da el mismo texto bajo los botones. Nunca se recorta en silencio.
+  - **Mismos filtros que la tabla** (delta 9): la URL de `/reportes/{tipo}/excel` y `/pdf` lleva exactamente los parámetros del GET que aplican al reporte, más `empresa` si el SA la eligió, y sin `page` ni `pageSize`. Lo que se ve filtrado es lo que se descarga.
+  - Ayuda: «Se exportan los {N} registros del filtro». En vuelo: «Puede tardar unos segundos».
+  - Tope previo: Excel 5.000 y PDF 1.000. Si `total` lo supera, el botón de ese formato queda con `aria-disabled` (sigue enfocable) y el motivo visible y asociado «Acota el filtro: máximo {L} registros en {Excel|PDF}», con `{L}` en formato es-CO. Este texto es de la spec: nombra el formato, que el literal del contrato no dice.
+  - **422 `TOPE_EXPORTACION`** (el servidor manda): bajo los botones, con `role="alert"`, el literal del contrato «El reporte supera el máximo de {tope} filas para exportar: ajusta los filtros.». `{tope}` sale de `tope` del cuerpo del error y, si no vino, del tope del formato pedido (5000 o 1000). Nunca queda «{tope}» a la vista. El número va tal cual lo da el contrato (`5000`), como en el resto de literales con `{tope}` del producto (`LIMITE_SUPERADO`, `TOPE_SUPERA_CONTRACTUAL`). Como el tope previo ya deshabilita el botón, el 422 solo aparece si el total cambió entre la carga y la exportación. Nunca se recorta en silencio.
   - En vuelo, «Generando…» con `aria-busy`.
-  - Los botones llevan `aria-describedby` hacia el aviso PII.
+  - Los botones llevan `aria-describedby` hacia el aviso PII, hacia la ayuda y, si lo hay, hacia su motivo.
   - Sin `reportes.exportar`, los botones no se pintan.
 
 | Estado | Contenido |
@@ -616,7 +635,7 @@ Las claves internas siguen siendo las del plan §6.1. El usuario ve títulos en 
 | `SIN_WEBHOOK` | `LISTO_SIN_WEBHOOK` o `modoSinWebhook=true` | `info` | `pantalla.bannerModoSinWebhook` | Ya puedes liquidar. Los resultados se consultan con el proveedor cada pocos minutos, en lugar de llegar al instante. |
 | `FIRMA_SIN_CONFIRMAR` | `LISTO` con `firmaConfirmada=false` | `info` | `pantalla.bannerFirmaSinConfirmar` | Ya puedes liquidar. Se confirma sola con el primer resultado que llegue. |
 
-- **Revisión 2026-11-25 (precedencia del contrato):** el título de `SUSPENDIDO`, `SIN_WEBHOOK` y `FIRMA_SIN_CONFIRMAR` es el literal de `x-flit-literales.pantalla`; el texto de la columna «Texto» sigue como cuerpo, porque el contrato no lo fija. `NO_LISTO` no tiene literal de banner en el contrato y conserva el de esta spec. **Pendiente en código (M15):** `BannerEstadoProducto.tsx:18-30` todavía pinta los títulos anteriores. Recomendación de UX para el contrato (no bloquea): los literales de banner hablan de «webhook» y «firma», que no le dicen nada a un Gestor; si el PO lo prefiere, el `architecture-agent` puede cambiarlos en el contrato y la UI los toma solos.
+- **Revisión 2026-11-25 (precedencia del contrato):** el título de `SUSPENDIDO`, `SIN_WEBHOOK` y `FIRMA_SIN_CONFIRMAR` es el literal de `x-flit-literales.pantalla`; el texto de la columna «Texto» sigue como cuerpo, porque el contrato no lo fija. `NO_LISTO` no tiene literal de banner en el contrato y conserva el de esta spec. **Resuelto en código (verificado en M21):** `BannerEstadoProducto.tsx:14-30` pinta los títulos del contrato. Recomendación de UX para el contrato (no bloquea): los literales de banner hablan de «webhook» y «firma», que no le dicen nada a un Gestor; si el PO lo prefiere, el `architecture-agent` puede cambiarlos en el contrato y la UI los toma solos.
 - Cambio de tono: `FIRMA_SIN_CONFIRMAR` pasa de `pending` (naranja = alerta) a `info` (azul = en proceso), porque no requiere ninguna acción (regla 5 de estados semánticos).
 - Para el SA, los títulos `NO_LISTO` y `SUSPENDIDO` llevan además, después del texto, un enlace «Ver en el backoffice» a `/backoffice/empresas/{id}`.
 
@@ -642,7 +661,7 @@ Los códigos que el contrato define (`PRODUCTO_NO_HABILITADO` y `SIN_EMPRESA`) u
 | `SESSION_INVALID` | Tu cuenta cambió o fue suspendida. Vuelve a iniciar sesión. *(sin cambio)* |
 | (otro) | No tienes permiso para abrir esta página. *(sin cambio)* |
 
-Título «No tienes acceso» y acción «Ir a mis productos» → `{hubUrl}/?inicio=1`: sin cambio. **Pendiente en código:** `app/403/page.tsx:8-13` todavía pinta los textos anteriores de `PRODUCTO_NO_HABILITADO`, `PRODUCT_NOT_ENABLED` y `SIN_EMPRESA`; la auditoría toma esta tabla.
+Título «No tienes acceso» y acción «Ir a mis productos» → `{hubUrl}/?inicio=1`: sin cambio. **Resuelto en código (verificado en M21):** `app/403/page.tsx:9-14` pinta los literales del contrato para `PRODUCTO_NO_HABILITADO`, `PRODUCT_NOT_ENABLED` y `SIN_EMPRESA`.
 
 Mensajes del shell (sin cambio): «Abriendo Impuestos…» y «No se pudo abrir Impuestos» + «Reintentar».
 
@@ -671,6 +690,7 @@ Ninguno se crea en esta ola sin encargo (modo D). Para cada hueco se indica dón
 | H-15 | **Cerrado en 1.1.0 (delta 4):** `ResumenLiquidacion` trae `estadoItem` e `itemId` en una `INDIVIDUAL` | `contracts/openapi/impuestos.v1.yaml` | El chip sale de `estadoItem` y el enlace va directo al ítem (§3.2); `contadores` queda como respaldo para respuestas viejas y para el resultado de `EXITOSO`. |
 | H-16 | **Cerrado en 1.1.0:** `Liquidacion.motivoCierre` (`maxLength` 300) | `contracts/openapi/impuestos.v1.yaml` | Segunda línea «Motivo: {texto}» en texto plano (§3.5). |
 | H-17 | **Cerrado en 1.2.0:** `Item.relanzadoDesdeLiquidacionId` | `contracts/openapi/impuestos.v1.yaml` | Enlace «Ver la original» al ítem original (§3.6). |
+| H-18 | `--chart-2` claro (`#00dbd5`) da ≈ 1,7:1 contra la superficie blanca: por debajo de 3:1 (WCAG 1.4.11, contraste de objetos no textuales). En oscuro cumple. Afecta igual a Diagnóstico | `packages/ui/src/styles/tokens.css` (paleta de gráficas, Diseño) | Mitigado en esta ola: la serie «Masivas» tiene nombre en la leyenda, en el `title` de cada barra y en la tabla de «Ver datos», así que el dato no depende del color. La corrección (oscurecer `--chart-2` claro o un borde de 1 px en `--di-divider`) va a modo D, para los dos productos a la vez. |
 
 **Componentes nuevos locales justificados** (en `frontend-impuestos`, no compartidos):
 - `ChipEstado`: mapa de §1 sobre `etiquetaKit` y `StatusBadge`.
@@ -735,3 +755,34 @@ Se marca cada punto con evidencia (`archivo:línea` o captura). Un punto en rojo
     - `?empresa=` propagado en peticiones y enlaces.
 11. **Claro y oscuro:** se revisan los dos temas (todos los tokens tienen `.dark`). Ningún texto queda por debajo de 4,5:1.
 12. **Evidencia:** lista de archivos revisados, veredicto (Aprobado / Aprobado con observaciones / No aprobado) y huecos nuevos agregados a §5.
+
+---
+
+## 7. Auditoría final M21 (modo C) — 2026-11-25, HEAD 2404ba1bf
+
+**Fuente:** esta spec + `packages/ui`/`packages/shell` (tokens con valor `.dark`) + `impuestos.v1.yaml` 1.2.1 (manda en literales). No se usó el PDF heredado. Auditoría por lectura de código, sin app corriendo ni capturas.
+
+**Archivos revisados a fondo:** `components/estadisticas/*` (Dashboard, Contadores, GraficaPorDia, BarrasSerie, ListaBarras, Figura, TablaAlternativa, RegionDesplazable, MontoTotal, DistribucionDepartamento, UltimosLotes, RankingEmpresas, FiltroPeriodo), `components/reportes/*`, `lib/reportes/{api,catalogo,useDescarga}.ts`, `lib/estadisticas/formato.ts`, `lib/errores.ts` y, en `frontend/`, `tabs/{DialogoActivacionImpuestos,EstadoAprovisionamiento,ProductosTab}.tsx` frente a `CredencialImpuestoDiagnostico.tsx`. **Barrido** (cuatro estados, `aria-describedby` en acciones deshabilitadas, colores) en Liquidaciones, Usuarios, Configuración, Backoffice, Banners y 403.
+
+**Barrido de fuente única:** cero `#hex`/`rgb()` fuera de `themeColor`; cero `--dx-*`; ningún import de `frontend-diagnostico`; cero clases de paleta Tailwind cruda (la única, `text-white` de la insignia de la campana, es la del molde sobre `--kit-rojo`). Los `style` en línea solo llevan `var(--chart-*)`. Los dos temas salen de las variables.
+
+| Pantalla / pieza | Veredicto |
+|---|---|
+| Dashboard `/` | APROBADO CON NOTAS (A-1, A-2, A-3) |
+| Reportes `/reportes` | APROBADO CON NOTAS (A-4) |
+| Liquidaciones (grid, por placa, masiva, lote, ítem) | APROBADO (barrido) |
+| Usuarios | APROBADO (barrido) |
+| Configuración | APROBADO (barrido) |
+| Backoffice SA | APROBADO (barrido) |
+| Shell, banners, campana, 403 | APROBADO (los pendientes de §4.3 y §4.5 están resueltos) |
+| `frontend/` ProductosTab: activación y estado de Impuestos | APROBADO CON NOTAS (A-5) |
+
+Ningún hallazgo es bloqueante. Todos son mejoras:
+
+- **A-1** `Contadores.tsx:35`: el pie del KPI dice «por placa» y la gráfica de la misma pantalla «Individuales». Hay que pasarlo a «{n} individuales · {m} masivas» (§3.1).
+- **A-2** `MontoTotal.tsx:24`: usa `TARJETA_CLS` (`px-6 pb-6 pt-4`) en la misma fila que `SECCION_CLS` (`p-4`), así que las dos tarjetas no casan. Hay que usar `SECCION_CLS` (§3.1).
+- **A-3** `Dashboard.tsx:134-138`: el skeleton solo cubre la primera fila. Falta la segunda, para que la página no salte (§3.1).
+- **A-4** `Reportes.tsx:210`: «1 registros» → «1 registro».
+- **A-5** `DialogoActivacionImpuestos.tsx:89`: el «Consultando los datos del alta…» lleva `aria-busy` pero no `role="status"`, así que no se anuncia.
+
+Hueco nuevo: H-18 (contraste de `--chart-2` en claro).
