@@ -1,7 +1,9 @@
+using Flit.Infrastructure.Migrations;
 using Flit.Infrastructure.Persistence.Sql;
 using Flit.Integration.Tests.Postgres;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 using Xunit;
 
@@ -28,6 +30,9 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
     private const string UserAdmin = "14694000-0000-4000-8000-0000000000a1";
     private const string UserGestor = "14694000-0000-4000-8000-0000000000a2";
     private const string UserAmbos = "14694000-0000-4000-8000-0000000000a3";
+
+    /// <summary>Actor de sistema con que el DDL 205 (3a) cierra los gestor_impuestos que asciende; el Down reabre solo esos.</summary>
+    private const string ActorAscenso = "00000000-0000-4000-8000-000000000205";
 
     private static async Task ExecAsync(NpgsqlConnection cn, string sql)
     {
@@ -88,12 +93,13 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
     // ── 1. Producto en el catálogo (F1a-CF1) ──────────────────────────────────────
 
     [PostgresFact]
-    public async Task Catalogo_TraeImpuestosActivo_ConSuIconoYOrden()
+    public async Task Catalogo_TraeImpuestosInactivo_ConSuIconoYOrden()
     {
+        // BLOQ-1 (a): nace inactivo; se activa por ambiente (docs/impuestos/guia-despliegue.md).
         await using var cn = await Fixture.OpenConnectionAsync();
         (await CountAsync(cn, """
             SELECT count(*) FROM platform.products
-             WHERE code = 'impuestos' AND name = 'Impuestos' AND icon = 'receipt' AND status = 'active' AND sort_order = 60
+             WHERE code = 'impuestos' AND name = 'Impuestos' AND icon = 'receipt' AND status = 'inactive' AND sort_order = 60
             """)).Should().Be(1);
     }
 
@@ -199,6 +205,106 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
         (await VigentesAsync(cn, UserAdmin, "admin_impuestos")).Should().Be(1);
     }
 
+    // ── 3a. Ascenso del DDL: actor centinela y AdminCompany vigente (DB Media/Baja) ────────────────────────
+
+    [PostgresFact]
+    public async Task Ddl_CierraElGestorAscendido_ConElActorCentinelaDeSistema()
+    {
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await SeedAsync(cn);
+        await AsignarAsync(cn, UserAmbos, "gestor_impuestos");
+        await AsignarAsync(cn, UserAmbos, "AdminCompany");
+
+        await RunDdlAsync(cn);
+
+        (await CountAsync(cn, $"""
+            SELECT count(*) FROM security.user_role_assignments a JOIN security.roles r ON r.id = a.role_id
+             WHERE a.user_id = '{UserAmbos}' AND r.code = 'gestor_impuestos' AND a.deleted_at IS NOT NULL
+               AND a.deleted_by = '{ActorAscenso}'
+            """)).Should().Be(1, "el Down distingue por este actor los cierres del ascenso");
+    }
+
+    [PostgresFact]
+    public async Task Ddl_NoAscendeSiElRolAdminCompanyEstaBorrado()
+    {
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await SeedAsync(cn);
+        await AsignarAsync(cn, UserAmbos, "gestor_impuestos");
+        await AsignarAsync(cn, UserAmbos, "AdminCompany");
+        await ExecAsync(cn, "UPDATE security.roles SET deleted_at = now() WHERE code = 'AdminCompany' AND tenant_id IS NULL");
+
+        await RunDdlAsync(cn);
+
+        (await VigentesAsync(cn, UserAmbos, "gestor_impuestos")).Should().Be(1, "igual que el trigger, un AdminCompany borrado no cuenta");
+    }
+
+    // ── Down de la migración ─────────────────────────────────────────────────────────────
+
+    private static string DownSql() =>
+        string.Join(Environment.NewLine, new ImpuestosProductoYAprovisionamiento().DownOperations.OfType<SqlOperation>().Select(o => o.Sql));
+
+    /// <summary>Corre el Down y deja el esquema como estaba (Up otra vez) para las demás pruebas de la colección.</summary>
+    private static async Task ConDownAsync(NpgsqlConnection cn, Func<Task> verificar)
+    {
+        try
+        {
+            await ExecAsync(cn, DownSql());
+            await verificar();
+        }
+        finally
+        {
+            await RunDdlAsync(cn);
+        }
+    }
+
+    [PostgresFact]
+    public async Task Down_ReabreSoloLosGestoresQueCerroElAscensoDelDdl()
+    {
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await SeedAsync(cn);
+        await AsignarAsync(cn, UserAmbos, "gestor_impuestos");
+        await AsignarAsync(cn, UserAmbos, "AdminCompany");
+        await RunDdlAsync(cn);
+        // Otro gestor cerrado por una persona (no por el DDL): el Down no lo toca.
+        await AsignarAsync(cn, UserGestor, "gestor_impuestos");
+        await ExecAsync(cn, $"""
+            UPDATE security.user_role_assignments a SET deleted_at = now(), deleted_by = '{UserAdmin}'
+              FROM security.roles r
+             WHERE r.id = a.role_id AND r.code = 'gestor_impuestos' AND a.user_id = '{UserGestor}';
+            """);
+
+        await ConDownAsync(cn, async () =>
+        {
+            (await VigentesAsync(cn, UserAmbos, "gestor_impuestos")).Should().Be(1, "lo cerró el ascenso del DDL");
+            (await CountAsync(cn, $"""
+                SELECT count(*) FROM security.user_role_assignments a JOIN security.roles r ON r.id = a.role_id
+                 WHERE a.user_id = '{UserAmbos}' AND r.code = 'gestor_impuestos' AND a.deleted_by IS NOT NULL
+                """)).Should().Be(0);
+            (await VigentesAsync(cn, UserGestor, "gestor_impuestos")).Should().Be(0, "lo cerró una persona, no el DDL");
+        });
+    }
+
+    [PostgresFact]
+    public async Task Down_BorraLasInvitacionesConAdminImpuestos_AntesDeBorrarElRol()
+    {
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await SeedAsync(cn);
+        await RunDdlAsync(cn);
+        await ExecAsync(cn, $"""
+            INSERT INTO security.user_invitations (tenant_id, email, role_id, token_hash, invited_by)
+            SELECT '{Tenant}', 'inv14694@it.local', id, 'hash-14694-down', '{UserAdmin}'
+              FROM security.roles WHERE code = 'admin_impuestos' AND tenant_id IS NULL;
+            """);
+
+        await ConDownAsync(cn, async () =>
+        {
+            (await CountAsync(cn, "SELECT count(*) FROM security.roles WHERE code = 'admin_impuestos' AND tenant_id IS NULL"))
+                .Should().Be(0);
+            (await CountAsync(cn, "SELECT count(*) FROM security.user_invitations WHERE token_hash = 'hash-14694-down'"))
+                .Should().Be(0);
+        });
+    }
+
     // ── 4. platform.tenant_product_provisioning (F1b-CF1, decisión R1) ─────────────────────────────
 
     [PostgresFact]
@@ -207,7 +313,7 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
         await using var cn = await Fixture.OpenConnectionAsync();
         await SeedAsync(cn);
         const string Insert = """
-            INSERT INTO platform.tenant_product_provisioning (tenant_id, product_code, estado, version, actualizado_en)
+            INSERT INTO platform.tenant_product_provisioning (tenant_id, product_code, status, reported_version, reported_at)
             VALUES ('{0}', '{1}', 'PENDIENTE', 1, now())
             """;
 
@@ -226,10 +332,10 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
             .Which.ConstraintName.Should().Be("ck_tenant_product_provisioning_not_plataforma");
 
         var versionCero = () => ExecAsync(cn, $"""
-            UPDATE platform.tenant_product_provisioning SET version = 0 WHERE tenant_id = '{Tenant}'
+            UPDATE platform.tenant_product_provisioning SET reported_version = 0 WHERE tenant_id = '{Tenant}'
             """);
         (await versionCero.Should().ThrowAsync<PostgresException>())
-            .Which.ConstraintName.Should().Be("ck_tenant_product_provisioning_version");
+            .Which.ConstraintName.Should().Be("ck_tenant_product_provisioning_reported_version");
     }
 
     [PostgresFact]
@@ -238,9 +344,9 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
         await using var cn = await Fixture.OpenConnectionAsync();
         await SeedAsync(cn);
         await ExecAsync(cn, $"""
-            INSERT INTO platform.tenant_product_provisioning (tenant_id, product_code, estado, version, actualizado_en)
+            INSERT INTO platform.tenant_product_provisioning (tenant_id, product_code, status, reported_version, reported_at)
             VALUES ('{Tenant}', 'impuestos', 'PENDIENTE', 1, now());
-            UPDATE platform.tenant_product_provisioning SET estado = 'LISTO', firma_confirmada = false, version = 2
+            UPDATE platform.tenant_product_provisioning SET status = 'LISTO', signature_confirmed = false, reported_version = 2
              WHERE tenant_id = '{Tenant}' AND product_code = 'impuestos';
             """);
 
@@ -259,7 +365,7 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
         await using var cn = await Fixture.OpenConnectionAsync();
         await SeedAsync(cn);
         await ExecAsync(cn, $"""
-            INSERT INTO platform.tenant_product_provisioning (tenant_id, product_code, estado, version, actualizado_en)
+            INSERT INTO platform.tenant_product_provisioning (tenant_id, product_code, status, reported_version, reported_at)
             VALUES ('{Tenant}', 'impuestos', 'PENDIENTE', 1, now());
             """);
 

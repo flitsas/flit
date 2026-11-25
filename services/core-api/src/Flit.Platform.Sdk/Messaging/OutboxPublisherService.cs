@@ -1,14 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using RabbitMQ.Client.Exceptions;
 
 namespace Flit.Platform.Sdk.Messaging;
 
 /// <summary>
 /// Saca los eventos pendientes de la outbox y los publica (HU #13338). Mismo patrón que la outbox de Trámites
 /// (<c>ProcedureStateChangeOutboxProcessor</c>): reclamo con <c>FOR NO KEY UPDATE SKIP LOCKED</c> dentro de una
-/// transacción, seguro con varias réplicas. Se sella <c>published_at</c> solo cuando el broker confirmó; si el broker
-/// no responde, el evento queda pendiente (sube <c>attempts</c>) y el lote se corta: sale en el siguiente ciclo, en
-/// orden, cuando el broker vuelva (AC3). Con el broker (o la base) caído, la espera entre ciclos se duplica en cada
+/// transacción, seguro con varias réplicas. Se sella <c>published_at</c> solo cuando el broker confirmó; si falla, el evento
+/// queda pendiente (sube <c>attempts</c>) y sale en el siguiente ciclo. El orden se conserva <b>por destino</b> (exchange +
+/// llave de ruteo, HU #14694 BLOQ-1 c): tras un fallo, los siguientes del MISMO destino esperan sin intentarse, y los de otros
+/// destinos siguen (un exchange sin permiso o sin declarar no detiene al resto). Si el broker no se alcanza
+/// (<see cref="BrokerUnreachableException"/>), el lote se corta entero: sale en el siguiente ciclo, en orden, cuando el
+/// broker vuelva (AC3). Con el broker (o la base) caído, la espera entre ciclos se duplica en cada
 /// fallo seguido hasta <see cref="PlatformMessagingOptions.MaxRetryDelay"/>, y vuelve a <c>PollInterval</c> al primer
 /// ciclo sano: una caída larga no llena la base ni el log con un intento por segundo.
 /// </summary>
@@ -88,8 +92,13 @@ internal sealed class OutboxPublisherService<TContext>(
 
             var published = 0;
             var fallo = false;
+            // Destinos con un fallo en este lote: lo que sigue de ese destino espera al próximo ciclo, en orden.
+            var detenidos = new HashSet<(string Exchange, string RoutingKey)>();
             foreach (var message in batch)
             {
+                var destino = (message.Exchange, message.RoutingKey);
+                if (detenidos.Contains(destino))
+                    continue;
                 try
                 {
                     await publisher.PublishAsync(message, ct).ConfigureAwait(false);
@@ -103,7 +112,9 @@ internal sealed class OutboxPublisherService<TContext>(
                     message.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
                     OutboxLog.PublishFailed(logger, message.Id, message.RoutingKey, message.Attempts, ex);
                     fallo = true;
-                    break; // el broker no responde: el resto del lote espera, en orden
+                    if (ex is BrokerUnreachableException)
+                        break; // sin broker: el resto del lote espera, en orden
+                    detenidos.Add(destino); // solo este destino espera; los demás siguen
                 }
             }
 

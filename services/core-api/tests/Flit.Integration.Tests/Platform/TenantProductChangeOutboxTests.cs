@@ -99,6 +99,7 @@ public sealed class TenantProductChangeOutboxTests(PostgresDatabaseFixture fixtu
               VALUES ('{UserAdmin}','admin14694@it.local','Admin','active','{Tenant}',now());
             INSERT INTO security.roles (code, name, is_system, is_active, target_entity_type, product_code, tenant_id)
               VALUES ('AdminCompany','Administrador de Compañía',true,true,'COMPANY','plataforma',NULL);
+            {ActivarImpuestos}
             """,
             cn);
         await cmd.ExecuteNonQueryAsync(Ct);
@@ -110,6 +111,22 @@ public sealed class TenantProductChangeOutboxTests(PostgresDatabaseFixture fixtu
                 """;
             await cmd.ExecuteNonQueryAsync(Ct);
         }
+    }
+
+    // BLOQ-1 (a): el DDL 205 siembra `impuestos` inactivo; aquí se activa como en un ambiente ya encendido
+    // (docs/impuestos/guia-despliegue.md) y se deja como estaba: platform.products se preserva entre pruebas.
+    private const string ActivarImpuestos = "UPDATE platform.products SET status = 'active' WHERE code = 'impuestos';";
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (PostgresAvailability.IsAvailable && Fixture.IsInitialized)
+        {
+            await using var cn = await Fixture.OpenConnectionAsync();
+            await using var cmd = new NpgsqlCommand("UPDATE platform.products SET status = 'inactive' WHERE code = 'impuestos';", cn);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await base.DisposeAsync();
     }
 
     private static async Task<TenantProductChange> CambiarAsync(ServiceProvider sp, string producto, bool enabled)

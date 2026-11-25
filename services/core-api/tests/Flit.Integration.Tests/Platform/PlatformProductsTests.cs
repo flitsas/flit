@@ -46,7 +46,9 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
         // `caja` (DDL 199) existe porque el rol ot_caja es de ese producto; no es una app de la suite (ListMyApps la excluye, ADR-0082).
         // `impuestos` (DDL 205, HU #14694) va al final (sort_order 60).
         products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja", "impuestos");
-        products.Should().OnlyContain(p => p.IsActive);
+        // BLOQ-1 (a, HU #14694): `impuestos` nace inactivo y se activa por ambiente (docs/impuestos/guia-despliegue.md).
+        products.Where(p => p.Code != "impuestos").Should().OnlyContain(p => p.IsActive);
+        products.Single(p => p.Code == "impuestos").IsActive.Should().BeFalse();
         products.Single(p => p.Code == "tramites").Name.Should().Be("Trámites");
     }
 

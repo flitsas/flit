@@ -2,16 +2,19 @@
 -- Migración: 20261125041316_ImpuestosProductoYAprovisionamiento.
 --
 -- Qué hace:
---   1. Producto `impuestos` en el catálogo (icono lucide `receipt`, orden 60, activo). Sin filas en tenant_products: nace
---      apagado para todas las empresas (fail-closed); lo enciende el SuperAdmin.
+--   1. Producto `impuestos` en el catálogo (icono lucide `receipt`, orden 60) con status = 'inactive' (BLOQ-1 a): no se
+--      puede encender para ninguna empresa (PUT tenant products ⇒ 409 PRODUCT_INACTIVE) ni registrar su manifiesto hasta
+--      activarlo en cada ambiente (docs/impuestos/guia-despliegue.md §1). Sin filas en tenant_products: además nace apagado
+--      para todas las empresas (fail-closed); lo enciende el SuperAdmin.
 --   2. Rol de sistema admin_impuestos (COMPANY), con el molde del DDL 126 §1, y siembra a cada AdminCompany activo (DDL 126
 --      §2). Sin permisos: los trae el manifiesto del producto (PUT /platform/products/impuestos/manifest), que también crea
 --      gestor_impuestos. El acceso sigue exigiendo el producto encendido (ProductAccessResolver).
 --   3. Ascenso de Gestor a Admin, SOLO en impuestos (F5b-CF2, A-H16, gate LT G-3): uq_ura_active_user_tenant_product
 --      (DDL 120) admite un solo rol activo por usuario, empresa y producto, así que el espejo genérico del DDL 126 no le
 --      daría admin_impuestos a un AdminCompany que ya es gestor_impuestos. Este DDL cierra (soft delete) ese
---      gestor_impuestos y le da admin_impuestos, y security.trg_ura_mirror_product_admins() suma una rama que hace lo mismo
---      al asignar AdminCompany. Los demás productos conservan el comportamiento del DDL 126 (el rol que ya hay se respeta).
+--      gestor_impuestos con deleted_by = 00000000-0000-4000-8000-000000000205 (actor de sistema del DDL 205, constante
+--      ImpuestosProductoYAprovisionamiento.ActorAscensoDdl205; el Down reabre solo esas filas) y le da admin_impuestos, y
+--      security.trg_ura_mirror_product_admins() suma una rama que hace lo mismo al asignar AdminCompany. Los demás productos conservan el comportamiento del DDL 126 (el rol que ya hay se respeta).
 --   4. platform.tenant_product_provisioning: último estado de aprovisionamiento que reporta el servicio del producto (rpc
 --      flit.identidad.v1.AprovisionamientoProductoService.ReportarEstadoAprovisionamiento, versión monotónica) para el
 --      admin de compañías (decisión R1, plan §1.2). Una fila por empresa y producto.
@@ -19,8 +22,8 @@
 --
 -- Excepciones al checklist de esquema (pendientes de registrar en ADR-0093, que hoy no las menciona; las propone este DDL):
 --   A5/A6 sin created_by/updated_by ni soft delete en tenant_product_provisioning: la escribe un servicio (no un usuario)
---         con upsert por versión; el rastro técnico queda en audit.audit_logs (trg_audit_log). Columnas de negocio en
---         español, como el contrato gRPC que las alimenta (plan §4.3).
+--         con upsert por versión; el rastro técnico queda en audit.audit_logs (trg_audit_log). Columnas en inglés como el
+--         resto del esquema (decisión del usuario, 2026-11-25); el contrato gRPC que las alimenta sigue en español.
 --   A11  el índice único (tenant_id, product_code) ya empieza por tenant_id; ix_..._product_code cubre la FK al catálogo.
 --
 -- Idempotente (ON CONFLICT / NOT EXISTS / IF NOT EXISTS / CREATE OR REPLACE / DROP ... IF EXISTS) y reversible (Down en
@@ -30,7 +33,7 @@
 -- 1. Producto impuestos
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
 INSERT INTO platform.products (code, name, icon, status, sort_order)
-VALUES ('impuestos', 'Impuestos', 'receipt', 'active', 60)
+VALUES ('impuestos', 'Impuestos', 'receipt', 'inactive', 60)
 ON CONFLICT (code) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -45,16 +48,18 @@ SELECT 'admin_impuestos', 'Administrador Impuestos',
         WHERE r.code = 'admin_impuestos' AND r.target_entity_type = 'COMPANY' AND r.tenant_id IS NULL AND r.deleted_at IS NULL);
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
--- 3a. AdminCompany activo que ya es gestor_impuestos ⇒ se cierra el gestor (ascenso; solo impuestos)
+-- 3a. AdminCompany activo que ya es gestor_impuestos ⇒ se cierra el gestor (ascenso; solo impuestos). deleted_by es el
+--     actor de sistema del DDL 205 (00000000-0000-4000-8000-000000000205): el Down reabre solo estas filas.
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
 UPDATE security.user_role_assignments g
-   SET deleted_at = now()
+   SET deleted_at = now(), deleted_by = '00000000-0000-4000-8000-000000000205'::uuid
   FROM security.roles gr
  WHERE gr.id = g.role_id AND gr.code = 'gestor_impuestos' AND gr.product_code = 'impuestos' AND gr.tenant_id IS NULL
    AND g.deleted_at IS NULL
    AND EXISTS (
        SELECT 1 FROM security.user_role_assignments a
          JOIN security.roles ac ON ac.id = a.role_id AND ac.code = 'AdminCompany' AND ac.target_entity_type = 'COMPANY'
+                               AND ac.deleted_at IS NULL
         WHERE a.user_id = g.user_id AND a.tenant_id = g.tenant_id AND a.deleted_at IS NULL);
 
 -- ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -148,15 +153,15 @@ CREATE TABLE IF NOT EXISTS platform.tenant_product_provisioning (
     id               uuid         NOT NULL DEFAULT uuidv7(),
     tenant_id        uuid         NOT NULL,
     product_code     varchar(40)  NOT NULL,
-    estado           varchar(32)  NOT NULL,
-    motivo_codigo    varchar(64)  NULL,
-    mensaje          varchar(300) NULL,
-    accion           varchar(32)  NULL,
-    firma_confirmada boolean      NULL,
-    version          bigint       NOT NULL,
-    actualizado_en   timestamptz  NOT NULL,
-    created_at       timestamptz  NOT NULL DEFAULT now(),
-    row_version      bigint       NOT NULL DEFAULT 0,
+    status              varchar(32)  NOT NULL,
+    reason_code         varchar(64)  NULL,
+    message             varchar(300) NULL,
+    action              varchar(32)  NULL,
+    signature_confirmed boolean      NULL,
+    reported_version    bigint       NOT NULL,
+    reported_at         timestamptz  NOT NULL,
+    created_at          timestamptz  NOT NULL DEFAULT now(),
+    row_version         bigint       NOT NULL DEFAULT 0,
 
     CONSTRAINT pk_tenant_product_provisioning PRIMARY KEY (id),
     CONSTRAINT uq_tenant_product_provisioning_tenant_product UNIQUE (tenant_id, product_code),
@@ -165,7 +170,7 @@ CREATE TABLE IF NOT EXISTS platform.tenant_product_provisioning (
     CONSTRAINT fk_tenant_product_provisioning_products FOREIGN KEY (product_code)
         REFERENCES platform.products (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
     CONSTRAINT ck_tenant_product_provisioning_not_plataforma CHECK (product_code <> 'plataforma'),
-    CONSTRAINT ck_tenant_product_provisioning_version CHECK (version >= 1)
+    CONSTRAINT ck_tenant_product_provisioning_reported_version CHECK (reported_version >= 1)
 );
 
 CREATE INDEX IF NOT EXISTS ix_tenant_product_provisioning_product_code
@@ -173,19 +178,19 @@ CREATE INDEX IF NOT EXISTS ix_tenant_product_provisioning_product_code
 
 COMMENT ON TABLE platform.tenant_product_provisioning IS
     'HU #14694 (ADR-0093) · Último estado de aprovisionamiento de un producto por empresa, reportado por el servicio del producto (rpc ReportarEstadoAprovisionamiento). Solo se guarda una versión mayor que la vigente. Lo lee GET /platform/admin/tenants/{id}/products (campo provisioning).';
-COMMENT ON COLUMN platform.tenant_product_provisioning.estado IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.status IS
     '@pii:none · Estado que define el producto. En impuestos: PENDIENTE, LISTO, LISTO_SIN_WEBHOOK, ERROR, INCIERTO, REQUIERE_CREDENCIALES, REQUIERE_REVISION_NIT o SUSPENDIDO (plan §3.1). Sin CHECK: la tabla sirve a cualquier producto con aprovisionamiento.';
-COMMENT ON COLUMN platform.tenant_product_provisioning.motivo_codigo IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.reason_code IS
     '@pii:none · Código estable del motivo (MotivoAprovisionamiento de contracts/openapi/impuestos.v1.yaml).';
-COMMENT ON COLUMN platform.tenant_product_provisioning.mensaje IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.message IS
     '@pii:none · Motivo legible (literal cerrado del motivo). Nunca secretos ni datos personales.';
-COMMENT ON COLUMN platform.tenant_product_provisioning.accion IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.action IS
     '@pii:none · Acción del SuperAdmin: REINTENTAR, CARGAR_SECRETO, CARGAR_CREDENCIALES o CORREGIR_NIT. NULL = ninguna.';
-COMMENT ON COLUMN platform.tenant_product_provisioning.firma_confirmada IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.signature_confirmed IS
     'Solo en LISTO: false = «Firma sin confirmar» hasta el primer webhook con firma válida. NULL en los demás estados.';
-COMMENT ON COLUMN platform.tenant_product_provisioning.version IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.reported_version IS
     'Versión monotónica del estado en el servicio del producto (idempotencia del reporte). No es row_version.';
-COMMENT ON COLUMN platform.tenant_product_provisioning.actualizado_en IS
+COMMENT ON COLUMN platform.tenant_product_provisioning.reported_at IS
     'Momento del estado en el servicio del producto.';
 COMMENT ON COLUMN platform.tenant_product_provisioning.row_version IS
     'Token de concurrencia (public.trg_row_version).';
@@ -207,5 +212,6 @@ CREATE POLICY tenant_isolation ON platform.tenant_product_provisioning
     );
 
 -- Down (en la migración): DROP TABLE platform.tenant_product_provisioning; restaura la función del DDL 126; borra las
--- asignaciones y el rol admin_impuestos, reabre los gestor_impuestos que cerró el ascenso de este DDL y borra el producto
--- (si no tiene filas en tenant_products).
+-- asignaciones, las invitaciones (security.user_invitations, FK RESTRICT) y el rol admin_impuestos; reabre solo los
+-- gestor_impuestos que cerró el 3a de este DDL (deleted_by = actor de sistema del DDL 205) y borra el producto (si nada lo
+-- referencia).

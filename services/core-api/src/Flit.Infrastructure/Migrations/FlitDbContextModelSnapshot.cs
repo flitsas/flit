@@ -5666,14 +5666,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
-                    b.Property<string>("Accion")
+                    b.Property<string>("Action")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
-                        .HasColumnName("accion");
-
-                    b.Property<DateTimeOffset>("ActualizadoEn")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("actualizado_en");
+                        .HasColumnName("action");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -5681,31 +5677,29 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<string>("Estado")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("estado");
-
-                    b.Property<bool?>("FirmaConfirmada")
-                        .HasColumnType("boolean")
-                        .HasColumnName("firma_confirmada");
-
-                    b.Property<string>("Mensaje")
+                    b.Property<string>("Message")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
-                        .HasColumnName("mensaje");
-
-                    b.Property<string>("MotivoCodigo")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("motivo_codigo");
+                        .HasColumnName("message");
 
                     b.Property<string>("ProductCode")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("product_code");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("reason_code");
+
+                    b.Property<DateTimeOffset>("ReportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reported_at");
+
+                    b.Property<long>("ReportedVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reported_version");
 
                     b.Property<long>("RowVersion")
                         .IsConcurrencyToken()
@@ -5714,13 +5708,19 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(0L)
                         .HasColumnName("row_version");
 
+                    b.Property<bool?>("SignatureConfirmed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("signature_confirmed");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
-
-                    b.Property<long>("Version")
-                        .HasColumnType("bigint")
-                        .HasColumnName("version");
 
                     b.HasKey("Id")
                         .HasName("pk_tenant_product_provisioning");

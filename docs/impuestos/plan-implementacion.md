@@ -603,10 +603,10 @@ CREATE TABLE impuestos.auditoria_lectura_backoffice (    -- Super Admin entre co
 
 Archivo `services/core-api/src/Flit.Infrastructure/Persistence/Sql/Ddl/205-impuestos-producto-y-aprovisionamiento.sql` y migración `20261125000000_ImpuestosProductoYAprovisionamiento.cs`. El último DDL es 204, con dos archivos; al rebasar hay que verificar que 205 sigue libre.
 
-1. `INSERT INTO platform.products ('impuestos','Impuestos','receipt','active',60) ON CONFLICT DO NOTHING`.
+1. `INSERT INTO platform.products ('impuestos','Impuestos','receipt','inactive',60) ON CONFLICT DO NOTHING`: nace inactivo (BLOQ-1 a) y se activa por ambiente con el SQL de [guia-despliegue.md §1](guia-despliegue.md).
 2. Rol de sistema `admin_impuestos` (COMPANY, `product_code='impuestos'`), con el mismo molde que el DDL 126 §1, y siembra a los AdminCompany activos (DDL 126 §2).
 3. **Ascenso de Gestor a Admin** (F5b-CF2, A-H16): `uq_ura_active_user_tenant_product` (DDL 120:161) permite un solo rol activo por usuario, compañía y producto. Por eso el DDL cierra el `gestor_impuestos` activo de quien también es AdminCompany y le asigna `admin_impuestos`. En `security.trg_ura_mirror_product_admins` se agrega una rama **solo para `impuestos`** que hace lo mismo al asignar AdminCompany. Los demás productos no cambian (gate LT G-3).
-4. `CREATE TABLE platform.tenant_product_provisioning (tenant_id uuid, product_code varchar(32) REFERENCES platform.products(code), estado varchar(32) NOT NULL, motivo_codigo varchar(64) NULL, mensaje varchar(300) NULL, accion varchar(32) NULL, firma_confirmada boolean NULL, version bigint NOT NULL, actualizado_en timestamptz NOT NULL, PRIMARY KEY (tenant_id, product_code))`, con su trigger de auditoría según el patrón del DDL 119.
+4. `CREATE TABLE platform.tenant_product_provisioning (tenant_id uuid, product_code varchar(32) REFERENCES platform.products(code), status varchar(32) NOT NULL, reason_code varchar(64) NULL, message varchar(300) NULL, action varchar(32) NULL, signature_confirmed boolean NULL, reported_version bigint NOT NULL, reported_at timestamptz NOT NULL, PRIMARY KEY (tenant_id, product_code))`, con su trigger de auditoría según el patrón del DDL 119.
 5. Sin cambio en el CHECK del DDL 204 (DA-2=b).
 
 El rol `gestor_impuestos` y los permisos de los dos roles los crea el **manifiesto** (`PUT /platform/products/impuestos/manifest`). El DDL solo siembra `admin_impuestos`, igual que con Diagnóstico.

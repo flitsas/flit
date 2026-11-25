@@ -49,6 +49,12 @@ public sealed record ResultadoCarga(IReadOnlyList<PlacaCargada> Placas, int Dupl
 public static class AnalizadorCarga
 {
     public const int MaximoBytes = 5 * 1024 * 1024;
+
+    /// <summary>
+    /// Filas de un .xlsx que se leen como mucho (M-3): el tope de placas más alto que admite cualquier compañía
+    /// (<see cref="Persistence.Siembra.ConfiguracionPorDefecto.MaxRegistrosLoteMaximo"/>) más una, que basta para saber que lo supera.
+    /// </summary>
+    public const int MaximoFilasXlsx = Persistence.Siembra.ConfiguracionPorDefecto.MaxRegistrosLoteMaximo + 1;
     public const string Columna = "placa";
     public const string MotivoVacia = "PLACA_VACIA";
     public const string MotivoInvalida = "PLACA_INVALIDA";
@@ -67,7 +73,7 @@ public static class AnalizadorCarga
         var esZip = archivo.Contenido.AsSpan().StartsWith(FirmaZip);
         var tabla = extension switch
         {
-            ".XLSX" when esZip => LectorXlsx.Leer(archivo.Contenido),
+            ".XLSX" when esZip => LectorXlsx.Leer(archivo.Contenido, MaximoFilasXlsx),
             ".CSV" when !esZip => LeerCsv(archivo.Contenido),
             _ => null,
         } ?? throw ErroresCarga.Formato();

@@ -685,6 +685,10 @@ services:
       Impuestos__Avisos__UrlFrontend: ${IMPUESTOS_SVC_AVISOS_URL_FRONTEND:-}
       # Límite por IP del receptor de avisos (menor que 1 impide arrancar).
       Impuestos__LimitesSolicitudes__AvisosPorIpPorMinuto: ${IMPUESTOS_SVC_AVISOS_POR_IP_POR_MINUTO:-60}
+      # Límite global del receptor (todas las IP juntas, IMP-3; no menor que el de cada IP). La IP de cada cliente sale de
+      # X-Forwarded-For solo si la conexión viene de la red interna (el gateway): ProxiesConfiables.
+      Impuestos__LimitesSolicitudes__AvisosGlobalesPorMinuto: ${IMPUESTOS_SVC_AVISOS_GLOBALES_POR_MINUTO:-600}
+      Impuestos__ProxiesConfiables__Redes__0: ${FLIT_INTERNAL_SUBNET:-10.114.40.0/24}
       # Ritmo de la ejecución (DA-5): ítems en vuelo por compañía y en total, y POST por segundo al API. Los defectos son los
       # del código (OpcionesEjecucion); el resto de esa sección (reintentos, pausa, reconciliador) queda en el código.
       Impuestos__Ejecucion__ConcurrenciaPorEmpresa: ${IMPUESTOS_SVC_CONCURRENCIA_EMPRESA:-2}
