@@ -101,6 +101,87 @@ public sealed class ConsumidorLiquidacionTests
     }
 
     [Fact]
+    public async Task Con_el_lote_cerrado_no_llama_al_proveedor_y_el_item_queda_SIN_RESULTADO_LOTE_CERRADO()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var proveedor = EntornoEjecucion.ProveedorQueAcepta();
+        await using var api = await EntornoEjecucion.ConApiAsync(proveedor, new RuntDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoEjecucion.SembrarEmpresaAsync(api, empresa, ct);
+        var (lote, items) = await EntornoEjecucion.SembrarLoteAsync(api, empresa, [Placa], ct);
+        await EntornoEjecucion.DespacharAsync(api, empresa, ct);
+        // El cierre confirmó la cabecera mientras el mensaje del ítem (ya en vuelo) esperaba en la cola.
+        await using (var db = api.Contexto(empresa))
+        {
+            await db.Set<Liquidacion>().Where(l => l.Id == lote).ExecuteUpdateAsync(s => s.SetProperty(l => l.Estado, EstadoLote.CerradoManualmente), ct);
+        }
+
+        await EntornoEjecucion.ProcesarColaAsync(api, ct);
+
+        EntornoEjecucion.Envios(proveedor).Should().Be(0, "un ítem de un lote cerrado no gasta una consulta del proveedor");
+        var item = await EntornoEjecucion.ItemAsync(api, empresa, items[0], ct);
+        item.Estado.Should().Be(EstadoItem.SinResultadoLoteCerrado, "el estado terminal que el cierre usa para los pendientes");
+        item.ProximoIntentoEn.Should().BeNull();
+        (await EntornoEjecucion.LoteAsync(api, empresa, lote, ct)).Estado.Should().Be(EstadoLote.CerradoManualmente);
+    }
+
+    [Fact]
+    public async Task Con_el_lote_abierto_el_envio_sigue_igual()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var proveedor = EntornoEjecucion.ProveedorQueAcepta();
+        await using var api = await EntornoEjecucion.ConApiAsync(proveedor, new RuntDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoEjecucion.SembrarEmpresaAsync(api, empresa, ct);
+        var (lote, items) = await EntornoEjecucion.SembrarLoteAsync(api, empresa, [Placa, "ABC123"], ct);
+        await EntornoEjecucion.DespacharAsync(api, empresa, ct);
+
+        await EntornoEjecucion.ProcesarColaAsync(api, ct);
+
+        EntornoEjecucion.Envios(proveedor).Should().Be(2, "con el lote EN_PROCESO cada ítem se envía una vez");
+        foreach (var id in items)
+            (await EntornoEjecucion.ItemAsync(api, empresa, id, ct)).Estado.Should().Be(EstadoItem.Enviado);
+        (await EntornoEjecucion.LoteAsync(api, empresa, lote, ct)).Estado.Should().Be(EstadoLote.EnProceso);
+    }
+
+    [Fact]
+    public async Task El_registro_previo_espera_el_bloqueo_del_cierre_y_si_el_lote_cerro_no_envia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var proveedor = EntornoEjecucion.ProveedorQueAcepta();
+        var runt = new RuntDePrueba();
+        await using var api = await EntornoEjecucion.ConApiAsync(proveedor, runt);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoEjecucion.SembrarEmpresaAsync(api, empresa, ct);
+        var (lote, items) = await EntornoEjecucion.SembrarLoteAsync(api, empresa, [Placa], ct);
+        await EntornoEjecucion.DespacharAsync(api, empresa, ct);
+
+        // Un cierre en curso: tiene la cabecera bloqueada (como CerrarLiquidacion) y todavía no confirmó.
+        await using var cierre = api.Contexto(empresa);
+        await using var tx = await cierre.Database.BeginTransactionAsync(ct);
+        await cierre.Database.ExecuteSqlAsync($"SELECT 1 FROM impuestos.liquidaciones WHERE id = {lote} FOR UPDATE", ct);
+        var entrega = Task.Run(() => EntornoEjecucion.ProcesarColaAsync(api, ct), ct);
+        var limite = DateTime.UtcNow.AddSeconds(30);
+        while (runt.Llamadas.Count == 0 && DateTime.UtcNow < limite && !entrega.IsCompleted)
+            await Task.Delay(50, ct);
+        await Task.Delay(TimeSpan.FromSeconds(1.5), ct);
+
+        EntornoEjecucion.Envios(proveedor).Should().Be(0, "el envío espera a que el cierre suelte la cabecera");
+        await cierre.Set<LiquidacionItem>().Where(i => i.Id == items[0])
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Estado, EstadoItem.SinResultadoLoteCerrado), ct);
+        await cierre.Set<Liquidacion>().Where(l => l.Id == lote)
+            .ExecuteUpdateAsync(s => s.SetProperty(l => l.Estado, EstadoLote.CerradoManualmente), ct);
+        await tx.CommitAsync(ct);
+        await entrega;
+
+        EntornoEjecucion.Envios(proveedor).Should().Be(0, "el cierre se serializó antes del envío: no se gasta la consulta");
+        (await EntornoEjecucion.ItemAsync(api, empresa, items[0], ct)).Estado.Should().Be(EstadoItem.SinResultadoLoteCerrado);
+    }
+
+    [Fact]
     public async Task Sin_webhook_no_manda_callbackUrl_y_el_primer_GET_va_a_los_10_segundos()
     {
         var ct = TestContext.Current.CancellationToken;
