@@ -837,6 +837,29 @@ La guía `docs/integraciones/guia-integracion-clientes.md` cambió el contrato d
 - Si el alta responde `api_key_rotated:true` y la compañía tenía llave de Diagnóstico, Impuestos guarda la llave nueva y la propaga a Diagnóstico con un rpc nuevo de Identidad: `ActualizarCredencialImpuestoDiagnostico`, con scope propio, auditado y con `x-flit-tenant-id`. Se hace en el mismo flujo, con reintentos, mediante un trabajo por la bandeja (outbox) para no perderlo.
 - Toca core-identity y core-api (M04b: proto, handler y tests), además de M07b.
 
+
+### 5.9 Aviso «lote terminado» y columnas 1.2.0 (decisión del orquestador, 2026-11-25)
+
+**Correo** (M12, `AvisoLoteTerminado`). Solo para lotes MASIVA y una sola vez por lote. Se publica `notificaciones.email.send` por la bandeja (outbox) con:
+- `plantilla`: `impuestos.lote.terminado`.
+- `canal`: `flit_smtp`.
+- `destinatario`: `{email, nombre}`, donde `nombre` es el mismo correo porque `correos_aviso` no guarda nombres. Se envía un correo por cada dirección.
+- Tema: ninguno. Se usa el de FLIT por defecto, porque core-impuestos no tiene acceso a los temas.
+
+Textos del correo:
+- `asunto`: «Impuestos: terminó la liquidación masiva «{nombreArchivo}»».
+- `html`, en texto plano envuelto en párrafos:
+  - «La liquidación masiva «{nombreArchivo}» de {empresa} terminó: {estado}.»
+  - «Placas: {total}. Con resultado: {exitosos}. Con novedad: {conNovedad}. Sin resultado: {sinResultado}.»
+  - «Consulta el detalle en Impuestos: {enlace}.»
+- `{estado}` usa la etiqueta del contrato para el estado del lote.
+- `{enlace}` es `{Impuestos:Avisos:UrlFrontend}/liquidaciones/{id}`. Si la opción falta, el párrafo del enlace no se incluye.
+- El correo no lleva placas, propietarios, documentos ni montos. Los valores se escapan como HTML.
+
+**Columnas 1.2.0.** Van en la misma migración de M07b, junto con `webhook_secret_anterior`:
+- `liquidaciones.motivo_cierre varchar(300) NULL`: lo escribe M12 en `/cerrar`.
+- `secretaria_nombre varchar(120) NULL` del ítem: lo llena la homologación del RUNT de M09 cuando el RUNT lo trae.
+
 ---
 
 ## 6. Frontend
