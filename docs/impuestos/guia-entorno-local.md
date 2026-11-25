@@ -13,6 +13,8 @@
 | Pieza | Local | Qué hace |
 |---|---|---|
 | Stub del API de liquidación (`scripts/dev/stub-impuestos/`) | `8898` | API sintético: alta de empresa, `/fuentes`, consultas, avisos firmados y PDFs, con escenarios |
+| Stub del RUNT por Intempo (`scripts/dev/stub-impuestos/stub_intempo.py`) | `8897` | Vehículo y propietario sintéticos para `RuntIntempoService` de core-consultas; escenario por el último carácter de la placa (§4.1) |
+| core-consultas | `4026` · gRPC `8084` | `RuntIntempoService/ConsultarPorPlaca`: el RUNT que consulta core-impuestos antes de cada liquidación |
 | `core-impuestos` | `4033` · gRPC `8089` | API del producto (`/api/v1/impuestos/*`) |
 | `frontend-impuestos` | `4034` | App web |
 | gateway | `4002` | Enruta `/api/v1/impuestos/*` a 4033 (`impuestos-route`) |
@@ -56,6 +58,12 @@ frontend-impuestos (4034), crea el usuario `impuestos` del broker y registra `sv
 `http://127.0.0.1:4034` del cliente OIDC `impuestos` en core-api y core-identity. Los servicios .NET corren desde
 `E:/flit/bin/<servicio>`, así `dotnet build`/`dotnet test` del repo no chocan con sus DLL.
 
+En modo `simulado` también arranca el stub del RUNT por Intempo (8897). A core-consultas le pasa
+`INTEMPO_API_BASE_URL=http://127.0.0.1:8897` y a core-impuestos `Impuestos__Consultas__Address=http://127.0.0.1:8084`.
+En modo `real` no cambia nada: core-consultas usa el `INTEMPO_API_BASE_URL` de `~/.flit/local.env` y core-impuestos no
+recibe la dirección. Para relevar solo esos dos servicios, mata el PID de su puerto (4026 y 4033) y vuelve a correr el
+script con `--sin-build`: los que ya corren no se reinician.
+
 ### 3.2 Equivalente manual
 
 Con core-api, core-identity, gateway, hub y RabbitMQ ya arriba (guía de la suite §3.2), en este orden:
@@ -69,7 +77,11 @@ Con core-api, core-identity, gateway, hub y RabbitMQ ya arriba (guía de la suit
 
    ```bash
    python -I scripts/dev/stub-impuestos/stub_impuestos.py      # 127.0.0.1:8898; imprime el INTEGRATION_TOKEN del stub
+   python -I scripts/dev/stub-impuestos/stub_intempo.py        # 127.0.0.1:8897; RUNT por Intempo sintético
    ```
+
+   **core-consultas** tiene que arrancar con `INTEMPO_API_BASE_URL=http://127.0.0.1:8897`. Sin esa variable responde
+   `FAILED_PRECONDITION` «Falta configurar Intempo» y toda liquidación termina en error transitorio del RUNT.
 
 4. **core-impuestos** (desde `services/core-impuestos/src/Flit.Impuestos.Api`):
 
@@ -85,9 +97,13 @@ Con core-api, core-identity, gateway, hub y RabbitMQ ya arriba (guía de la suit
      Impuestos__Api__IntegrationToken=<el que imprime el stub> \
      Impuestos__Tramites__Address=http://127.0.0.1:8082 \
      Impuestos__Identidad__Address=http://127.0.0.1:8083 \
+     Impuestos__Consultas__Address=http://127.0.0.1:8084 \
      Impuestos__Plataforma__GatewayUrl=http://127.0.0.1:4002 \
      dotnet run --no-launch-profile
    ```
+
+   `Impuestos__Consultas__Address` es el gRPC de core-consultas. Sin ella core-impuestos no consulta el RUNT: cada ítem
+   termina como transitorio con «RUNT no configurado (Impuestos__Consultas__Address)».
 
    Más `Impuestos__DataProtection__CertificadoRuta` y `__CertificadoClave` (los carga el script del certificado). Con
    `Impuestos__Identidad__SimularSuscripcionActiva=true` (solo local) toda empresa queda suscrita sin preguntarle a
@@ -106,6 +122,27 @@ cabecera `X-Stub-Escenario`, por placa o `tax_id` mágico, o con el defecto del 
 avisos desordenados, firma inválida, reintentos, sin callback, archivos) está en `scripts/dev/stub-impuestos/README.md` y en
 el plan §7. Todos los datos son sintéticos: no uses placas ni NIT reales.
 
+### 4.1 Stub del RUNT por Intempo (8897)
+
+Emula lo que llama `ProveedorRuntIntempo` de core-consultas: `POST /api/RuntConsulta/consultar-vehiculo?Plate=<placa>` y
+`POST /api/RuntConsulta/consultar-vin?Vin=<vin>`, con el cuerpo vacío y sin autenticación. Responde el JSON plano de Intempo
+(`noPlaca`, `modelo`, `marca`, `organismoTransito`, `propietariosActuales[0]` con `idTipoDocumento`, `noDocumento`,
+`nombreCompleto` y `direcciones`). Estado y contadores en `http://127.0.0.1:8897/__estado`. Variables opcionales:
+`STUB_INTEMPO_PUERTO` y `STUB_INTEMPO_RETRASO_S` (25, retraso del escenario 7).
+
+El escenario sale del último carácter de la placa, o del VIN:
+
+| Último carácter | Respuesta del stub | Lo que ve core-impuestos |
+|---|---|---|
+| `1` y cualquier otro (incluido el `0` de las placas mágicas del stub de liquidación) | 200, persona natural `CC 100000000<n>`, organismo `STRIA DE TTOyTTE MEDELLIN` | Encontrado: Antioquia (05), Medellín; sigue al API de liquidación |
+| `6` | 200, persona natural, organismo `SECRETARIA DE MOVILIDAD DE NEIVA` | Huila (41), inactivo en `/fuentes` del stub: «Departamento no habilitado» |
+| `7` | Responde después de 25 s, más que el timeout de Intempo (20 s) | Error de tiempo agotado: transitorio |
+| `8` | 200 `text/html` que no es JSON | Respuesta inválida: transitorio |
+| `9` | 404 | No encontrado: definitivo |
+
+Los nombres de organismo son los de `impuestos.organismos`, para que la homologación por nombre los encuentre. Todo lo demás
+es inventado: nombre `PERSONA DEMO STUB`, dirección, teléfono `3000000000` y correo `propietario@example.com`.
+
 Vector de firma para comprobar un receptor: secreto `whsec_prueba`, ts `1700000000`, cuerpo `{"a":1}` ⇒
 `v1=0ca0bb9c916989fb6c1d1eb729a180da30cb078b7cbe551c8f8da0ec452ac9db`.
 
@@ -113,6 +150,8 @@ Vector de firma para comprobar un receptor: secreto `whsec_prueba`, ts `17000000
 
 ```bash
 curl -s http://127.0.0.1:8898/__estado | head -c 300; echo
+curl -s http://127.0.0.1:8897/__estado | head -c 300; echo
+curl -s -X POST -H 'Content-Type: application/json' 'http://127.0.0.1:8897/api/RuntConsulta/consultar-vehiculo?Plate=TBC121' | head -c 200; echo
 curl -s http://127.0.0.1:4033/health/ready; echo
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4002/api/v1/impuestos/sesion   # 401 sin token: el gateway llega
 ```
@@ -143,3 +182,4 @@ La ruta del gateway tiene su prueba en `services/core-api/tests/Flit.Gateway.Tes
 | 502 en `/api/v1/impuestos/*` | El gateway no tiene el destino 4033 | Variable del clúster en el gateway (§3.2, paso 5) |
 | El login de Impuestos vuelve al hub con error de `redirect_uri` | core-api y core-identity arrancaron con hosts distintos | Reinícialos con el mismo `Suite__Hosts__Overrides__impuestos` |
 | `ACCESS_REFUSED` en el log | Faltan permisos del usuario `impuestos` | §3.2, paso 2 |
+| Todas las placas quedan en error transitorio del RUNT | core-consultas sin `INTEMPO_API_BASE_URL` («Falta configurar Intempo») o core-impuestos sin `Impuestos__Consultas__Address` | Levanta el stub 8897 y reinicia los dos servicios (§3.1) |
