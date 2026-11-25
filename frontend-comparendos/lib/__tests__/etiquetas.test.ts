@@ -100,6 +100,7 @@ describe("etiquetas del correo de evidencia", () => {
     expect(TIPO_COMUNICACION.Evidencia).toBe("Documento del comparendo al conductor");
     expect(TIPO_PLANTILLA.CorreoEvidencia).toBe("Correo: documento del comparendo");
     expect(EVENTO_TIMELINE.EvidenciaEnviada).toBe("Documento enviado al conductor");
+    expect(EVENTO_TIMELINE.EvidenciaOmitida).toBe("Documento asociado sin correo al conductor");
     expect(etiquetaPlantilla("comparendos.evidencia")).toBe("Documento del comparendo al conductor");
   });
   it("no es un aviso: el envío manual y masivo no lo ofrece", () => {

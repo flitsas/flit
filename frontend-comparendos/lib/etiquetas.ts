@@ -156,6 +156,7 @@ export const EVENTO_TIMELINE: Record<string, string> = {
   DocumentoAsociadoOcr: "Documento escaneado asociado",
   AvisoEnviado: "Aviso enviado",
   EvidenciaEnviada: "Documento enviado al conductor",
+  EvidenciaOmitida: "Documento asociado sin correo al conductor",
   ComunicacionEstado: "Estado del correo",
   PortalAbierto: "Portal abierto",
   CambioContraventorSolicitado: "Cambio solicitado",
