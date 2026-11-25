@@ -1,3 +1,4 @@
+using Flit.Platform.Sdk.IaConsumo;
 using System.Globalization;
 using Flit.Comparendos.Api.Modulos.Calendario;
 using Flit.Comparendos.Api.Modulos.Catalogos;
@@ -154,7 +155,25 @@ public sealed partial class ServicioOcr(
 
         var promptId = doc.PromptVersionId ?? paquete.PromptVersionId;
         var prompt = await db.PromptsOcr.AsNoTracking().FirstAsync(p => p.Id == promptId, ct).ConfigureAwait(false);
-        var r = await proveedor.ExtraerAsync(a.Contenido, a.Archivo.ContentType, prompt.Texto, prompt.Modelo, ct).ConfigureAwait(false);
+        ResultadoOcr r;
+        // ADR-0090: la lectura queda en el registro de consumo de IA como comparendos/ocr_comparendo, a nombre de la empresa
+        // del documento (corre en el procesador, sin petición).
+        using (IaCallContext.Instancia.Iniciar(new IaAmbito
+               {
+                   Modulo = IaProcesosFlit.ModuloComparendos,
+                   Proceso = IaProcesosFlit.OcrComparendo,
+                   TipoTarea = IaTiposTarea.Ocr,
+                   Origen = IaOrigenes.Job,
+                   TenantId = doc.TenantId.ToString(),
+                   EntidadTipo = "documento_ocr",
+                   EntidadId = doc.Id.ToString(),
+                   PromptCodigo = IaProcesosFlit.OcrComparendo,
+                   PromptVersion = prompt.NumeroVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                   ArchivoSha256 = a.Archivo.Sha256,
+               }))
+        {
+            r = await proveedor.ExtraerAsync(a.Contenido, a.Archivo.ContentType, prompt.Texto, prompt.Modelo, ct).ConfigureAwait(false);
+        }
         doc.Intentos++;
         doc.ProveedorModelo = $"{prompt.Proveedor}/{r.Modelo}";
         doc.PromptVersionId = prompt.Id;

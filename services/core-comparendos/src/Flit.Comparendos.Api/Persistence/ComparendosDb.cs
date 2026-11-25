@@ -1,5 +1,6 @@
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -89,6 +90,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.AddFlitOutbox(Schema);
         modelBuilder.AddFlitInbox(Schema);
+        modelBuilder.AddFlitIaConsumo(Schema);
 
         Base(modelBuilder);
         Configuracion(modelBuilder);

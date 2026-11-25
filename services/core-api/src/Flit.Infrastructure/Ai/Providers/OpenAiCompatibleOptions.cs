@@ -21,6 +21,9 @@ internal class OpenAiCompatibleOptions
 
     public int DrFlitTimeoutSeconds { get; set; } = 20;
 
+    /// <summary>Código del proveedor para el registro de consumo de IA (ADR-0090).</summary>
+    public virtual string CodigoProveedor => Flit.Platform.Sdk.IaConsumo.IaProveedores.OpenAi;
+
     public string ResolveVisionModel() =>
         string.IsNullOrWhiteSpace(VisionModel) ? Model : VisionModel;
 }
@@ -34,9 +37,13 @@ internal sealed class OpenAiProviderOptions : OpenAiCompatibleOptions
 internal sealed class KimiProviderOptions : OpenAiCompatibleOptions
 {
     public const string SectionName = "Kimi";
+
+    public override string CodigoProveedor => Flit.Platform.Sdk.IaConsumo.IaProveedores.Kimi;
 }
 
 internal sealed class DeepSeekProviderOptions : OpenAiCompatibleOptions
 {
     public const string SectionName = "DeepSeek";
+
+    public override string CodigoProveedor => Flit.Platform.Sdk.IaConsumo.IaProveedores.DeepSeek;
 }
