@@ -2,14 +2,16 @@
 # Build context: services/   +   contexto con nombre «contracts» = contracts/proto
 #   docker build -f services/core-impuestos/Dockerfile --build-context contracts=contracts/proto services
 #
-# Solo copia lo que compila: su código, el SDK de plataforma y los tipos comunes de los contratos. Replica la estructura
-# del repo bajo /services para que las ProjectReference relativas resuelvan igual que en local.
+# Solo copia lo que compila: su código, el SDK de plataforma, el contrato gRPC de catálogos de core-api y los tipos comunes
+# de los contratos. Replica la estructura del repo bajo /services para que las ProjectReference relativas resuelvan igual que
+# en local.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /services/core-impuestos
 COPY core-impuestos/global.json core-impuestos/Directory.Build.props core-impuestos/Directory.Packages.props ./
 COPY core-api/Directory.Build.props core-api/Directory.Packages.props /services/core-api/
 COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
+COPY core-api/src/Flit.Tramites.Grpc.Contracts/ /services/core-api/src/Flit.Tramites.Grpc.Contracts/
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
 COPY core-identity/src/Flit.Identidad.Grpc.Contracts/ /services/core-identity/src/Flit.Identidad.Grpc.Contracts/
