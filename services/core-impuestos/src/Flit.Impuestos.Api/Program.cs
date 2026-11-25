@@ -1,6 +1,7 @@
 using Flit.Api.Telemetry;
 using Flit.Impuestos.Api;
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
+using Flit.Impuestos.Api.Modulos.Backoffice;
 using Flit.Impuestos.Api.Modulos.Catalogos;
 using Flit.Impuestos.Api.Modulos.Configuracion;
 using Flit.Impuestos.Api.Persistence;
@@ -63,6 +64,9 @@ public static class Program
         builder.Services.AddCatalogosImpuestos(builder.Configuration);
         builder.Services.AddConfiguracionImpuestos();
         builder.Services.AddSuscripcionImpuestos(builder.Configuration);
+        // M13: usuarios delegados en la plataforma (UsuariosProductoService de core-api) y backoffice de compañías del Super Admin.
+        builder.Services.AddUsuariosPlataforma(builder.Configuration);
+        builder.Services.AddBackofficeImpuestos(builder.Configuration);
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<ImpuestosDb>(builder.Configuration);
@@ -114,6 +118,8 @@ public static class Program
         Modulos.Configuracion.ConfiguracionEndpoints.Map(api);
         Modulos.Configuracion.ConfiguracionContractualBackofficeEndpoints.Map(api);
         Modulos.Catalogos.FuentesEndpoints.Map(api);
+        Modulos.Usuarios.UsuariosEndpoints.Map(api);
+        Modulos.Backoffice.EmpresasBackofficeEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).

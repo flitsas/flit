@@ -134,4 +134,37 @@ public sealed class ProductRoleRulesTests
             .Should().Throw<ProductRoleRuleException>().Where(e => e.Code == "ROL_NO_ASIGNABLE");
         ProductRoleRules.RowFor(Admin, P, Miembro(rol: propio)).Reason.Should().Be(NoActionsReason.SuperAdminOnly);
     }
+    // ── HU #14694 (M13) — los roles de cada producto salen de su manifiesto: Impuestos usa gestor_impuestos, no usuario_impuestos ──
+
+    [Fact]
+    public void Impuestos_SusRolesSonLosDelManifiesto_GestorYAdmin()
+    {
+        ProductRoleRules.UserRole("impuestos").Should().Be("gestor_impuestos");
+        ProductRoleRules.AdminRole("impuestos").Should().Be("admin_impuestos");
+        ProductRoleRules.AssignableRoles(Super, "impuestos").Should().Equal("gestor_impuestos", "admin_impuestos");
+        ProductRoleRules.AssignableRoles(Admin, "impuestos").Should().Equal("gestor_impuestos");
+        FluentActions.Invoking(() => ProductRoleRules.EnsureAllowedRole("impuestos", "gestor_impuestos")).Should().NotThrow();
+        FluentActions.Invoking(() => ProductRoleRules.EnsureCanGrant(Admin, "impuestos", "admin_impuestos"))
+            .Should().Throw<ProductRoleRuleException>().Where(e => e.Code == "ROL_NO_ASIGNABLE");
+    }
+
+    [Theory]
+    [InlineData("usuario_impuestos")]
+    [InlineData("usuario_diagnostico")]
+    [InlineData("admin_diagnostico")]
+    [InlineData("gestor_diagnostico")]
+    public void Impuestos_RechazaElRolGenericoYLosDeOtroProducto(string rol) =>
+        FluentActions.Invoking(() => ProductRoleRules.EnsureAllowedRole("impuestos", rol))
+            .Should().Throw<ProductRoleRuleException>().Where(e => e.Code == "ROL_NO_PERMITIDO");
+
+    [Fact]
+    public void Impuestos_UnAdminDelProductoSoloTocaGestores_YDiagnosticoNoCambia()
+    {
+        var gestor = new ProductRoleRef(Guid.NewGuid(), "gestor_impuestos");
+        ProductRoleRules.IsVisible("impuestos", Miembro(rol: gestor)).Should().BeTrue();
+        ProductRoleRules.RowFor(Admin, "impuestos", Miembro(rol: gestor)).Actions.Should().Equal(ProductUserAction.Suspend);
+        FluentActions.Invoking(() => ProductRoleRules.EnsureCanTouch(Admin, "impuestos", Miembro(rol: gestor))).Should().NotThrow();
+        ProductRoleRules.IsVisible("impuestos", Miembro(rol: new ProductRoleRef(Guid.NewGuid(), "usuario_impuestos"))).Should().BeFalse();
+        ProductRoleRules.UserRole(P).Should().Be("usuario_diagnostico", "Diagnóstico conserva su rol de usuario");
+    }
 }
