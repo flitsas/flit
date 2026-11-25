@@ -81,6 +81,10 @@ internal sealed class PrevalidacionResendService(
         if (string.Equals(validation.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
             return (IdentidadManualError, false, null, string.Empty);
 
+        // Un envío pendiente ya tiene su reenvío en cola: otro encima duplicaría el enlace y el cupo.
+        if (validation.Status == BiometricEstados.PendienteEnvio)
+            return ("validacion_en_curso", false, null, string.Empty);
+
         // Tope global de rondas: sin cupo no se crea ni se reemite nada (la fila queda intacta).
         if (rounds is not null && await rounds.IsResendBlockedAsync(validation, ct))
             return (IdentityRoundsErrors.LimiteRondasAlcanzado, false, null, string.Empty);
@@ -211,9 +215,9 @@ internal sealed class PrevalidacionResendService(
     private const string IdentidadAprobadaEnProveedor = "identidad_aprobada";
 
     /// <summary>
-    /// Falla transitoria (AC11 — HU #10943): encola en pendiente_envio; el worker de envío reintenta. El reenvío YA
-    /// consumió cupo del tope (D10), aunque el envío no se completó. Si el fallo fue en el reissue, el worker crea una
-    /// validación nueva: el enlace anterior sigue vivo en el proveedor hasta que venza (límite conocido).
+    /// Falla transitoria (AC11 — HU #10943): encola en pendiente_envio; el worker de envío reintenta. La ronda NO se
+    /// cuenta aquí: solo cuenta cuando el worker logra crear el enlace (<c>IdentityValidationSendRetryProcessor</c>), así un
+    /// envío que falla no consume cupo. Mientras el envío está pendiente, un nuevo reenvío se rechaza (<c>validacion_en_curso</c>).
     /// </summary>
     private async Task<(string? Error, bool Queued, int? CooldownMinutos, string CaptureUrl)> EncolarReenvioTransitorioAsync(
         Guid tenantId,
@@ -224,7 +228,6 @@ internal sealed class PrevalidacionResendService(
         validation.Status = BiometricEstados.PendienteEnvio;
         validation.Attempts = 0;
         validation.ReconcilePollCount = 0;
-        validation.ResendCount += 1;
         validation.LastResentAt = now;
         validation.UpdatedAt = now;
 

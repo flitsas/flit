@@ -128,6 +128,10 @@ internal sealed class IdentityValidationSendRetryProcessor(
             v.ProviderPayload = result.RawPayloadSanitized;
             v.UpdatedAt = now;
 
+            // Un reenvío encolado cuenta su ronda SOLO cuando el enlace nuevo se crea (un envío fallido no consume cupo).
+            if (v.LastResentAt is not null)
+                v.ResendCount += 1;
+
             await events.PublishAsync(new IdentityValidationRequested
             {
                 TenantId = v.TenantId,

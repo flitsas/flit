@@ -189,7 +189,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
 
         error.Should().BeNull();
         validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
-        validation.ResendCount.Should().Be(1);
+        validation.ResendCount.Should().Be(0, "la ronda no se cuenta hasta crear el enlace");
         await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -345,7 +345,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
     // ── AC11 — falla transitoria del proveedor al reenviar ───────────────────────
 
     [Fact]
-    public async Task AC11_KyverumTransientFailure_Returns202_LeavesPendienteEnvio_AndConsumesQuota()
+    public async Task AC11_KyverumTransientFailure_Returns202_LeavesPendienteEnvio_SinConsumirRonda()
     {
         var ct = TestContext.Current.CancellationToken;
         var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
@@ -358,7 +358,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
         error.Should().BeNull();
         result!.Queued.Should().BeTrue();
         validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
-        validation.ResendCount.Should().Be(1, "el reenvío ya consumió cupo del tope aunque no se completó el envío");
+        validation.ResendCount.Should().Be(0, "un envío que no se completó no consume cupo");
     }
 
     [Fact]

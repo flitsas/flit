@@ -348,7 +348,7 @@ public sealed class EditarPrevalidacionHandlerTests
     // ── Kyverum — falla transitoria al reenviar por cambio de correo ─────────────
 
     [Fact]
-    public async Task Kyverum_TransientFailureOnEmailChange_QueuesAsPendienteEnvio_AndStillConsumesQuota()
+    public async Task Kyverum_TransientFailureOnEmailChange_QueuesAsPendienteEnvio_SinConsumirRonda()
     {
         var ct = TestContext.Current.CancellationToken;
         var (_, validation) = SeedStandaloneNatural(status: BiometricEstados.Expirado);
@@ -364,7 +364,7 @@ public sealed class EditarPrevalidacionHandlerTests
         result!.Resent.Should().BeTrue();
         result.CaptureUrl.Should().BeNull();
         validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
-        validation.ResendCount.Should().Be(1);
+        validation.ResendCount.Should().Be(0, "la ronda cuenta solo cuando el enlace se crea");
     }
 
     [Fact]
