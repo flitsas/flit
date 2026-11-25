@@ -274,6 +274,237 @@ public sealed class CompanyQueryFirmaTests
         hoja.Rows.Should().HaveCount(1);
     }
 
+    // ── HU #14701 (A4): el Excel de la consulta guardada (gestor y Super Admin) ──────────────────
+
+    [Fact] // Las dos columnas visibles: mismos valores que la tabla, fila por fila.
+    public async Task Excel_ConAmbasColumnas_TraeLosMismosValoresQueLaTabla()
+    {
+        var db = NewDbName();
+        await Sembrar(db);
+        var def = DefinirConColumnas([], "placa", "firmado_por_todas", "falta_firmar");
+
+        var (tabla, hoja) = await TablaYExcelAsync(db, def, ["100", "300", "301"], ["201"]);
+
+        hoja.Headers.Should().Equal("Placa", "Firmado por todas las partes", "Falta firmar");
+        hoja.Rows.Should().HaveCount(tabla.Filas.Count).And.HaveCount(3);
+        foreach (var fila in tabla.Filas)
+        {
+            var celdas = hoja.Rows.Single(r => r[0] == fila.Placa);
+            celdas[1].Should().Be(fila.FirmadoPorTodas == true ? "Sí" : "No");
+            celdas[2].Should().Be(fila.FaltaFirmar ?? string.Empty);
+        }
+
+        hoja.Rows.Single(r => r[0] == "AAA111").Should().Equal("AAA111", "Sí", "");
+        hoja.Rows.Single(r => r[0] == "BBB222")[2]
+            .Should().Be("Vendedor: Vera Vendedora (rechazada) · Comprador: Carlos Comprador");
+    }
+
+    [Fact] // Una sola columna visible: solo esa sale.
+    public async Task Excel_ConUnaSolaColumna_SoloTraeEsaColumna()
+    {
+        var db = NewDbName();
+        await Sembrar(db);
+
+        var (_, soloFaltaFirmar) = await TablaYExcelAsync(
+            db, DefinirConColumnas([], "falta_firmar"), ["100"], null);
+        soloFaltaFirmar.Headers.Should().Equal("Falta firmar");
+        soloFaltaFirmar.Rows.Select(r => r[0]).Should().Contain("Comprador: Nora Nadie");
+
+        var (_, soloFirmado) = await TablaYExcelAsync(
+            db, DefinirConColumnas([], "firmado_por_todas"), ["100"], null);
+        soloFirmado.Headers.Should().Equal("Firmado por todas las partes");
+        soloFirmado.Rows.Select(r => r[0]).Should().BeEquivalentTo("Sí", "No", "No");
+    }
+
+    [Fact] // Filtro «es No»: el archivo trae exactamente las filas del listado, también con una sola columna.
+    public async Task Excel_ConFiltroEsNo_TraeExactamenteLasMismasFilasQueElListado()
+    {
+        var db = NewDbName();
+        await Sembrar(db);
+        var def = DefinirConColumnas(
+            [Cond(CompanyQueryFieldCatalog.FirmadoPorTodas, "false")], "placa", "firmado_por_todas", "falta_firmar");
+
+        var (tabla, hoja) = await TablaYExcelAsync(db, def, ["100", "300", "301"], ["201"]);
+
+        tabla.Total.Should().Be(2);
+        hoja.Rows.Select(r => r[0]).Should().BeEquivalentTo(tabla.Filas.Select(f => f.Placa));
+        hoja.Rows.Should().OnlyContain(r => r[1] == "No");
+
+        var (tablaUna, hojaUna) = await TablaYExcelAsync(db,
+            DefinirConColumnas([Cond(CompanyQueryFieldCatalog.FirmadoPorTodas, "false")], "placa"),
+            ["100", "300", "301"], ["201"]);
+        hojaUna.Rows.Select(r => r[0]).Should().BeEquivalentTo(tablaUna.Filas.Select(f => f.Placa));
+    }
+
+    [Fact] // Super Admin: mismo exportador, varias compañías, «es No» → mismas filas que el listado.
+    public async Task Excel_SuperAdmin_ConFiltroEsNo_TraeLasMismasFilasQueElListado()
+    {
+        var db = NewDbName();
+        await using (var seed = NewContext(db))
+        {
+            SeedCatalogos(seed);
+            foreach (var (id, code, nit) in new[] { (Empresa, "TESLA", "900000001"), (OtraEmpresa, "RENTING", "900000002") })
+                seed.Tenants.Add(new Flit.Infrastructure.Persistence.Entities.Identity.Tenant { Id = id, Code = code, LegalName = code, TaxId = nit, TenantType = "FLIT", IsActive = true, CreatedAt = DateTimeOffset.UtcNow });
+            var a = Tramite(seed, "REF-A-FIRMADO", "AAA111", Empresa);
+            Actor(seed, a, "comprador", "Carla Compradora", "100", Empresa);
+            var b = Tramite(seed, "REF-A-FALTA", "BBB222", Empresa);
+            Actor(seed, b, "comprador", "Nora Nadie", "203", Empresa);
+            var c = Tramite(seed, "REF-B-FALTA", "CCC333", OtraEmpresa);
+            Actor(seed, c, "vendedor", "Vera Vendedora", "201", OtraEmpresa);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var def = DefinirConColumnas(
+            [Cond(CompanyQueryFieldCatalog.FirmadoPorTodas, "false")], "placa", "firmado_por_todas", "falta_firmar");
+        await using var ctx = NewContext(db);
+        var real = new CompanyQueryRepository(ctx, new FakeEvaluator(["100"]));
+        var saved = new SavedQueryDto(Guid.NewGuid(), "SA", null, false, def, DateTimeOffset.UtcNow, null);
+        var builder = new CompanyQueryReportDocumentBuilder(
+            new DelegatingRepo(real, saved), new FixedSuperAdminSaved(saved));
+
+        var resultado = await builder.BuildForSuperAdminAsync(saved.Id, TestContext.Current.CancellationToken);
+        var listado = await real.ExecuteForSuperAdminAsync(
+            new QueryRequest(def, 1, 50), TestContext.Current.CancellationToken);
+
+        resultado.Should().NotBeNull();
+        var hoja = LeerXlsx(resultado!.Bytes);
+        listado.Total.Should().Be(2);
+        resultado.Total.Should().Be(2);
+        hoja.Rows.Select(r => r[0]).Should().BeEquivalentTo(listado.Filas.Select(f => f.Placa));
+        hoja.Rows.Should().OnlyContain(r => r[1] == "No" && r[2].Length > 0);
+    }
+
+    [Fact] // Volumen: 10.000 filas, el exportador no llama a nadie y las columnas nuevas no lo frenan >20 %.
+    public async Task Excel_Volumen10000Filas_NoLlamaProveedoresYNoSubeMasDel20PorCiento()
+    {
+        const int N = 10_000;
+        var contador = new RepoSintetico(Enumerable.Range(0, N).Select(FilaSintetica).ToList());
+        var conColumnas = new SavedQueryDto(Guid.NewGuid(), "Vol", null, false,
+            DefinirConColumnas([], "placa", "estado", "firmado_por_todas", "falta_firmar"),
+            DateTimeOffset.UtcNow, null);
+        var sinColumnas = conColumnas with
+        {
+            Definition = DefinirConColumnas([], "placa", "estado", "prioritario", "tipo"),
+        };
+
+        // Sin proveedores: el exportador solo depende de repositorios de consulta (nada de HTTP ni del evaluador).
+        typeof(CompanyQueryReportDocumentBuilder).GetConstructors().Single().GetParameters()
+            .Select(p => p.ParameterType)
+            .Should().BeEquivalentTo([typeof(ICompanyQueryRepository), typeof(ISuperAdminSavedQueryRepository)]);
+
+        async Task<double> MedirAsync(SavedQueryDto saved)
+        {
+            var b = new CompanyQueryReportDocumentBuilder(
+                new DelegatingRepo(contador, saved), new FixedSuperAdminSaved(saved));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var r = await b.BuildAsync(Empresa, saved.Id, TestContext.Current.CancellationToken);
+            sw.Stop();
+            r!.Total.Should().Be(N);
+            r.Truncated.Should().BeTrue(); // tope del correo: 5.000 filas, igual con o sin las columnas nuevas
+            LeerXlsx(r.Bytes).Rows.Should().HaveCount(CompanyQueryReportDocumentBuilder.RowCap);
+            return sw.Elapsed.TotalMilliseconds;
+        }
+
+        await MedirAsync(sinColumnas); // calentamiento
+        await MedirAsync(conColumnas);
+        var baseMs = new List<double>();
+        var nuevoMs = new List<double>();
+        for (var i = 0; i < 7; i++)
+        {
+            baseMs.Add(await MedirAsync(sinColumnas));
+            nuevoMs.Add(await MedirAsync(conColumnas));
+        }
+
+        static double Mediana(List<double> l) => l.Min(); // el mínimo es la medida menos sensible al ruido de CI
+        Mediana(nuevoMs).Should().BeLessThanOrEqualTo(Mediana(baseMs) * 1.20,
+            $"base {Mediana(baseMs):F0} ms vs con columnas {Mediana(nuevoMs):F0} ms");
+    }
+
+    private static CompanyQueryRowDto FilaSintetica(int i) => new(
+        Guid.NewGuid(), $"REF-{i}", $"P{i:D5}", null, null, null, Empresa, "Empresa", TipoMatriculaId, "Matrícula",
+        "preparado", i % 7 == 0, false, 0, null, null, false, null, false, [], false, null, "", "Gustavo",
+        DateTimeOffset.UtcNow, null, null, null, null, null, null, 0, [],
+        FirmadoPorTodas: i % 3 == 0, FaltaFirmar: i % 3 == 0 ? string.Empty : $"Comprador: Persona {i}");
+
+    private static QueryDefinition DefinirConColumnas(QueryCondition[] condiciones, params string[] columnas) =>
+        new(new QueryDateFilter(CompanyQueryDateField.Creacion, QueryRangePreset.Ultimos30), condiciones, columnas);
+
+    private static async Task<(CompanyQueryResultDto Tabla, Hoja Hoja)> TablaYExcelAsync(
+        string db, QueryDefinition def, string[] firmados, string[]? rechazados)
+    {
+        await using var ctx = NewContext(db);
+        var real = new CompanyQueryRepository(ctx,
+            new FakeEvaluator(firmados.ToHashSet(), rechazados?.ToHashSet()));
+        var saved = new SavedQueryDto(Guid.NewGuid(), "Q", null, false, def, DateTimeOffset.UtcNow, null);
+        var builder = new CompanyQueryReportDocumentBuilder(
+            new DelegatingRepo(real, saved), new FixedSuperAdminSaved(saved));
+
+        var resultado = await builder.BuildAsync(Empresa, saved.Id, TestContext.Current.CancellationToken);
+        var tabla = await real.ExecuteAsync(
+            Empresa, new QueryRequest(def, 1, 50), TestContext.Current.CancellationToken);
+        return (tabla, LeerXlsx(resultado!.Bytes));
+    }
+
+    private sealed record Hoja(IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
+
+    /// <summary>Lee la primera hoja (cadenas en línea, como las escribe TabularWorkbookWriter).</summary>
+    private static Hoja LeerXlsx(byte[] bytes)
+    {
+        using var ms = new MemoryStream(bytes);
+        using var doc = DocumentFormat.OpenXml.Packaging.SpreadsheetDocument.Open(ms, false);
+        var sheetData = doc.WorkbookPart!.WorksheetParts.First().Worksheet
+            .Descendants<DocumentFormat.OpenXml.Spreadsheet.SheetData>().First();
+        var shared = doc.WorkbookPart.SharedStringTablePart?.SharedStringTable
+            .Elements<DocumentFormat.OpenXml.Spreadsheet.SharedStringItem>().Select(x => x.InnerText).ToList();
+        var filas = sheetData.Elements<DocumentFormat.OpenXml.Spreadsheet.Row>()
+            .Select(r => (IReadOnlyList<string>)r.Elements<DocumentFormat.OpenXml.Spreadsheet.Cell>().Select(c =>
+                c.DataType?.Value == DocumentFormat.OpenXml.Spreadsheet.CellValues.SharedString && shared is not null
+                    ? shared[int.Parse(c.CellValue!.Text)]
+                    : c.InlineString?.InnerText ?? c.CellValue?.Text ?? string.Empty).ToList())
+            .ToList();
+        return new Hoja(filas[0], filas.Skip(1).ToList());
+    }
+
+    /// <summary>Repositorio real para ejecutar; la consulta guardada se entrega fija.</summary>
+    private sealed class DelegatingRepo(ICompanyQueryRepository inner, SavedQueryDto saved) : ICompanyQueryRepository
+    {
+        public Task<CompanyQueryResultDto> ExecuteAsync(Guid t, QueryRequest r, CancellationToken ct = default) => inner.ExecuteAsync(t, r, ct);
+        public Task<CompanyQueryResultDto> ExecuteForSuperAdminAsync(QueryRequest r, CancellationToken ct = default) => inner.ExecuteForSuperAdminAsync(r, ct);
+        public Task<SavedQueryDto?> GetSavedByIdAsync(Guid t, Guid id, CancellationToken ct = default) => Task.FromResult<SavedQueryDto?>(saved);
+        public Task<IReadOnlyList<QueryFieldDto>> GetFieldsAsync(Guid t, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<QueryFieldDto>> GetFieldsForSuperAdminAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<SavedQueryDto>> ListSavedAsync(Guid t, Guid u, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<SavedQueryDto> SaveAsync(Guid t, Guid u, Guid? id, SavedQueryInput i, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> DeleteSavedAsync(Guid t, Guid u, Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    /// <summary>Repositorio en memoria con filas sintéticas, paginado como el real.</summary>
+    private sealed class RepoSintetico(List<CompanyQueryRowDto> filas) : ICompanyQueryRepository
+    {
+        public Task<CompanyQueryResultDto> ExecuteAsync(Guid t, QueryRequest r, CancellationToken ct = default)
+        {
+            var pagina = filas.Skip((r.Page - 1) * r.PageSize).Take(r.PageSize).ToList();
+            return Task.FromResult(new CompanyQueryResultDto(
+                filas.Count, r.Page, r.PageSize, default, default, 0, pagina, []));
+        }
+
+        public Task<CompanyQueryResultDto> ExecuteForSuperAdminAsync(QueryRequest r, CancellationToken ct = default) => ExecuteAsync(Guid.Empty, r, ct);
+        public Task<SavedQueryDto?> GetSavedByIdAsync(Guid t, Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<QueryFieldDto>> GetFieldsAsync(Guid t, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<QueryFieldDto>> GetFieldsForSuperAdminAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<SavedQueryDto>> ListSavedAsync(Guid t, Guid u, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<SavedQueryDto> SaveAsync(Guid t, Guid u, Guid? id, SavedQueryInput i, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> DeleteSavedAsync(Guid t, Guid u, Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    private sealed class FixedSuperAdminSaved(SavedQueryDto saved) : ISuperAdminSavedQueryRepository
+    {
+        public Task<IReadOnlyList<SavedQueryDto>> ListAsync(CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<SavedQueryDto?> GetByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<SavedQueryDto?>(saved);
+        public Task<SavedQueryDto> SaveAsync(Guid u, Guid? id, SavedQueryInput i, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
     // ── Infraestructura de prueba ─────────────────────────────────────────────────────────────
 
     private static async Task Sembrar(string db)
