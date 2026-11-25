@@ -61,7 +61,7 @@ public static class CompanyDomainEndpoints
         }
 
         var result = await handler.HandleAsync(tenant.Value, ResolveUserId(httpContext.User), cancellationToken).ConfigureAwait(false);
-        return AdminCompaniesDomainEndpoints.ToVerifyResult(result, tenant.Value, options.EdgeTarget);
+        return AdminCompaniesDomainEndpoints.ToVerifyResult(result, tenant.Value, options.EdgeIp);
     }
 
     private static Guid? ResolveUserId(ClaimsPrincipal user) => AdminCompaniesDomainEndpoints.ResolveUserId(user);
@@ -81,7 +81,7 @@ public static class CompanyDomainEndpoints
         var domain = await handler.HandleAsync(tenant.Value, cancellationToken).ConfigureAwait(false);
         return domain is null
             ? AdminCompaniesDomainEndpoints.NotFoundResponse(tenant.Value)
-            : Results.Ok(TenantDomainResponse.From(domain, options.EdgeTarget));
+            : Results.Ok(TenantDomainResponse.From(domain, options.EdgeIp));
     }
 
     /// <summary>

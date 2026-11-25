@@ -263,7 +263,7 @@ public sealed class PortalDominioPostgresTests(PostgresDatabaseFixture fixture) 
         await RegistrarAsync(OrganismoA, "portal.example.com", "tok-pd-0000000000000009");
         await using var mb = NewContext();
         var repoMb = new TenantDomainRepository(mb);
-        var act = () => repoMb.RegisterOrReplaceAsync(CabezaMarcaBlanca, "portal.example.com", "tok-mb-0000000000000002", Actor, Ct);
+        var act = () => repoMb.RegisterOrReplaceAsync(CabezaMarcaBlanca, "portal.example.com", "tok-mb-0000000000000002", Actor, TenantDomainPurposes.Hub, Ct);
         await act.Should().ThrowAsync<DomainHostAlreadyRegisteredException>();
     }
 

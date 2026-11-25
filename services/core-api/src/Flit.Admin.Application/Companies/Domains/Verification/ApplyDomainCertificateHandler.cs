@@ -4,7 +4,6 @@ namespace Flit.Admin.Application.Companies.Domains.Verification;
 
 public enum ApplyDomainCertificateOutcome
 {
-    Activated,
     Updated,
     NotFound,
     NotVerified,
@@ -21,15 +20,14 @@ public sealed record ApplyDomainCertificateResult(ApplyDomainCertificateOutcome 
 
 /// <summary>
 /// Aplica la señal de certificado del borde (#12426) sobre el ciclo de estados de #12425 — consumido
-/// por <c>PUT /internal/domains/{host}/certificate</c>. Contrato §3: <c>verified</c> pasa a
-/// <c>active</c> (<c>activated_at = now()</c>, AC3); <c>active</c> solo actualiza fechas del
-/// certificado; cualquier otro estado (<c>pending</c>/<c>failed</c>) es <c>409 DOMAIN_NOT_VERIFIED</c>
-/// — no tiene sentido emitir certificado para un dominio que no comprobó titularidad.
+/// por <c>PUT /internal/domains/{host}/certificate</c>. <c>verified</c> y <c>active</c> solo actualizan
+/// las fechas del certificado (la activación la pide el SuperAdmin); cualquier otro estado
+/// (<c>pending</c>/<c>failed</c>) es <c>409 DOMAIN_NOT_VERIFIED</c> — no tiene sentido emitir
+/// certificado para un dominio que no comprobó titularidad.
 /// </summary>
-public sealed class ApplyDomainCertificateHandler(ITenantDomainRepository repository, TimeProvider? timeProvider = null)
+public sealed class ApplyDomainCertificateHandler(ITenantDomainRepository repository)
 {
     private readonly ITenantDomainRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     public const string JobActor = "job:certificate-issuer";
 
@@ -49,8 +47,7 @@ public sealed class ApplyDomainCertificateHandler(ITenantDomainRepository reposi
             return ApplyDomainCertificateResult.NotVerified();
         }
 
-        var now = _clock.GetUtcNow();
-        var decision = DomainStateMachine.DecideCertificate(current.Status, now);
+        var decision = DomainStateMachine.DecideCertificate(current.Status);
 
         var updated = await _repository.ApplyCertificateAsync(
             host,
@@ -66,10 +63,6 @@ public sealed class ApplyDomainCertificateHandler(ITenantDomainRepository reposi
             return ApplyDomainCertificateResult.NotFound();
         }
 
-        return ApplyDomainCertificateResult.Ok(
-            updated,
-            decision.NewStatus == TenantDomainStatus.Active && current.Status == TenantDomainStatus.Verified
-                ? ApplyDomainCertificateOutcome.Activated
-                : ApplyDomainCertificateOutcome.Updated);
+        return ApplyDomainCertificateResult.Ok(updated, ApplyDomainCertificateOutcome.Updated);
     }
 }
