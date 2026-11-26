@@ -1,6 +1,5 @@
 using Flit.Infrastructure.Documents.Branding;
 using Microsoft.Extensions.Logging;
-using PdfSharpCore.Pdf.IO;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -91,13 +90,12 @@ internal sealed partial class PdfDocumentNameStampPipeline
         }
     }
 
+    /// <summary>
+    /// Misma red que <see cref="PdfModifyNormalizer.IsRecoverablePdfException"/>: incluye SharpZipLib
+    /// (<c>Unexpected EOF</c> en streams) para no saltarse N1/N2/PDFium/placeholder.
+    /// </summary>
     internal static bool IsStampFailure(Exception ex) =>
-        ex is PdfReaderException
-            or InvalidOperationException
-            or IOException
-            or ArgumentException
-            or NotSupportedException
-            or FormatException;
+        PdfModifyNormalizer.IsRecoverablePdfException(ex);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
