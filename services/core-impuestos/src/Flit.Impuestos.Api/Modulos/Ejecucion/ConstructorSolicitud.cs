@@ -41,7 +41,8 @@ public abstract record Construccion(DatosItem Datos)
 /// <list type="number">
 ///   <item>Documento: tipo del API (si no, «Datos incompletos» <c>documentType</c>) y número de 3 a 20 letras o dígitos (sin
 ///   puntos ni espacios); con NIT, sin dígito de verificación: lo que va antes del guion, o el número tal cual si tiene de 3 a 9
-///   dígitos; con 10 o más sin guion es ambiguo (<c>documentNumber</c>).</item>
+///   dígitos; con exactamente 10 dígitos sin guion, los 9 primeros si el último es su dígito de verificación DIAN (módulo 11);
+///   cualquier otro caso de 10 o más sin guion es ambiguo (<c>documentNumber</c>).</item>
 ///   <item>Secretaría homologada (<c>secretaryDepartmentCode</c> si no la hay).</item>
 ///   <item>Departamento habilitado: el de la copia de configuración del lote; sin lista, el que tiene fuente activa en
 ///   <c>/fuentes</c>. Si no, «Departamento no habilitado».</item>
@@ -153,11 +154,28 @@ public static class ConstructorSolicitud
             var guion = limpio.IndexOf('-', StringComparison.Ordinal);
             if (guion >= 0)
                 limpio = limpio[..guion];
+            else if (limpio.Length == 10 && limpio.All(char.IsAsciiDigit) && limpio[9] - '0' == DigitoVerificacion(limpio[..9]))
+                limpio = limpio[..9];
             else if (limpio.Length > 9)
                 return null;
         }
 
         return limpio.Length is >= 3 and <= 20 && limpio.All(char.IsAsciiLetterOrDigit) ? limpio : null;
+    }
+
+    private static readonly int[] PesosDv = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+
+    /// <summary>
+    /// Dígito de verificación DIAN de un NIT de solo dígitos (hasta 15): pesos 3, 7, 13, … de derecha a izquierda, residuo r de
+    /// la suma módulo 11; DV = r si r es 0 o 1, si no 11 − r.
+    /// </summary>
+    private static int DigitoVerificacion(string nit)
+    {
+        var suma = 0;
+        for (var i = 0; i < nit.Length; i++)
+            suma += (nit[nit.Length - 1 - i] - '0') * PesosDv[i];
+        var residuo = suma % 11;
+        return residuo <= 1 ? residuo : 11 - residuo;
     }
 
     private static bool Habilitado(string departamento, CopiaConfiguracion copia, FuenteApi? fuente) =>

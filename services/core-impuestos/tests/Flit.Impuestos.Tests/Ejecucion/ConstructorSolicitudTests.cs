@@ -105,10 +105,28 @@ public sealed class ConstructorSolicitudTests
         lista.Solicitud.DocumentNumber.Should().Be(esperado);
     }
 
-    [Fact]
-    public void Un_NIT_de_diez_digitos_sin_guion_es_ambiguo_y_queda_datos_incompletos_documentNumber()
+    [Theory]
+    [InlineData("9001234568", "900123456")] // residuo 3 ⇒ DV 11 − 3 = 8
+    [InlineData("9001234550", "900123455")] // residuo 0 ⇒ DV 0
+    [InlineData("9001234591", "900123459")] // residuo 1 ⇒ DV 1
+    [InlineData("9001234661", "900123466")] // residuo 10 ⇒ DV 11 − 10 = 1
+    public void Un_NIT_de_diez_digitos_sin_guion_con_DV_valido_va_sin_el_DV(string numero, string esperado)
     {
-        var datos = RuntDePrueba.Antioquia() with { TipoDocumento = "NIT", NumeroDocumento = "9001234567" };
+        var datos = RuntDePrueba.Antioquia() with { TipoDocumento = "NIT", NumeroDocumento = numero };
+
+        var lista = ConstructorSolicitud.Construir("ABC123", datos, Medellin, Todos, Fuentes, null).Should().BeOfType<Construccion.Lista>().Subject;
+
+        lista.Solicitud.DocumentType.Should().Be("NIT");
+        lista.Solicitud.DocumentNumber.Should().Be(esperado);
+    }
+
+    [Theory]
+    [InlineData("9001234567")] // el DV de 900123456 es 8, no 7
+    [InlineData("90012345A8")] // diez caracteres, no todos dígitos
+    [InlineData("90012345681")] // once dígitos sin guion
+    public void Un_NIT_de_diez_o_mas_sin_guion_y_sin_DV_valido_es_ambiguo_y_queda_datos_incompletos_documentNumber(string numero)
+    {
+        var datos = RuntDePrueba.Antioquia() with { TipoDocumento = "NIT", NumeroDocumento = numero };
 
         ConstructorSolicitud.Construir("ABC123", datos, Medellin, Todos, Fuentes, null)
             .Should().BeOfType<Construccion.Incompleta>().Which.Campo.Should().Be("documentNumber");
