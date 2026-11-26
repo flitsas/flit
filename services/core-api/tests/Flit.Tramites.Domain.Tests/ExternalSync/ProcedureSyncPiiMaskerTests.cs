@@ -55,6 +55,20 @@ public sealed class ProcedureSyncPiiMaskerTests
     }
 
     [Fact]
+    public void Gestor_SeEnmascaraConLasReglasDeNombreYCorreoYElNuloSigueNulo()
+    {
+        var item = Item([]) with { NombreGestor = "GESTORA EJEMPLO", CorreoGestor = "gestora@ejemplo.test" };
+
+        var enmascarado = ProcedureSyncPiiMasker.Mask(item);
+        enmascarado.NombreGestor.Should().Be("G*** E***");
+        enmascarado.CorreoGestor.Should().Be("g***@ejemplo.test");
+
+        var sinGestor = ProcedureSyncPiiMasker.Mask(Item([]));
+        sinGestor.NombreGestor.Should().BeNull();
+        sinGestor.CorreoGestor.Should().BeNull();
+    }
+
+    [Fact]
     public void AC3_SinCompradoresNoFalla()
     {
         ProcedureSyncPiiMasker.Mask(Item([])).Compradores.Should().BeEmpty();

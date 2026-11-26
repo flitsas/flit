@@ -127,11 +127,14 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
                f.uploaded_at AS factura_cargada_en,
                t.id AS tenant_id,
                t.tax_id AS nit,
-               t.legal_name AS compania_nombre
+               t.legal_name AS compania_nombre,
+               gu.display_name AS gestor_nombre,
+               gu.email AS gestor_correo
           FROM page p
           JOIN tramites.procedure_instances pi ON pi.id = p.id
           JOIN tramites.procedure_types pt     ON pt.id = pi.procedure_type_id
           JOIN identity.tenants t              ON t.id = pi.tenant_id
+          LEFT JOIN identity.users gu          ON gu.id = COALESCE(pi.assigned_to_user_id, pi.created_by_user_id)
           LEFT JOIN catalogs.transit_offices tof ON tof.id = pi.transit_office_id
           LEFT JOIN LATERAL (
                 SELECT jsonb_agg(jsonb_build_object(
@@ -378,7 +381,9 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
         InvoiceUploadedAt: Date(r, "factura_cargada_en"),
         TenantId: r.GetGuid(r.GetOrdinal("tenant_id")),
         TenantTaxId: Str(r, "nit"),
-        TenantLegalName: Str(r, "compania_nombre"));
+        TenantLegalName: Str(r, "compania_nombre"),
+        ManagerName: Str(r, "gestor_nombre"),
+        ManagerEmail: Str(r, "gestor_correo"));
 
     private static List<ProcedureSyncActorRow> ReadActors(string? json)
     {
