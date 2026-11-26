@@ -40,8 +40,8 @@ function conSesion(superAdmin: boolean) {
 }
 
 const TENANT = "00000000-0000-7000-8000-0000000000e1";
-const API_KEY = "fk_live_valor_secreto_de_prueba_0001";
-const SECRETO = "whsec_valor_secreto_de_prueba_0002";
+const API_KEY = "fk_live_valor_secreto_de_prueba_0001"; // gitleaks:allow
+const SECRETO = "whsec_valor_secreto_de_prueba_0002"; // gitleaks:allow
 const CONFIGURADA = { tieneApiKey: true, tieneWebhookSecret: false, origen: "COPIA_DIAGNOSTICO", apiKeyPrefijo: "fk_live_", actualizadoEn: "2026-11-20T15:00:00Z" };
 const SIN_NADA = { tieneApiKey: false, tieneWebhookSecret: false, origen: null, apiKeyPrefijo: null, actualizadoEn: null };
 

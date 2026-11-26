@@ -378,8 +378,8 @@ public sealed class CredencialesProductoGrpcTests
 
     // ── HU #14711 — ObtenerSecretoWebhookImpuesto ─────────────────────────────────────────────────────────────────────
 
-    private const string SecretoActual = "whsec_CENTINELA_actual_0123456789";
-    private const string SecretoAnterior = "whsec_CENTINELA_anterior_0123456789";
+    private const string SecretoActual = "whsec_CENTINELA_actual_0123456789"; // gitleaks:allow
+    private const string SecretoAnterior = "whsec_CENTINELA_anterior_0123456789"; // gitleaks:allow
     private static readonly DateTimeOffset AhoraWebhook = new(2026, 11, 25, 15, 0, 0, TimeSpan.Zero);
 
     private void ConSecretos(bool anteriorVigente)

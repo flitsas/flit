@@ -147,7 +147,7 @@ Respuesta `201 Created` (empresa nueva):
     "updated_at": "2026-11-25T15:00:00Z"
   },
   "created": true,
-  "api_key": "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde",
+  "api_key": "<api_key de 43 caracteres>",
   "api_key_rotated": false,
   "webhook_secret": "whsec_Zx9…"
 }

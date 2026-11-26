@@ -28,7 +28,7 @@ namespace Flit.Impuestos.Tests.Credenciales;
 /// </example>
 public sealed class AlmacenCredencialesTests
 {
-    private const string ApiKey = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
+    private const string ApiKey = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"; // gitleaks:allow
     private const string Secreto = "whsec_secreto-de-prueba-no-real";
 
     [Fact]

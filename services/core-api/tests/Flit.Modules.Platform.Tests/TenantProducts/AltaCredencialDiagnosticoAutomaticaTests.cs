@@ -22,7 +22,7 @@ namespace Flit.Modules.Platform.Tests.TenantProducts;
 public sealed class AltaCredencialDiagnosticoAutomaticaTests
 {
     private const string Llave = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
-    private const string Secreto = "whsec_secreto_de_prueba_0123456789";
+    private const string Secreto = "whsec_secreto_de_prueba_0123456789"; // gitleaks:allow
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly DateTimeOffset Ahora = new(2026, 11, 25, 15, 0, 0, TimeSpan.Zero);
 
@@ -236,7 +236,7 @@ public sealed class AltaCredencialDiagnosticoAutomaticaTests
         _credenciales.GuardarAltaProveedorAsync(default, default!, default!, default!, default, default, Arg.Any<CancellationToken>())
             .ThrowsAsyncForAnyArgs(new TenantProductCredentialConflictException());
         _credenciales.GetAsync(TenantId, "diagnostico", "impuesto_api_key", Arg.Any<CancellationToken>())
-            .Returns(null, new TenantProductCredential(TenantId, "diagnostico", "impuesto_api_key", "cif:impuesto_api_key:OtraLlaveDelBotonDistinta0123456789", 0, Ahora));
+            .Returns(null, new TenantProductCredential(TenantId, "diagnostico", "impuesto_api_key", "cif:impuesto_api_key:OtraLlaveDelBotonDistinta0123456789", 0, Ahora)); // gitleaks:allow
 
         await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, 1), Ct);
 

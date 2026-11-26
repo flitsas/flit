@@ -25,8 +25,8 @@ public sealed class ObtenerCredencialImpuestoDiagnosticoHandlerTests
 {
     private const string Llave = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
     private const string LlaveVieja = "ViEjAaaaIjKlMnOpQrStUvWxYz0123456789-_zzzzz";
-    private const string Secreto = "whsec_CENTINELA_secreto_nuevo_0123456789";
-    private const string SecretoViejo = "whsec_CENTINELA_secreto_viejo_9876543210";
+    private const string Secreto = "whsec_CENTINELA_secreto_nuevo_0123456789"; // gitleaks:allow
+    private const string SecretoViejo = "whsec_CENTINELA_secreto_viejo_9876543210"; // gitleaks:allow
     private const string Diagnostico = "diagnostico";
     private const string CodigoLlave = "impuesto_api_key";
     private const string CodigoSecreto = "impuesto_webhook_secret";

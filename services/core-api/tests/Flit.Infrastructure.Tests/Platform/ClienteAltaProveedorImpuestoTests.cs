@@ -26,7 +26,7 @@ public sealed class ClienteAltaProveedorImpuestoTests
     private const string Base = "https://proveedor.prueba.local";
     private const string Token = "token-de-integracion-CENTINELA-0123456789abcdef";
     private const string Llave = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
-    private const string Secreto = "whsec_CENTINELA_0123456789";
+    private const string Secreto = "whsec_CENTINELA_0123456789"; // gitleaks:allow
     private static readonly PeticionAltaProveedor Peticion = new("Flota Andina SAS", "900123456", "ops@flota.example");
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -30,7 +30,7 @@ public sealed class ClienteApiLiquidacionTests
 {
     public const string Base = "https://api.prueba";
     public const string Token = "token-integracion-de-prueba-no-real";
-    public const string ApiKey = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
+    public const string ApiKey = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"; // gitleaks:allow
     public const string WebhookSecret = "whsec_secreto-de-prueba-no-real";
 
     public const string Alta201 =

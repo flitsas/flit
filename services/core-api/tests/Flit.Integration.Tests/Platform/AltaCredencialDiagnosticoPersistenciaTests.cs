@@ -33,7 +33,7 @@ namespace Flit.Integration.Tests.Platform;
 public sealed class AltaCredencialDiagnosticoPersistenciaTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
     private const string Llave = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
-    private const string Secreto = "whsec_secreto_de_prueba_0123456789";
+    private const string Secreto = "whsec_secreto_de_prueba_0123456789"; // gitleaks:allow
     private static readonly Guid Tenant = new("14711000-0000-4000-8000-0000000000c1");
     private static readonly Guid UserAdmin = new("14711000-0000-4000-8000-0000000000a1");
     private static readonly DateTimeOffset Momento = new(2026, 11, 25, 15, 0, 0, TimeSpan.Zero);

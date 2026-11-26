@@ -402,7 +402,7 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
             Invoker(await ServiceTokenAsync(ct, "svc-impuestos", "platform.identidad.credenciales.impuesto.actualizar")));
         var conCopia = new CredencialesProductoService.CredencialesProductoServiceClient(
             Invoker(await ServiceTokenAsync(ct, "svc-impuestos", "platform.identidad.credenciales.impuesto.copia")));
-        var pedido = new ActualizarCredencialImpuestoDiagnosticoRequest { ApiKey = "llave-rotada-de-prueba-0123456789" };
+        var pedido = new ActualizarCredencialImpuestoDiagnosticoRequest { ApiKey = "llave-rotada-de-prueba-0123456789" }; // gitleaks:allow
 
         var r = await conScope.ActualizarCredencialImpuestoDiagnosticoAsync(pedido, Metadata(_empresaAlta), cancellationToken: ct);
         r.Actualizada.Should().BeFalse("la empresa de la prueba no tiene llave de Diagnóstico y el rpc nunca la crea");
