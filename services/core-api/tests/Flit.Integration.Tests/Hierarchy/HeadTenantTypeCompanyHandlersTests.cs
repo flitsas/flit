@@ -129,7 +129,7 @@ public sealed class HeadTenantTypeCompanyHandlersTests(PostgresDatabaseFixture f
     [PostgresFact]
     public async Task AC1_Cliente_existente_pasa_a_cabeza_por_edicion_y_nace_marcado()
     {
-        var id = await CreateAsync("Suelto", "900100200-5", "CONCESIONARIO");
+        var id = await CreateAsync("Suelto", "900100200-5", "RENTING");
         await SeedActorAsync(id);
 
         var result = await UpdateAsync(id, "Suelto", "900100200-5", "MARCA_BLANCA");

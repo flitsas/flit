@@ -133,6 +133,15 @@ export function selectableTenantTypes(isSuperAdmin: boolean): TenantType[] {
 }
 
 /**
+ * Tipos del selector del ALTA general (Bug #14714). «Concesionario» queda fuera: solo existe como
+ * hijo de una cabeza Concesión y se crea desde ella (Clientes hijos); creado aquí quedaba huérfano.
+ * La edición conserva el catálogo completo (`selectableTenantTypes`).
+ */
+export function creatableTenantTypes(isSuperAdmin: boolean): TenantType[] {
+  return selectableTenantTypes(isSuperAdmin).filter((t) => t !== "CONCESIONARIO");
+}
+
+/**
  * Payload del POST /api/v1/admin/companies (alta de compañía). Sin `code`: lo asigna el servidor
  * (consecutivo COMP-XXXX, HU #13605) y llega en la respuesta.
  */
