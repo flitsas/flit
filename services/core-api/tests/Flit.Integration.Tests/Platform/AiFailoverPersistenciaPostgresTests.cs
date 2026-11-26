@@ -65,14 +65,54 @@ public sealed class AiFailoverPersistenciaPostgresTests(PostgresDatabaseFixture 
         (await ctx.AiFailoverAlerts.CountAsync(ct)).Should().Be(2);
     }
 
-    private async Task SembrarOcrAsync(CancellationToken ct)
+    [PostgresFact]
+    public async Task Regreso_automatico_vuelve_al_principal_con_transicion_y_sin_alerta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SembrarOcrAsync(ct);
+
+        await using (var db = NewRetryingContext())
+        {
+            var repo = new AiToolProviderSettingsRepository(db);
+            await repo.RecordFailoverAsync(AiToolCodes.Ocr, AiProviderCodes.Anthropic, AiProviderCodes.OpenAi, null, ct);
+            await repo.RecordAutoReturnAsync(AiToolCodes.Ocr, AiProviderCodes.OpenAi, AiProviderCodes.Anthropic, ct);
+        }
+
+        await using var ctx = NewContext();
+        (await ctx.AiToolProviderSettings.AsNoTracking().SingleAsync(x => x.ToolCode == AiToolCodes.Ocr, ct))
+            .ActiveProvider.Should().Be(AiProviderCodes.Anthropic);
+        var transiciones = await ctx.AiProviderTransitions.AsNoTracking().OrderBy(t => t.OccurredAt).ToListAsync(ct);
+        transiciones.Select(t => t.Reason).Should().Equal("failover_auto", "auto_return");
+        (await ctx.AiFailoverAlerts.CountAsync(ct)).Should().Be(1, "solo el failover deja alerta");
+    }
+
+    [PostgresFact]
+    public async Task Regreso_automatico_no_pisa_un_cambio_hecho_entretanto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SembrarOcrAsync(ct, activo: AiProviderCodes.Kimi);
+
+        // El router creía que el activo era openai, pero alguien ya lo había puesto en kimi.
+        await using (var db = NewRetryingContext())
+        {
+            await new AiToolProviderSettingsRepository(db)
+                .RecordAutoReturnAsync(AiToolCodes.Ocr, AiProviderCodes.OpenAi, AiProviderCodes.Anthropic, ct);
+        }
+
+        await using var ctx = NewContext();
+        (await ctx.AiToolProviderSettings.AsNoTracking().SingleAsync(x => x.ToolCode == AiToolCodes.Ocr, ct))
+            .ActiveProvider.Should().Be(AiProviderCodes.Kimi);
+        (await ctx.AiProviderTransitions.CountAsync(ct)).Should().Be(0);
+    }
+
+    private async Task SembrarOcrAsync(CancellationToken ct, string activo = AiProviderCodes.Anthropic)
     {
         await using var ctx = NewContext();
         ctx.AiToolProviderSettings.Add(new AiToolProviderSettingsRow
         {
             Id = Guid.CreateVersion7(),
             ToolCode = AiToolCodes.Ocr,
-            ActiveProvider = AiProviderCodes.Anthropic,
+            ActiveProvider = activo,
             AutoReturnToPrimary = true,
             ProvidersJson = """[{"enabled":true,"priorityRank":1,"providerCode":"anthropic"},{"enabled":true,"priorityRank":2,"providerCode":"openai"},{"enabled":true,"priorityRank":3,"providerCode":"kimi"}]""",
             CreatedAt = DateTimeOffset.UtcNow,

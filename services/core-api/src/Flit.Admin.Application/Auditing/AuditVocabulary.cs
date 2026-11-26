@@ -66,6 +66,9 @@ public static class AuditVocabulary
 
         // Feature #13508 (HU #13510) — failover automático de proveedor IA.
         public const string Failover = "failover_auto";
+
+        /// <summary>Regreso automático al proveedor IA principal (<c>auto_return_to_primary</c>).</summary>
+        public const string AutoReturn = "auto_return";
     }
 
     /// <summary>Categoría transversal de la operación auditada (HU #10678).</summary>
