@@ -349,6 +349,9 @@ describe("CredencialImpuestoDiagnostico · Obtener del proveedor (HU #14711)", (
     ["PROVEEDOR_TOKEN_INVALIDO", 502, "El proveedor rechazó la autorización de este ambiente; revisa la configuración de la integración"],
     ["PROVEEDOR_INTEGRACION_DESHABILITADA", 502, "El proveedor tiene deshabilitada la integración; ingresa la llave manualmente"],
     ["PROVEEDOR_SOLICITUD_INVALIDA", 502, "El proveedor rechazó los datos de la empresa; revisa el NIT o ingresa la llave manualmente"],
+    ["SIN_ADMIN", 422, "La empresa no tiene un Administrador de Compañía activo; asígnalo antes de obtener la llave"],
+    ["TENANT_NOT_FOUND", 404, "La empresa no existe o fue eliminada; recarga la página"],
+    ["ALTA_EN_CURSO", 409, "Ya se está obteniendo la llave de esta empresa; espera un momento y recarga"],
   ])("error %s (%i) muestra su mensaje en role=alert y no relee", async (code, status, mensaje) => {
     const user = userEvent.setup();
     obtenerCredencialImpuestoDiagnostico.mockRejectedValue(new ApiError(status, "detalle técnico del servidor", { code }));
