@@ -17,6 +17,11 @@ public sealed class CreateCompanyHandler
     private const int LegalNameMaxLength = 255;
     private const int TaxIdMaxLength = 20;
 
+    /// <summary>Bug #14714 — mensaje 422 al intentar dar de alta un Concesionario sin cabeza.</summary>
+    public const string ConcesionarioRequiresHeadMessage =
+        "Un cliente Concesionario se crea desde su cabeza de Concesión (Clientes hijos). "
+        + "Crea o abre la cabeza y agrégalo allí.";
+
     private readonly ICompanyWriteRepository _repository;
 
     public CreateCompanyHandler(ICompanyWriteRepository repository)
@@ -75,6 +80,13 @@ public sealed class CreateCompanyHandler
         {
             errors.Add(new CompanyValidationError(
                 "tenantType", $"El tipo de compañía debe ser {CompanyTenantTypes.DisplayList}."));
+        }
+        else if (string.Equals(tenantType, CompanyTenantTypes.Concesionario, StringComparison.Ordinal))
+        {
+            // Bug #14714: un cliente Concesionario solo existe como hijo de una cabeza Concesión.
+            // Creado por el alta general quedaba huérfano, sin padre al que asociarlo. Se da de alta
+            // desde la cabeza (POST /companies/{head}/children, que fija ParentTenantId).
+            errors.Add(new CompanyValidationError("tenantType", ConcesionarioRequiresHeadMessage));
         }
 
         // Unicidad del NIT: identifica a la empresa ante el Estado, así que dos tenants con el mismo NIT

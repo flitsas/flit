@@ -5,7 +5,7 @@
 // Uso de ejemplo:
 //   render(<CreateCompanyDialog open onClose={fn} onCreate={fn} onCreated={fn} />);
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CreateCompanyDialog } from "../CreateCompanyDialog";
 import { ApiValidationError } from "@/lib/api/types";
@@ -31,6 +31,14 @@ describe("CreateCompanyDialog (#10118)", () => {
     expect(onCreate).not.toHaveBeenCalled();
   });
 
+  it("no ofrece Concesionario en el alta general: solo existe como hijo de una cabeza (Bug #14714)", () => {
+    render(<CreateCompanyDialog open onClose={vi.fn()} onCreate={vi.fn()} onCreated={vi.fn()} />);
+
+    const select = screen.getByLabelText(/tipo de compañía/i);
+    expect(within(select).queryByRole("option", { name: /cliente concesión/i })).not.toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: /radicadora/i })).toBeInTheDocument();
+  });
+
   it("envía el payload correcto y notifica onCreated en éxito", async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn().mockResolvedValue(createdCompany);
@@ -40,14 +48,14 @@ describe("CreateCompanyDialog (#10118)", () => {
 
     await user.type(screen.getByLabelText(/razón social/i), "Renting Andino S.A.S.");
     await user.type(screen.getByLabelText(/^nit$/i), "900123456-1");
-    await user.selectOptions(screen.getByLabelText(/tipo de compañía/i), "CONCESIONARIO");
+    await user.selectOptions(screen.getByLabelText(/tipo de compañía/i), "FLIT");
     await user.click(screen.getByRole("button", { name: /crear compañía/i }));
 
     await waitFor(() =>
       expect(onCreate).toHaveBeenCalledWith({
         razonSocial: "Renting Andino S.A.S.",
         nit: "900123456-1",
-        tenantType: "CONCESIONARIO",
+        tenantType: "FLIT",
         estadoActivo: true,
       }),
     );

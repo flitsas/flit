@@ -20,6 +20,9 @@ public abstract class PostgresTestBase(PostgresDatabaseFixture fixture) : IAsync
     /// </summary>
     protected FlitDbContext NewContext() => Fixture.CreateDbContext();
 
+    /// <summary>Contexto con reintento automático, como el de producto (Bug #14714).</summary>
+    protected FlitDbContext NewRetryingContext() => Fixture.CreateRetryingDbContext();
+
     public virtual async ValueTask InitializeAsync()
     {
         if (!PostgresAvailability.IsAvailable)
