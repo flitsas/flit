@@ -28,7 +28,7 @@ internal sealed partial class PdfSharpDocumentInspector(ILogger<PdfSharpDocument
             var isEncrypted = document.SecuritySettings.DocumentSecurityLevel != PdfDocumentSecurityLevel.None;
             return new PdfInspectionResult(IsParseable: true, IsEncrypted: isEncrypted, PageCount: document.PageCount);
         }
-        catch (Exception ex) when (ex is PdfReaderException or InvalidOperationException or IOException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (PdfModifyNormalizer.IsRecoverablePdfException(ex))
         {
             LogInspectFailed(logger, ex.Message);
             return new PdfInspectionResult(IsParseable: false, IsEncrypted: false, PageCount: 0);

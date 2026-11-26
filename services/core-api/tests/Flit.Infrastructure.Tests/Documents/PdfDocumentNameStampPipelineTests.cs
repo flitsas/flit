@@ -3,6 +3,7 @@ using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using FluentAssertions;
+using ICSharpCode.SharpZipLib;
 using Microsoft.Extensions.Logging.Abstractions;
 using PdfSharpCore.Pdf.IO;
 using QuestPDF.Fluent;
@@ -220,6 +221,77 @@ public sealed class PdfDocumentNameStampPipelineTests
         act.Should().NotThrow();
         Encoding.UTF8.GetString(merged!.AsSpan(0, 4)).Should().Be("%PDF");
         PageCount(merged!).Should().Be(2);
+    }
+
+    [Fact]
+    public void IsRecoverablePdfException_WhenSharpZipUnexpectedEof_ReturnsTrue()
+    {
+        // FT2-0000781 — PdfSharp descomprime con SharpZipLib; ese fallo no es PdfReaderException.
+        var ex = new SharpZipBaseException("Unexpected EOF");
+        PdfModifyNormalizer.IsRecoverablePdfException(ex).Should().BeTrue();
+        PdfDocumentNameStampPipeline.IsStampFailure(ex).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsRecoverablePdfException_WhenSharpZipIsInnerException_ReturnsTrue()
+    {
+        // Contenedor fuera de la lista tipada: solo el InnerException SharpZip debe activar el match.
+        var wrapped = new KeyNotFoundException("open failed", new SharpZipBaseException("Unexpected EOF"));
+        PdfModifyNormalizer.IsRecoverablePdfException(wrapped).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Apply_WhenSharpZipUnexpectedEof_UsesFallbackWithoutThrowing()
+    {
+        var original = MinimalPdf();
+        var pipeline = new PdfDocumentNameStampPipeline(
+            NullLogger.Instance,
+            stamp: (_, _, _) => throw new SharpZipBaseException("Unexpected EOF"),
+            normalizeN1: _ => null,
+            normalizeN2: _ => null);
+
+        byte[]? result = null;
+        var act = () => result = pipeline.Apply(original, "Contrato leasing", FlitDocumentTheme.DocNameBottomCm);
+
+        act.Should().NotThrow();
+        result.Should().NotBeNull();
+        PdfModifyNormalizer.CanOpenForImport(result!).Should().BeTrue();
+        Encoding.UTF8.GetString(result!.AsSpan(0, 4)).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void Compose_WhenPartThrowsSharpZip_StillProducesExpediente()
+    {
+        // Replica FT2-0000781: Unexpected EOF al estampar no debe tumbar el consolidado.
+        var good = MinimalPdf();
+        var hostile = MinimalPdf();
+        var pipeline = new PdfDocumentNameStampPipeline(
+            NullLogger.Instance,
+            stamp: (bytes, name, bottom) =>
+            {
+                if (name.Contains("HOSTIL", StringComparison.Ordinal))
+                    throw new SharpZipBaseException("Unexpected EOF");
+                return FlitPdfStamper.ApplyDocumentName(bytes, name, bottom);
+            },
+            normalizeN1: _ => null,
+            normalizeN2: _ => null);
+        var merger = new PdfExpedienteConsolidadoMerger(pipeline);
+
+        var request = new MergeRequest(
+            Parts:
+            [
+                new MergePart(good, "SOAT"),
+                new MergePart(hostile, "HOSTIL Contrato leasing"),
+            ],
+            Cover: null,
+            EstadoTramite: "entregado");
+
+        byte[]? composed = null;
+        var act = () => composed = merger.Compose(request);
+
+        act.Should().NotThrow();
+        Encoding.UTF8.GetString(composed!.AsSpan(0, 4)).Should().Be("%PDF");
+        PageCount(composed!).Should().Be(2);
     }
 
     [Fact]
