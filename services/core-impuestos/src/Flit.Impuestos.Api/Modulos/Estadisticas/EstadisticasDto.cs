@@ -10,7 +10,8 @@ public sealed record ContadoresDashboardDto(int Total, int Individuales, int Mas
 
 /// <summary><c>Dashboard.resultados</c>: placas por resultado; las pendientes se separan por modo (webhook o consulta, F4a-CF2).</summary>
 public sealed record ResultadosDashboardDto(
-    int Exitosas, int ConError, int PendientesWebhook, int PendientesConsulta, int DatosIncompletos, int DepartamentoNoHabilitado, int Inciertas, int SinResultado);
+    int Exitosas, int ConError, int PendientesWebhook, int PendientesConsulta, int DatosIncompletos, int DepartamentoNoHabilitado, int Inciertas, int SinResultado,
+    int NoAplica);
 
 /// <summary><c>Dashboard.deuda</c>: placas exitosas con deuda y al día (paz y salvo).</summary>
 public sealed record DeudaDashboardDto(int PlacasConDeuda, int PlacasAlDia);

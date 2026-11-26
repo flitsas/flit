@@ -41,13 +41,12 @@ public sealed partial class CrearLiquidacionIndividual(
         Placa.TryNormalizar(entrada, out var placa) && placa.Length >= LargoMinimoPlaca ? placa : throw ErroresLiquidaciones.Placa();
 
     /// <summary>
-    /// Crea la individual. Con <paramref name="relanzadoDesde"/> es el relanzamiento de ese ítem (<see cref="RelanzarItem"/>): el ítem
-    /// nuevo lleva <c>relanzado_desde</c> y <c>posible_duplicado=true</c>, y la transacción toma el ítem original con
-    /// <c>FOR UPDATE</c> (<see cref="RelanzarItem.BloquearOriginalAsync"/>): dos relanzamientos del mismo ítem quedan en serie. <paramref name="actorNombre"/> es el nombre de quien actúa (<see cref="Plataforma.INombreActor"/>) en el
-    /// momento de crear (<see cref="RegistrarNombreCreador"/>).
+    /// Crea la individual. <paramref name="actorNombre"/> es el nombre de quien actúa (<see cref="Plataforma.INombreActor"/>) en el
+    /// momento de crear (<see cref="RegistrarNombreCreador"/>). Desde la 1.3.0 relanzar no crea liquidaciones: abre un nuevo intento del
+    /// mismo ítem (<see cref="RelanzamientoItem"/>).
     /// </summary>
     public async Task<LiquidacionConItemsDto> CrearAsync(
-        Guid empresa, string? placaEntrada, Guid actor, ReferenciaDto empresaRef, CancellationToken ct, Guid? relanzadoDesde = null, string? actorNombre = null)
+        Guid empresa, string? placaEntrada, Guid actor, ReferenciaDto empresaRef, CancellationToken ct, string? actorNombre = null)
     {
         var placa = NormalizarPlaca(placaEntrada);
         Guid loteId;
@@ -63,14 +62,6 @@ public sealed partial class CrearLiquidacionIndividual(
             {
                 db.ChangeTracker.Clear();
                 await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-                if (relanzadoDesde is { } original)
-                {
-                    // MEN-7: los relanzamientos del mismo ítem van en serie. Orden de bloqueos (DespachadorCredito): primero el candado
-                    // del crédito (esta transacción libera al final) y luego el ítem original.
-                    await DespachadorCredito.TomarCandadoAsync(db, ct).ConfigureAwait(false);
-                    await RelanzarItem.BloquearOriginalAsync(db, empresa, original, ct).ConfigureAwait(false);
-                }
-
                 var ahora = reloj.GetUtcNow();
                 var lote = new Liquidacion
                 {
@@ -92,8 +83,6 @@ public sealed partial class CrearLiquidacionIndividual(
                     Placa = placa,
                     Estado = EstadoItem.Pendiente,
                     ActualizadoEn = ahora,
-                    RelanzadoDesde = relanzadoDesde,
-                    PosibleDuplicado = relanzadoDesde is not null,
                 });
                 await despachador.LiberarAsync(empresa, ct).ConfigureAwait(false);
                 await tx.CommitAsync(ct).ConfigureAwait(false);
@@ -106,7 +95,7 @@ public sealed partial class CrearLiquidacionIndividual(
     }
 
     /// <summary>
-    /// Aprovisionamiento que admite crear (individual, masiva o relanzamiento): <c>SUSPENDIDO</c> ⇒ 409 <c>PRODUCTO_SUSPENDIDO</c>; otro que
+    /// Aprovisionamiento que admite crear (individual, masiva) o relanzar: <c>SUSPENDIDO</c> ⇒ 409 <c>PRODUCTO_SUSPENDIDO</c>; otro que
     /// no sea <c>LISTO</c> o <c>LISTO_SIN_WEBHOOK</c> (o sin fila) ⇒ 409 <c>APROVISIONAMIENTO_NO_LISTO</c>.
     /// </summary>
     internal static async Task ExigirAprovisionamientoAsync(ImpuestosDb db, Guid empresa, CancellationToken ct)

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Impuestos
-  version: "1.2.3"
+  version: "1.3.0"
   description: >
     Endpoints REST del producto Impuestos (core-impuestos) bajo /api/v1/impuestos (HU #14694, ADR-0093; plan
     docs/impuestos/plan-implementacion.md §5.1; deltas de la 1.1.0 en §5.7 y de la 1.2.0 en §5.8). La app web llega por el gateway con el
@@ -41,6 +41,15 @@ info:
     Delta 1.2.3 (aditivo): ResumenLiquidacion.placaNoInscrita (boolean nullable; también en Liquidacion,
     LiquidacionConItems y Dashboard.ultimosLotes, que lo extienden o lo usan). Solo en INDIVIDUAL: true si su único ítem
     quedó en ERROR `portal_rejected` de placa no inscrita, false en otro caso; null en MASIVA, como estadoItem.
+
+
+    Deltas 1.3.0 (relanzar como nuevo intento y servicio público, decisión del usuario 2026-11-26): POST
+    .../items/{itemId}/relanzar ya no crea otra liquidación: abre un nuevo intento del MISMO ítem y responde 200 con la
+    misma LiquidacionConItems (sin 201 ni 422; `confirmarPosibleDuplicado` se acepta y se ignora; CONFIRMACION_REQUERIDA
+    queda retirado y su literal se conserva solo para clientes viejos; posibleDuplicado ya no se marca). ItemDetalle suma
+    numeroIntento e intentos[] (esquema IntentoItem, el más reciente primero). EstadoItem suma NO_APLICA (vehículo que el
+    RUNT reporta de servicio público: final, sin llamar al proveedor, ni error ni exitosa); Contadores y
+    Dashboard.resultados suman noAplica. Nuevo literal de NO_RELANZABLE.
 
 
     Toda ruta de negocio pasa por el guard de suscripción (producto `impuestos` encendido para la compañía y sus
@@ -90,7 +99,7 @@ x-flit-literales:
     RECIBO_NO_ENCONTRADO: El recibo no existe.
     RECIBO_NO_DISPONIBLE: El recibo no está disponible.
     YA_TERMINADA: "La liquidación ya terminó: no se puede cerrar."
-    NO_RELANZABLE: Solo se relanzan placas en «Incierto — requiere decisión» o con error reintentable.
+    NO_RELANZABLE: Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.
     CONFIRMACION_REQUERIDA: Confirma que aceptas un posible duplicado en el proveedor.
     RANGO_INVALIDO: El rango de fechas no es válido.
     FILTRO_INVALIDO: Un filtro no es válido.
@@ -473,26 +482,29 @@ paths:
     post:
       tags: [Liquidaciones]
       operationId: relanzarItemLiquidacion
-      summary: Relanzar una placa como liquidación individual nueva
+      summary: Relanzar una placa como nuevo intento del mismo ítem
       description: >
-        Permiso impuestos.liquidaciones.crear. Solo desde INCIERTO_REQUIERE_DECISION o ERROR con clase REINTENTABLE. El
-        ítem original no cambia; el nuevo lleva relanzadoDesdeItemId (y relanzadoDesde) y posibleDuplicado=true. Exige el
-        aprovisionamiento como la individual. El Super Admin relanza en la compañía de `empresa` (1.1.0).
+        Permiso impuestos.liquidaciones.crear (1.3.0). No crea otra liquidación: abre un nuevo intento del MISMO ítem. Solo
+        desde INCIERTO_REQUIERE_DECISION, DATOS_INCOMPLETOS, ERROR con clase REINTENTABLE o ERROR `portal_rejected` de
+        placa no inscrita, y con la liquidación sin CERRADO_MANUALMENTE; si no (por ejemplo, el ítem ya está en curso por un
+        relanzamiento anterior o es NO_APLICA), 409 NO_RELANZABLE. El intento que se cierra queda en ItemDetalle.intentos;
+        el ítem sube numeroIntento, pierde el error, el resultado, el total y las vigencias del intento anterior y vuelve a
+        la cola (PENDIENTE y luego CONSULTANDO_RUNT); la liquidación vuelve a EN_PROCESO hasta que termine. posibleDuplicado
+        no se marca. Exige el aprovisionamiento como la individual. El Super Admin relanza en la compañía de `empresa`
+        (1.1.0).
       parameters:
         - $ref: "#/components/parameters/Empresa"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              additionalProperties: false
-              required: [confirmarPosibleDuplicado]
               properties:
-                confirmarPosibleDuplicado: { type: boolean, description: "Debe ser true." }
+                confirmarPosibleDuplicado: { type: boolean, description: "Retirado en la 1.3.0: se acepta y se ignora." }
       responses:
-        "201":
-          description: Liquidación individual nueva.
+        "200":
+          description: La misma liquidación, con el ítem en su nuevo intento.
           content: { application/json: { schema: { $ref: "#/components/schemas/LiquidacionConItems" } } }
         "400": { $ref: "#/components/responses/Empresa400" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -500,9 +512,6 @@ paths:
         "404": { $ref: "#/components/responses/NoEncontrado" }
         "409":
           description: NO_RELANZABLE, APROVISIONAMIENTO_NO_LISTO o PRODUCTO_SUSPENDIDO.
-          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
-        "422":
-          description: CONFIRMACION_REQUERIDA.
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
 
   /api/v1/impuestos/liquidaciones/{id}/items/{itemId}/recibos/{reciboId}:
@@ -1311,9 +1320,13 @@ components:
         - EXITOSO
         - ERROR
         - SIN_RESULTADO_LOTE_CERRADO
+        - NO_APLICA
       description: >
         Plan §3.2. Junto a DATOS_INCOMPLETOS va la etiqueta de `campoFaltante`; junto a DEPARTAMENTO_NO_HABILITADO, el
-        nombre del departamento; junto a INCIERTO, x-flit-literales.pantalla.detalleIncierto.
+        nombre del departamento; junto a INCIERTO, x-flit-literales.pantalla.detalleIncierto. NO_APLICA (1.3.0): el RUNT
+        reporta el vehículo como de servicio público; es final, no se relanza, no cuenta como error ni como exitosa, y lleva
+        errorCodigo `servicio_publico` con errorMensaje «El RUNT reporta el vehículo como de servicio público. Los vehículos
+        de servicio público no pagan impuesto vehicular.»
       x-flit-etiquetas:
         PENDIENTE: Pendiente
         CONSULTANDO_RUNT: Consultando RUNT
@@ -1327,6 +1340,7 @@ components:
         EXITOSO: Exitosa
         ERROR: Con error
         SIN_RESULTADO_LOTE_CERRADO: Sin resultado (lote cerrado)
+        NO_APLICA: No aplica (servicio público)
 
     ResultadoStatus:
       type: string
@@ -1443,7 +1457,7 @@ components:
 
     Contadores:
       type: object
-      required: [exitosas, conDeuda, pazYSalvo, error, datosIncompletos, departamentoNoHabilitado, incierto, sinResultado, pendientes]
+      required: [exitosas, conDeuda, pazYSalvo, error, datosIncompletos, departamentoNoHabilitado, incierto, sinResultado, pendientes, noAplica]
       properties:
         exitosas: { type: integer }
         conDeuda: { type: integer }
@@ -1454,6 +1468,7 @@ components:
         incierto: { type: integer }
         sinResultado: { type: integer }
         pendientes: { type: integer }
+        noAplica: { type: integer, description: "Ítems NO_APLICA (servicio público, 1.3.0)." }
       x-flit-etiquetas:
         exitosas: Exitosas
         conDeuda: Con deuda
@@ -1464,6 +1479,7 @@ components:
         incierto: Inciertas
         sinResultado: Sin resultado
         pendientes: Pendientes
+        noAplica: No aplica
 
     ResumenLiquidacion:
       type: object
@@ -1568,7 +1584,7 @@ components:
         totalAPagar: { type: number, nullable: true, description: "null = «Sin dato» (nunca 0)." }
         resultadoStatus: { $ref: "#/components/schemas/ResultadoStatus" }
         parcial: { type: boolean, description: "true si la consulta terminó partial." }
-        posibleDuplicado: { type: boolean }
+        posibleDuplicado: { type: boolean, description: "Solo en ítems relanzados antes de la 1.3.0; desde entonces siempre false." }
         resultadoTardio: { type: boolean }
         relanzadoDesde: { type: string, format: uuid, nullable: true, description: "Id del ítem original. Desde la 1.1.0 se prefiere relanzadoDesdeItemId (mismo valor)." }
         relanzadoDesdeItemId: { type: string, format: uuid, nullable: true, description: "Id del ítem original del que se relanzó (1.1.0)." }
@@ -1644,7 +1660,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/Item"
         - type: object
-          required: [empresa, creadaPor, creadaEn, resultado, periodos, recibos]
+          required: [empresa, creadaPor, creadaEn, resultado, periodos, recibos, numeroIntento, intentos]
           properties:
             empresa: { $ref: "#/components/schemas/Referencia" }
             creadaPor: { $ref: "#/components/schemas/Referencia" }
@@ -1658,6 +1674,26 @@ components:
                 frente a portal), warnings, file_errors y error. null sin resultado.
             periodos: { type: array, items: { $ref: "#/components/schemas/Periodo" } }
             recibos: { type: array, items: { $ref: "#/components/schemas/Recibo" } }
+            numeroIntento: { type: integer, minimum: 1, description: "Intento en curso (1.3.0): 1 al crear, +1 por relanzamiento." }
+            intentos:
+              type: array
+              description: "Intentos cerrados al relanzar (1.3.0), el más reciente primero; vacío si nunca se relanzó."
+              items: { $ref: "#/components/schemas/IntentoItem" }
+
+    IntentoItem:
+      type: object
+      description: >
+        Un intento cerrado de un ítem (1.3.0): la foto del ítem en el momento de relanzarlo. Sin datos del propietario ni el
+        resultado del proveedor.
+      required: [numero, estado, errorCodigo, errorMensaje, totalAPagar, registradoEn, relanzadoPor]
+      properties:
+        numero: { type: integer, minimum: 1 }
+        estado: { $ref: "#/components/schemas/EstadoItem" }
+        errorCodigo: { type: string, nullable: true }
+        errorMensaje: { type: string, nullable: true }
+        totalAPagar: { type: number, nullable: true, description: "null = «Sin dato» (nunca 0)." }
+        registradoEn: { type: string, format: date-time, description: "Cuándo se cerró el intento (el relanzamiento)." }
+        relanzadoPor: { type: string, nullable: true, description: "Nombre de quien relanzó, tal como venía en su token." }
 
     AnalisisCarga:
       type: object
@@ -1702,7 +1738,7 @@ components:
             lotesEnProceso: Lotes en proceso
         resultados:
           type: object
-          required: [exitosas, conError, pendientesWebhook, pendientesConsulta, datosIncompletos, departamentoNoHabilitado, inciertas, sinResultado]
+          required: [exitosas, conError, pendientesWebhook, pendientesConsulta, datosIncompletos, departamentoNoHabilitado, inciertas, sinResultado, noAplica]
           properties:
             exitosas: { type: integer }
             conError: { type: integer }
@@ -1712,6 +1748,7 @@ components:
             departamentoNoHabilitado: { type: integer }
             inciertas: { type: integer }
             sinResultado: { type: integer }
+            noAplica: { type: integer, description: "Placas NO_APLICA (servicio público, 1.3.0)." }
           x-flit-etiquetas:
             exitosas: Exitosas
             conError: Con error
@@ -1721,6 +1758,7 @@ components:
             departamentoNoHabilitado: Departamento no habilitado
             inciertas: Inciertas
             sinResultado: Sin resultado
+            noAplica: No aplica
         deuda:
           type: object
           required: [placasConDeuda, placasAlDia]

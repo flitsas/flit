@@ -538,6 +538,58 @@ public sealed class ConsumidorLiquidacionTests
     }
 
     [Fact]
+    public async Task Servicio_publico_queda_NO_APLICA_sin_llamar_al_proveedor_y_el_lote_puede_terminar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var proveedor = EntornoEjecucion.ProveedorQueAcepta();
+        var runt = new RuntDePrueba
+        {
+            Responder = placa => new ConsultaRunt.Encontrado(RuntDePrueba.Antioquia() with
+            {
+                TipoServicio = placa switch { "PUB001" => "Público", "PUB002" => " PUBLICO ", _ => "Particular" },
+            }),
+        };
+        await using var api = await EntornoEjecucion.ConApiAsync(proveedor, runt);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoEjecucion.SembrarEmpresaAsync(api, empresa, ct);
+        var (lote, items) = await EntornoEjecucion.SembrarLoteAsync(api, empresa, ["PUB001", "PUB002"], ct);
+        var (_, particular) = await EntornoEjecucion.SembrarLoteAsync(api, empresa, ["PAR003"], ct);
+        await EntornoEjecucion.DespacharAsync(api, empresa, ct);
+
+        await EntornoEjecucion.ProcesarColaAsync(api, ct);
+
+        EntornoEjecucion.Envios(proveedor).Should().Be(1, "solo la placa particular llega al proveedor");
+        foreach (var id in items)
+        {
+            var item = await EntornoEjecucion.ItemAsync(api, empresa, id, ct);
+            item.Estado.Should().Be(EstadoItem.NoAplica);
+            item.ErrorCodigo.Should().Be("servicio_publico");
+            item.ErrorMensaje.Should().Be("El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular.");
+            item.ErrorClase.Should().BeNull("NO_APLICA no es un error");
+            item.TokenHash.Should().BeNull("no hubo registro previo al envío");
+            item.EnviadoEn.Should().BeNull();
+        }
+
+        (await EntornoEjecucion.ItemAsync(api, empresa, particular[0], ct)).Estado.Should().Be(EstadoItem.Enviado);
+        var cabecera = await EntornoEjecucion.LoteAsync(api, empresa, lote, ct);
+        cabecera.CNoAplica.Should().Be(2);
+        cabecera.CError.Should().Be(0, "no cuenta como error");
+        cabecera.CExitosas.Should().Be(0, "ni como exitosa");
+        cabecera.CPendientes.Should().Be(0);
+        cabecera.Estado.Should().Be(EstadoLote.CompletadoConNovedades, "NO_APLICA es final: el lote se cierra");
+        cabecera.TerminadaEn.Should().NotBeNull();
+
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: [Permisos.LiquidacionesVer]));
+        using var detalle = JsonDocument.Parse(await cliente.GetStringAsync($"{Flit.Impuestos.Api.Program.Prefijo}/liquidaciones/{lote}", ct));
+        detalle.RootElement.GetProperty("contadores").GetProperty("noAplica").GetInt32().Should().Be(2);
+        detalle.RootElement.GetProperty("contadores").GetProperty("error").GetInt32().Should().Be(0);
+        using var lista = JsonDocument.Parse(await cliente.GetStringAsync($"{Flit.Impuestos.Api.Program.Prefijo}/liquidaciones/{lote}/items", ct));
+        lista.RootElement.GetProperty("items")[0].GetProperty("estado").GetString().Should().Be("NO_APLICA");
+        lista.RootElement.GetProperty("items")[0].GetProperty("errorCodigo").GetString().Should().Be("servicio_publico");
+    }
+
+    [Fact]
     public async Task Un_sobre_de_otra_empresa_no_toca_el_item()
     {
         var ct = TestContext.Current.CancellationToken;

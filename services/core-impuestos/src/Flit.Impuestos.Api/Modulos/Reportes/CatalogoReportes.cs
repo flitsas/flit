@@ -97,6 +97,7 @@ internal static class CatalogoReportes
         ["EXITOSO"] = "Exitosa",
         ["ERROR"] = "Con error",
         ["SIN_RESULTADO_LOTE_CERRADO"] = "Sin resultado (lote cerrado)",
+        ["NO_APLICA"] = "No aplica (servicio público)",
     };
 
     /// <summary>x-flit-etiquetas de <c>ResultadoStatus</c>.</summary>

@@ -41,6 +41,9 @@ public enum EstadoItem
 
     /// <summary>El lote se cerró a mano sin resultado; todavía acepta un resultado tardío.</summary>
     SinResultadoLoteCerrado,
+
+    /// <summary>El impuesto vehicular no aplica: el RUNT reporta el vehículo como de servicio público. Final; no se llama al proveedor.</summary>
+    NoAplica,
 }
 
 /// <summary>Cómo cuenta un ítem en el dashboard (columna «Cuenta en el dashboard como» del plan §3.2).</summary>
@@ -53,6 +56,7 @@ public enum CategoriaDashboard
     Exitosa,
     Error,
     SinResultado,
+    NoAplica,
 }
 
 /// <summary>Propiedades de cada <see cref="EstadoItem"/> (plan §3.2).</summary>
@@ -63,10 +67,12 @@ public enum CategoriaDashboard
 /// </example>
 public static class EstadosItem
 {
-    /// <summary>Final para el cierre del lote (incluye <c>INCIERTO_REQUIERE_DECISION</c>, DA-6b).</summary>
+    /// <summary>Final para el cierre del lote (incluye <c>INCIERTO_REQUIERE_DECISION</c>, DA-6b, y <c>NO_APLICA</c>, R3).</summary>
     public static bool EsFinal(EstadoItem estado) => estado is EstadoItem.InciertoRequiereDecision or EstadoItem.DatosIncompletos
-        or EstadoItem.DepartamentoNoHabilitado or EstadoItem.Exitoso or EstadoItem.Error or EstadoItem.SinResultadoLoteCerrado;
+        or EstadoItem.DepartamentoNoHabilitado or EstadoItem.Exitoso or EstadoItem.Error or EstadoItem.SinResultadoLoteCerrado
+        or EstadoItem.NoAplica;
 
+    /// <summary>Categoría del dashboard; <c>NO_APLICA</c> cuenta aparte: ni error ni exitosa ni pendiente.</summary>
     public static CategoriaDashboard Categoria(EstadoItem estado) => estado switch
     {
         EstadoItem.Incierto or EstadoItem.InciertoRequiereDecision => CategoriaDashboard.Incierto,
@@ -75,6 +81,7 @@ public static class EstadosItem
         EstadoItem.Exitoso => CategoriaDashboard.Exitosa,
         EstadoItem.Error => CategoriaDashboard.Error,
         EstadoItem.SinResultadoLoteCerrado => CategoriaDashboard.SinResultado,
+        EstadoItem.NoAplica => CategoriaDashboard.NoAplica,
         _ => CategoriaDashboard.Pendiente,
     };
 }

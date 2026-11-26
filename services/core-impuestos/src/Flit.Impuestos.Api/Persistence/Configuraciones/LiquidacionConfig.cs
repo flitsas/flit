@@ -48,6 +48,9 @@ public sealed class Liquidacion : IEntidadDeEmpresa
 
     public int CPendientes { get; set; }
 
+    /// <summary>Ítems <c>NO_APLICA</c> (vehículo de servicio público, R3): ni error ni exitoso.</summary>
+    public int CNoAplica { get; set; }
+
     /// <summary>jsonb <c>{maxRegistros, departamentosHabilitados, concurrencia}</c> vigente al crear la liquidación.</summary>
     public string ConfigCopia { get; set; } = "{}";
 
@@ -102,7 +105,7 @@ internal sealed class LiquidacionConfig : IEntityTypeConfiguration<Liquidacion>
                  {
                      nameof(Liquidacion.CExitosas), nameof(Liquidacion.CConDeuda), nameof(Liquidacion.CPazYSalvo), nameof(Liquidacion.CError),
                      nameof(Liquidacion.CDatosIncompletos), nameof(Liquidacion.CDptoNoHabilitado), nameof(Liquidacion.CIncierto),
-                     nameof(Liquidacion.CSinResultado),
+                     nameof(Liquidacion.CSinResultado), nameof(Liquidacion.CNoAplica),
                  })
         {
             builder.Property<int>(contador).HasDefaultValue(0).ValueGeneratedNever();

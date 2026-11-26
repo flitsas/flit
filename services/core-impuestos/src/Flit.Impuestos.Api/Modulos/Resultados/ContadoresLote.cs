@@ -38,6 +38,7 @@ public static class ContadoresLote
         lote.CIncierto = Contar(items, CategoriaDashboard.Incierto);
         lote.CSinResultado = Contar(items, CategoriaDashboard.SinResultado);
         lote.CPendientes = Contar(items, CategoriaDashboard.Pendiente);
+        lote.CNoAplica = Contar(items, CategoriaDashboard.NoAplica);
 
         var anterior = lote.Estado;
         lote.Estado = CierreLote.Evaluar(anterior, items.Select(i => i.Estado).ToList());

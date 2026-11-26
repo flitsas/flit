@@ -46,6 +46,8 @@ internal static class LiquidacionesEndpoints
     {
         services.AddScoped<ConsultaLiquidaciones>();
         services.AddScoped<CrearLiquidacionIndividual>();
+        // R3: relanzar abre un nuevo intento del mismo ítem.
+        services.AddScoped<RelanzamientoItem>();
         // M12: masiva, cierre manual, terminación del lote con su aviso (correo y pantalla).
         services.AddScoped<CrearLiquidacionMasiva>();
         services.AddScoped<CerrarLiquidacion>();

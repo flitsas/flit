@@ -35,7 +35,7 @@ internal sealed record AgregadosEstadistica(
 /// <list type="bullet">
 ///   <item><c>contadores</c>: total, individuales y masivas; <c>lotesEnProceso</c> son las masivas del rango en <c>CREADO</c> o
 ///   <c>EN_PROCESO</c>.</item>
-///   <item><c>resultados</c> por la categoría del estado (plan §3.2). <c>ENVIADO</c> enviada con <c>callbackUrl</c> cuenta como
+///   <item><c>resultados</c> por la categoría del estado (plan §3.2); <c>noAplica</c> (1.3.0) son las de servicio público. <c>ENVIADO</c> enviada con <c>callbackUrl</c> cuenta como
 ///   «pendiente de webhook»; enviada sin él y las que todavía no salen (<c>PENDIENTE</c>, <c>CONSULTANDO_RUNT</c>,
 ///   <c>REINTENTO_PROGRAMADO</c>, <c>ENVIANDO</c>), como «pendiente por consulta».</item>
 ///   <item><c>deuda</c>: exitosas con <c>con_deuda</c> y con <c>paz_y_salvo</c>.</item>
@@ -136,7 +136,7 @@ internal static class CalculadoraEstadisticas
         {
             var unico = porLote.GetValueOrDefault(l.Id);
             return new ResumenLiquidacionDto(l.Id, CodigosDeEnum.Codigo(l.Tipo), CodigosDeEnum.Codigo(l.Estado), l.TotalItems,
-                new ContadoresDto(l.CExitosas, l.CConDeuda, l.CPazYSalvo, l.CError, l.CDatosIncompletos, l.CDptoNoHabilitado, l.CIncierto, l.CSinResultado, l.CPendientes),
+                ConsultaLiquidaciones.Contadores(l),
                 l.CreadaEn, ConsultaLiquidaciones.CreadorDe(l), alcance.Referencia(l.TenantId), l.NombreArchivo,
                 unico?.Placa, unico?.Id, unico is null ? null : CodigosDeEnum.Codigo(unico.Estado),
                 unico is null ? null : ConsultaLiquidaciones.PlacaNoInscrita(unico.Estado, unico.ErrorCodigo, unico.ErrorMensaje));
@@ -165,7 +165,8 @@ internal static class CalculadoraEstadisticas
             DatosIncompletos: Contar(grupos, CategoriaDashboard.DatosIncompletos),
             DepartamentoNoHabilitado: Contar(grupos, CategoriaDashboard.DepartamentoNoHabilitado),
             Inciertas: Contar(grupos, CategoriaDashboard.Incierto),
-            SinResultado: Contar(grupos, CategoriaDashboard.SinResultado));
+            SinResultado: Contar(grupos, CategoriaDashboard.SinResultado),
+            NoAplica: Contar(grupos, CategoriaDashboard.NoAplica));
 
         var serie = Enumerable.Range(0, rango.Dias).Select(n =>
         {

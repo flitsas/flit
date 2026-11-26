@@ -81,7 +81,8 @@ public sealed class EstadisticasEnSqlTests(ApiReportesFixture fixture) : IClassF
         d.Periodo.Should().Be(new PeriodoDashboardDto(rango.Desde, rango.Hasta));
         d.Contadores.Should().Be(new ContadoresDashboardDto(14, 2, 12, 1));
         d.Resultados.Should().Be(new ResultadosDashboardDto(
-            Exitosas: 5, ConError: 1, PendientesWebhook: 1, PendientesConsulta: 3, DatosIncompletos: 1, DepartamentoNoHabilitado: 1, Inciertas: 1, SinResultado: 1));
+            Exitosas: 5, ConError: 1, PendientesWebhook: 1, PendientesConsulta: 3, DatosIncompletos: 1, DepartamentoNoHabilitado: 1, Inciertas: 1, SinResultado: 1,
+            NoAplica: 0));
         d.Deuda.Should().Be(new DeudaDashboardDto(4, 1));
         d.MontoTotal.Should().Be(157.25m, "la suma no cuenta el null como 0 y no incluye lo de antes de desde");
         d.LiquidacionesSinMonto.Should().Be(1);

@@ -56,6 +56,8 @@ public sealed class ItemDetalleTests
         d.GetProperty("liquidacionId").GetGuid().Should().Be(lote);
         d.GetProperty("placa").GetString().Should().Be("LHQ479");
         d.GetProperty("estado").GetString().Should().Be("EXITOSO");
+        d.GetProperty("numeroIntento").GetInt32().Should().Be(1, "R3: un ítem que nunca se relanzó va en su primer intento");
+        d.GetProperty("intentos").GetArrayLength().Should().Be(0);
         d.GetProperty("parcial").GetBoolean().Should().BeTrue();
         d.GetProperty("consultaStatus").GetString().Should().Be("partial");
         d.GetProperty("resultadoStatus").GetString().Should().Be("con_deuda");

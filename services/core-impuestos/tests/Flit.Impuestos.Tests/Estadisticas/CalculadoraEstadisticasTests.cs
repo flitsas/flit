@@ -114,6 +114,26 @@ public sealed class CalculadoraEstadisticasTests(ApiReportesFixture fixture) : I
     }
 
     [Fact]
+    public async Task NO_APLICA_cuenta_aparte_ni_como_error_ni_como_exitosa_ni_como_pendiente()
+    {
+        var ct = Preparar();
+        var empresa = await EmpresaAsync(ct);
+        await E.SembrarAsync(Api, empresa, TipoLiquidacion.Masiva, Guid.NewGuid(), ct, null,
+            new ItemSemilla("NAP001", EstadoItem.NoAplica, ErrorCodigo: "servicio_publico"),
+            new ItemSemilla("NAP002", EstadoItem.NoAplica, ErrorCodigo: "servicio_publico"),
+            new ItemSemilla("NAP003", EstadoItem.Error, ErrorCodigo: "portal_unavailable"),
+            new ItemSemilla("NAP004", ResultadoStatus: "paz_y_salvo", Total: 0m));
+
+        var r = (await DashboardAsync(empresa, string.Empty, ct)).GetProperty("resultados");
+
+        r.GetProperty("noAplica").GetInt32().Should().Be(2);
+        r.GetProperty("conError").GetInt32().Should().Be(1, "NO_APLICA no es un error");
+        r.GetProperty("exitosas").GetInt32().Should().Be(1);
+        r.GetProperty("pendientesConsulta").GetInt32().Should().Be(0, "NO_APLICA es final");
+        r.GetProperty("pendientesWebhook").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
     public async Task Los_contadores_la_serie_y_los_ultimos_lotes_son_solo_de_la_propia_compania()
     {
         var ct = Preparar();

@@ -41,6 +41,7 @@ public sealed partial class LiteralesErroresTransversalesTests(ApiReportesFixtur
     [InlineData("ESCRITURA_ENTRE_EMPRESAS", EscrituraEntreEmpresas)]
     [InlineData("SIN_USUARIO", SinUsuario)]
     [InlineData("VALOR_INVALIDO", ValorInvalido)]
+    [InlineData("NO_RELANZABLE", RelanzarItemTests.LiteralNoRelanzable)]
     public void El_contrato_declara_el_literal_de_cada_codigo(string codigo, string literal)
     {
         var errores = ErroresDelContrato();
@@ -56,6 +57,18 @@ public sealed partial class LiteralesErroresTransversalesTests(ApiReportesFixtur
         var version = lineas.Single(l => l.StartsWith("  version: ", StringComparison.Ordinal))["  version: ".Length..].Trim('"');
 
         Version.Parse(version).Should().BeGreaterThanOrEqualTo(new Version(1, 2, 2), "los literales transversales llegaron en la 1.2.2");
+    }
+
+    [Fact]
+    public void El_contrato_esta_en_la_1_3_0_con_relanzar_como_nuevo_intento_y_NO_APLICA()
+    {
+        var texto = File.ReadAllText(RutaContrato());
+        var lineas = File.ReadAllLines(RutaContrato());
+        var version = lineas.Single(l => l.StartsWith("  version: ", StringComparison.Ordinal))["  version: ".Length..].Trim('"');
+
+        Version.Parse(version).Should().Be(new Version(1, 3, 0));
+        texto.Should().Contain("        - NO_APLICA", "EstadoItem suma NO_APLICA");
+        texto.Should().Contain("    IntentoItem:", "esquema del intento cerrado de un ítem");
     }
 
     [Fact]

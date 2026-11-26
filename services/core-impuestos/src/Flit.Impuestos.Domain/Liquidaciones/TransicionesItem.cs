@@ -15,6 +15,9 @@ public abstract record EventoItem
     /// <summary>El departamento del vehículo no está en el contrato de la compañía.</summary>
     public sealed record DepartamentoFueraDeContrato : EventoItem;
 
+    /// <summary>El RUNT reporta el vehículo como de servicio público (<see cref="ServicioVehiculo.EsPublico"/>): no paga impuesto.</summary>
+    public sealed record ServicioPublico : EventoItem;
+
     /// <summary>El RUNT falló de forma transitoria.</summary>
     public sealed record RuntTransitorio : EventoItem;
 
@@ -45,7 +48,7 @@ public abstract record EventoItem
     /// <summary>Venció el plazo del incierto; <paramref name="TokenHallado"/> si el token apareció en el listado del API.</summary>
     public sealed record PlazoInciertoVencido(bool TokenHallado) : EventoItem;
 
-    /// <summary>Un usuario relanza el ítem (con aviso de posible duplicado).</summary>
+    /// <summary>Un usuario relanza el ítem: abre un nuevo intento del mismo ítem (R3).</summary>
     public sealed record Relanzar : EventoItem;
 
     /// <summary>Se cerró el lote a mano.</summary>
@@ -66,7 +69,8 @@ public sealed record SituacionItem(
 
 /// <summary>
 /// Resultado de una transición del ítem: la situación nueva y lo que quien la aplica debe hacer o guardar (código y campo del
-/// error, marcas de parcial y tardío, adoptar el <c>consulta.id</c>, token nuevo, relanzamiento, aviso al aprovisionamiento).
+/// error, marcas de parcial y tardío, adoptar el <c>consulta.id</c>, token nuevo, nuevo intento del relanzamiento, aviso al
+/// aprovisionamiento).
 /// </summary>
 public sealed record ResultadoItem(
     SituacionItem Nueva,
@@ -76,7 +80,7 @@ public sealed record ResultadoItem(
     bool ResultadoTardio = false,
     bool AdoptaConsulta = false,
     bool TokenNuevo = false,
-    bool CrearRelanzamiento = false,
+    bool NuevoIntento = false,
     bool AprovisionamientoRequiereCredenciales = false);
 
 /// <summary>
@@ -99,6 +103,13 @@ public static class TransicionesItem
 
     /// <summary>El RUNT no encontró la placa.</summary>
     public const string CodigoRuntPlacaNoEncontrada = "RUNT_PLACA_NO_ENCONTRADA";
+
+    /// <summary>Código del ítem <c>NO_APLICA</c> por vehículo de servicio público.</summary>
+    public const string CodigoServicioPublico = "servicio_publico";
+
+    /// <summary>Mensaje del ítem <c>NO_APLICA</c> por vehículo de servicio público (literal del usuario, 2026-11-26).</summary>
+    public const string MensajeServicioPublico =
+        "El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular.";
 
     /// <summary>El API respondió 401 a la api_key de la compañía al enviar.</summary>
     public const string CodigoCredencialRechazada = "CREDENCIAL_RECHAZADA";
@@ -129,6 +140,7 @@ public static class TransicionesItem
             (EstadoItem.ConsultandoRunt, EventoItem.RuntDatoFaltante f) => Hacia(actual, EstadoItem.DatosIncompletos) with { CampoFaltante = f.Campo },
             (EstadoItem.ConsultandoRunt, EventoItem.DepartamentoFueraDeContrato) => Hacia(actual, EstadoItem.DepartamentoNoHabilitado),
             (EstadoItem.ConsultandoRunt, EventoItem.RuntTransitorio) => RuntTransitorio(actual),
+            (EstadoItem.ConsultandoRunt, EventoItem.ServicioPublico) => Hacia(actual, EstadoItem.NoAplica) with { ErrorCodigo = CodigoServicioPublico },
             (EstadoItem.ConsultandoRunt, EventoItem.RuntPlacaNoEncontrada) => ErrorCon(actual, CodigoRuntPlacaNoEncontrada, ClaseError.CorregirDatos),
             (EstadoItem.ReintentoProgramado, EventoItem.VenceReintento) => Hacia(actual, EstadoItem.Pendiente),
 
@@ -181,11 +193,12 @@ public static class TransicionesItem
     /// <summary>
     /// Se relanza desde <c>INCIERTO_REQUIERE_DECISION</c>, <c>DATOS_INCOMPLETOS</c> (faltó un dato del RUNT), <c>ERROR</c>
     /// <see cref="ClaseError.Reintentable"/> o <c>ERROR</c> de placa no inscrita (<see cref="ClasificacionErrores.EsPlacaNoInscrita"/>,
-    /// clase <see cref="ClaseError.Depende"/>). El ítem no cambia; si no, <see cref="CodigoNoRelanzable"/>.
+    /// clase <see cref="ClaseError.Depende"/>). El nuevo intento (R3) nace como un ítem que entra a la cola: <c>PENDIENTE</c>, sin
+    /// reintentos ni error. Desde cualquier otro estado (en vuelo, exitoso, <c>NO_APLICA</c>…), <see cref="CodigoNoRelanzable"/>.
     /// </summary>
     private static ResultadoItem Relanzar(SituacionItem actual) =>
         EsRelanzable(actual)
-            ? new ResultadoItem(actual, CrearRelanzamiento: true)
+            ? new ResultadoItem(new SituacionItem(EstadoItem.Pendiente), NuevoIntento: true)
             : throw TransicionInvalida.Con(CodigoNoRelanzable, "Este ítem no se puede relanzar.");
 
     private static bool EsRelanzable(SituacionItem actual) => actual.Estado switch

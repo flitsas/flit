@@ -86,6 +86,9 @@ public sealed class LiquidacionItem : IEntidadDeEmpresa
 
     public bool PosibleDuplicado { get; set; }
 
+    /// <summary>Intento en curso del ítem (R3): 1 al crear; cada relanzamiento cierra el actual en <c>liquidacion_item_intentos</c> y suma 1.</summary>
+    public int NumeroIntento { get; set; } = 1;
+
     public DateTimeOffset ActualizadoEn { get; set; }
 
     /// <summary>Token de concurrencia (columna de sistema <c>xmin</c>).</summary>
@@ -141,7 +144,10 @@ internal sealed class LiquidacionItemConfig : IEntityTypeConfiguration<Liquidaci
         builder.Property(x => x.ResultadoCifrado).HasComment("@pii:high Cuerpo completo del resultado, cifrado (impuestos.resultado.v1).");
         builder.Property(x => x.Warnings).HasColumnType("text[]").HasDefaultValueSql("'{}'").ValueGeneratedNever();
         builder.Property(x => x.ResultadoTardio).HasDefaultValue(false).ValueGeneratedNever();
-        builder.Property(x => x.PosibleDuplicado).HasDefaultValue(false).ValueGeneratedNever();
+        builder.Property(x => x.PosibleDuplicado).HasDefaultValue(false).ValueGeneratedNever()
+            .HasComment("Solo filas anteriores a la 1.3.0: desde entonces relanzar abre un nuevo intento del mismo ítem (R3) y no se marca.");
+        builder.Property(x => x.NumeroIntento).HasDefaultValue(1).ValueGeneratedNever()
+            .HasComment("Intento en curso (1..n). Los cerrados están en liquidacion_item_intentos (R3).");
         builder.Property(x => x.Version).IsRowVersion();
         builder.HasIndex(x => new { x.LiquidacionId, x.Estado }).HasDatabaseName("ix_items_liq");
         builder.HasIndex(x => x.ProximoPollEn).HasFilter("estado IN ('ENVIADO','INCIERTO')").HasDatabaseName("ix_items_poll");

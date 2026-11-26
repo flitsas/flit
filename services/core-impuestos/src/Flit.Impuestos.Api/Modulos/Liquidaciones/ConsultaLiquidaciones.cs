@@ -104,6 +104,9 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
             ?? throw ErroresLiquidaciones.ItemNoEncontrado();
         var periodos = await db.Set<LiquidacionPeriodo>().AsNoTracking().Where(p => p.ItemId == itemId).OrderBy(p => p.Periodo).ToListAsync(ct).ConfigureAwait(false);
         var recibos = await db.Set<Recibo>().AsNoTracking().Where(r => r.ItemId == itemId).OrderBy(r => r.Id).ToListAsync(ct).ConfigureAwait(false);
+        var intentos = await db.Set<LiquidacionItemIntento>().AsNoTracking().Where(i => i.ItemId == itemId).OrderByDescending(i => i.Numero)
+            .Select(i => new { i.Numero, i.Estado, i.ErrorCodigo, i.ErrorMensaje, i.TotalAPagar, i.RegistradoEn, i.RelanzadoPor })
+            .ToListAsync(ct).ConfigureAwait(false);
         var origenes = await LotesDeOrigenAsync(db, [item], ct).ConfigureAwait(false);
         var reciboPorArchivo = recibos.GroupBy(r => r.FileIdApi, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
 
@@ -115,7 +118,9 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
             [.. periodos.Select(p => new PeriodoDto(p.Periodo, p.Avaluo, p.Impuesto, p.Sancion, p.Intereses, p.Descuentos, p.PagosPrevios, p.TotalAPagar,
                 OtrosCargos(p.OtrosCargos), p.Vencimiento, p.ReferenciaPago, p.NoLiquidable,
                 p.FileIdApi is { } f && reciboPorArchivo.TryGetValue(f, out var r) ? r : null))],
-            [.. recibos.Select(r => new ReciboDto(r.Id, CodigosDeEnum.Codigo(r.Tipo), r.Periodos, CodigosDeEnum.Codigo(r.Estado), r.Motivo, null))]);
+            [.. recibos.Select(r => new ReciboDto(r.Id, CodigosDeEnum.Codigo(r.Tipo), r.Periodos, CodigosDeEnum.Codigo(r.Estado), r.Motivo, null))],
+            item.NumeroIntento,
+            [.. intentos.Select(i => new IntentoItemDto(i.Numero, CodigosDeEnum.Codigo(i.Estado), i.ErrorCodigo, i.ErrorMensaje, i.TotalAPagar, i.RegistradoEn, i.RelanzadoPor))]);
     }
 
     /// <summary>El ítem del contrato; <paramref name="origenes"/> da el lote de cada ítem original (relanzamientos).</summary>
@@ -227,8 +232,9 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
             new ConfigCopiaDto(copia.MaxRegistros, copia.DepartamentosHabilitados, copia.Concurrencia));
     }
 
-    private static ContadoresDto Contadores(Liquidacion l) => new(
-        l.CExitosas, l.CConDeuda, l.CPazYSalvo, l.CError, l.CDatosIncompletos, l.CDptoNoHabilitado, l.CIncierto, l.CSinResultado, l.CPendientes);
+    internal static ContadoresDto Contadores(Liquidacion l) => new(
+        l.CExitosas, l.CConDeuda, l.CPazYSalvo, l.CError, l.CDatosIncompletos, l.CDptoNoHabilitado, l.CIncierto, l.CSinResultado, l.CPendientes,
+        l.CNoAplica);
 
     /// <summary>El único ítem de una individual tal como lo pinta el resumen.</summary>
     private sealed record ItemIndividual(Guid Id, string Placa, EstadoItem Estado, bool PlacaNoInscrita);

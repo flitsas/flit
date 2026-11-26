@@ -7,7 +7,8 @@ namespace Flit.Impuestos.Api.Modulos.Ejecucion;
 /// <summary>
 /// Lo que la liquidación necesita del RUNT (plan §2.2, D-ENTRADA): el propietario (tipo y número de documento ya en el código del
 /// API: <c>CC</c>, <c>NIT</c>, <c>CE</c>, <c>PA</c>, <c>TI</c> o <c>CD</c>), el vehículo, el organismo de tránsito y el contacto y la
-/// dirección del propietario. Solo vive en memoria mientras se arma la solicitud: la dirección, el correo y el teléfono no se guardan
+/// dirección del propietario, y el tipo de servicio del vehículo (<see cref="TipoServicio"/>, tal cual lo da el RUNT: Particular,
+/// Público u Oficial; R3). Solo vive en memoria mientras se arma la solicitud: la dirección, el correo y el teléfono no se guardan
 /// (DA-7, Ley 1581). <see cref="ToString"/> no imprime ningún dato.
 /// </summary>
 public sealed record DatosRunt(
@@ -21,7 +22,8 @@ public sealed record DatosRunt(
     string? Telefono,
     string? DireccionDepartamento,
     string? DireccionCiudad,
-    string? Direccion)
+    string? Direccion,
+    string? TipoServicio = null)
 {
     public override string ToString() => "DatosRunt { [REDACTADO: PII] }";
 }
@@ -85,8 +87,8 @@ internal sealed class ClienteRuntGrpc(RuntIntempoService.RuntIntempoServiceClien
     }
 
     /// <summary>
-    /// El propietario actual (o, si no viene, el primero de <c>owner</c>), su primera dirección, el modelo, la marca y el organismo de
-    /// tránsito del vehículo. Los textos vacíos quedan null.
+    /// El propietario actual (o, si no viene, el primero de <c>owner</c>), su primera dirección, el modelo, la marca, el organismo de
+    /// tránsito y el tipo de servicio (<c>informacion_general.tipo_servicio</c>) del vehículo. Los textos vacíos quedan null.
     /// </summary>
     public static DatosRunt Mapear(VehiculoIntempo v)
     {
@@ -108,7 +110,8 @@ internal sealed class ClienteRuntGrpc(RuntIntempoService.RuntIntempoServiceClien
             Texto(direccion?.Telefono),
             Texto(direccion?.Departamento),
             Texto(direccion?.Ciudad),
-            Texto(direccion?.Direccion));
+            Texto(direccion?.Direccion),
+            Texto(v.InformacionGeneral?.TipoServicio));
     }
 
     /// <summary>

@@ -493,6 +493,11 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("c_incierto");
 
+                    b.Property<int>("CNoAplica")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("c_no_aplica");
+
                     b.Property<int>("CPazYSalvo")
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
@@ -701,6 +706,12 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("liquidacion_id");
 
+                    b.Property<int>("NumeroIntento")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("numero_intento")
+                        .HasComment("Intento en curso (1..n). Los cerrados están en liquidacion_item_intentos (R3).");
+
                     b.Property<bool>("Parcial")
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
@@ -716,7 +727,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.Property<bool>("PosibleDuplicado")
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
-                        .HasColumnName("posible_duplicado");
+                        .HasColumnName("posible_duplicado")
+                        .HasComment("Solo filas anteriores a la 1.3.0: desde entonces relanzar abre un nuevo intento del mismo ítem (R3) y no se marca.");
 
                     b.Property<byte[]>("PropietarioNombreCifrado")
                         .HasColumnType("bytea")
@@ -822,7 +834,86 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_liquidacion_items_error_clase", "error_clase IS NULL OR error_clase IN ('CORREGIR_DATOS', 'DEPENDE', 'REINTENTABLE')");
 
-                            t.HasCheckConstraint("ck_liquidacion_items_estado", "estado IN ('PENDIENTE', 'CONSULTANDO_RUNT', 'REINTENTO_PROGRAMADO', 'ENVIANDO', 'ENVIADO', 'INCIERTO', 'INCIERTO_REQUIERE_DECISION', 'DATOS_INCOMPLETOS', 'DEPARTAMENTO_NO_HABILITADO', 'EXITOSO', 'ERROR', 'SIN_RESULTADO_LOTE_CERRADO')");
+                            t.HasCheckConstraint("ck_liquidacion_items_estado", "estado IN ('PENDIENTE', 'CONSULTANDO_RUNT', 'REINTENTO_PROGRAMADO', 'ENVIANDO', 'ENVIADO', 'INCIERTO', 'INCIERTO_REQUIERE_DECISION', 'DATOS_INCOMPLETOS', 'DEPARTAMENTO_NO_HABILITADO', 'EXITOSO', 'ERROR', 'SIN_RESULTADO_LOTE_CERRADO', 'NO_APLICA')");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Impuestos.Api.Persistence.LiquidacionItemIntento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CampoFaltante")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("campo_faltante");
+
+                    b.Property<string>("ErrorClase")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("error_clase");
+
+                    b.Property<string>("ErrorCodigo")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("error_codigo");
+
+                    b.Property<string>("ErrorMensaje")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("error_mensaje");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("estado");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<int>("Numero")
+                        .HasColumnType("integer")
+                        .HasColumnName("numero");
+
+                    b.Property<DateTimeOffset>("RegistradoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registrado_en");
+
+                    b.Property<string>("RelanzadoPor")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("relanzado_por")
+                        .HasComment("@pii:medium Nombre del usuario interno (en claro por decisión del usuario)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal?>("TotalAPagar")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("total_a_pagar")
+                        .HasComment("NULL no es 0 (F2-CF14).");
+
+                    b.HasKey("Id")
+                        .HasName("pk_liquidacion_item_intentos");
+
+                    b.HasIndex("ItemId", "Numero")
+                        .IsUnique()
+                        .HasDatabaseName("ux_liquidacion_item_intentos_item_numero");
+
+                    b.ToTable("liquidacion_item_intentos", "impuestos", t =>
+                        {
+                            t.HasComment("Intentos cerrados de cada ítem al relanzarlo (R3). Sin PII del propietario ni resultado cifrado.");
+
+                            t.HasCheckConstraint("ck_liquidacion_item_intentos_error_clase", "error_clase IS NULL OR error_clase IN ('CORREGIR_DATOS', 'DEPENDE', 'REINTENTABLE')");
+
+                            t.HasCheckConstraint("ck_liquidacion_item_intentos_estado", "estado IN ('PENDIENTE', 'CONSULTANDO_RUNT', 'REINTENTO_PROGRAMADO', 'ENVIANDO', 'ENVIADO', 'INCIERTO', 'INCIERTO_REQUIERE_DECISION', 'DATOS_INCOMPLETOS', 'DEPARTAMENTO_NO_HABILITADO', 'EXITOSO', 'ERROR', 'SIN_RESULTADO_LOTE_CERRADO', 'NO_APLICA')");
+
+                            t.HasCheckConstraint("ck_liquidacion_item_intentos_numero", "numero >= 1");
                         });
                 });
 
@@ -1227,6 +1318,16 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasForeignKey("RelanzadoDesde")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_liquidacion_items_relanzado_desde");
+                });
+
+            modelBuilder.Entity("Flit.Impuestos.Api.Persistence.LiquidacionItemIntento", b =>
+                {
+                    b.HasOne("Flit.Impuestos.Api.Persistence.LiquidacionItem", null)
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_liquidacion_item_intentos_liquidacion_items");
                 });
 
             modelBuilder.Entity("Flit.Impuestos.Api.Persistence.LiquidacionPeriodo", b =>

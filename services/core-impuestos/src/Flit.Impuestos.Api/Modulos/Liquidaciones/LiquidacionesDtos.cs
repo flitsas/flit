@@ -11,9 +11,10 @@ public sealed record SolicitudIndividualEntrada(string? Placa);
 /// <summary>Esquema <c>Referencia</c>: id y nombre (vacío si la plataforma no lo da).</summary>
 public sealed record ReferenciaDto(Guid Id, string Nombre);
 
-/// <summary>Esquema <c>Contadores</c> de la cabecera.</summary>
+/// <summary>Esquema <c>Contadores</c> de la cabecera; <see cref="NoAplica"/> (1.3.0) son las placas de servicio público.</summary>
 public sealed record ContadoresDto(
-    int Exitosas, int ConDeuda, int PazYSalvo, int Error, int DatosIncompletos, int DepartamentoNoHabilitado, int Incierto, int SinResultado, int Pendientes);
+    int Exitosas, int ConDeuda, int PazYSalvo, int Error, int DatosIncompletos, int DepartamentoNoHabilitado, int Incierto, int SinResultado, int Pendientes,
+    int NoAplica);
 
 /// <summary>
 /// Esquema <c>ResumenLiquidacion</c> (fila del grid). <see cref="Placa"/>, <see cref="ItemId"/> y <see cref="EstadoItem"/> solo en la
@@ -79,15 +80,23 @@ public sealed record PeriodoDto(
 public sealed record ReciboDto(Guid Id, string Tipo, IReadOnlyList<string> Periodos, string Estado, string? Motivo, string? Razon);
 
 /// <summary>
+/// Esquema <c>IntentoItem</c> (1.3.0): un intento cerrado del ítem al relanzarlo. <see cref="TotalAPagar"/> null = «Sin dato».
+/// </summary>
+public sealed record IntentoItemDto(
+    int Numero, string Estado, string? ErrorCodigo, string? ErrorMensaje, decimal? TotalAPagar, DateTimeOffset RegistradoEn, string? RelanzadoPor);
+
+/// <summary>
 /// Esquema <c>ItemDetalle</c>: el <see cref="ItemDto"/> más la compañía, quién y cuándo creó la liquidación, <c>consultaStatus</c>, el
-/// <c>resultado</c> del proveedor (null sin resultado), las vigencias y los recibos.
+/// <c>resultado</c> del proveedor (null sin resultado), las vigencias y los recibos del intento en curso, su
+/// <see cref="NumeroIntento"/> y los <see cref="Intentos"/> cerrados, el más reciente primero (1.3.0).
 /// </summary>
 public sealed record ItemDetalleDto(
     Guid Id, Guid LiquidacionId, int? Fila, string Placa, string Estado, string? ErrorCodigo, string? ErrorClase, string? ErrorMensaje,
     string? CampoFaltante, DepartamentoItemDto? Departamento, PropietarioDto? Propietario, decimal? TotalAPagar, string? ResultadoStatus,
     bool Parcial, bool PosibleDuplicado, bool ResultadoTardio, Guid? RelanzadoDesde, Guid? RelanzadoDesdeItemId, Guid? RelanzadoDesdeLiquidacionId,
     SecretariaDto? Secretaria, ReferenciaDto Empresa, ReferenciaDto CreadaPor, DateTimeOffset CreadaEn, string? ConsultaStatus,
-    JsonElement? Resultado, IReadOnlyList<PeriodoDto> Periodos, IReadOnlyList<ReciboDto> Recibos)
+    JsonElement? Resultado, IReadOnlyList<PeriodoDto> Periodos, IReadOnlyList<ReciboDto> Recibos, int NumeroIntento,
+    IReadOnlyList<IntentoItemDto> Intentos)
     : ItemDto(Id, LiquidacionId, Fila, Placa, Estado, ErrorCodigo, ErrorClase, ErrorMensaje, CampoFaltante, Departamento, Propietario, TotalAPagar,
         ResultadoStatus, Parcial, PosibleDuplicado, ResultadoTardio, RelanzadoDesde, RelanzadoDesdeItemId, RelanzadoDesdeLiquidacionId, Secretaria);
 
@@ -130,11 +139,10 @@ internal static class ErroresLiquidaciones
     public static ReglaException YaTerminada() =>
         ReglaException.Conflicto(CierreLote.CodigoYaTerminada, "La liquidación ya terminó: no se puede cerrar.");
 
-    public static ReglaException NoRelanzable() =>
-        ReglaException.Conflicto("NO_RELANZABLE", "Solo se relanzan placas en «Incierto — requiere decisión» o con error reintentable.");
+    public const string LiteralNoRelanzable =
+        "Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.";
 
-    public static ReglaException ConfirmacionRequerida() =>
-        new("CONFIRMACION_REQUERIDA", "Confirma que aceptas un posible duplicado en el proveedor.") { Campo = "confirmarPosibleDuplicado" };
+    public static ReglaException NoRelanzable() => ReglaException.Conflicto(TransicionesItem.CodigoNoRelanzable, LiteralNoRelanzable);
 
     /// <summary>
     /// Motivo de cierre de más de <c>maxLength</c> 300. El contrato no le da un código propio: va el genérico del servicio

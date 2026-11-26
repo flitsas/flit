@@ -31,6 +31,7 @@ public sealed class TransicionesItemTests
     [InlineData(S.Exitoso, true, CategoriaDashboard.Exitosa)]
     [InlineData(S.Error, true, CategoriaDashboard.Error)]
     [InlineData(S.SinResultadoLoteCerrado, true, CategoriaDashboard.SinResultado)]
+    [InlineData(S.NoAplica, true, CategoriaDashboard.NoAplica)]
     public void Estados_finales_y_categoria_del_dashboard(S estado, bool final, CategoriaDashboard categoria)
     {
         EstadosItem.EsFinal(estado).Should().Be(final);
@@ -56,6 +57,40 @@ public sealed class TransicionesItemTests
 
         r.Nueva.Estado.Should().Be(S.DatosIncompletos);
         r.CampoFaltante.Should().Be("documento_numero");
+    }
+
+    [Fact]
+    public void Vehiculo_de_servicio_publico_queda_NO_APLICA_con_su_codigo_sin_clase_de_error()
+    {
+        var r = Aplicar(S.ConsultandoRunt, new EventoItem.ServicioPublico());
+
+        r.Nueva.Estado.Should().Be(S.NoAplica);
+        r.Nueva.ClaseError.Should().BeNull("NO_APLICA no es un error");
+        r.ErrorCodigo.Should().Be("servicio_publico");
+        TransicionesItem.CodigoServicioPublico.Should().Be("servicio_publico");
+        TransicionesItem.MensajeServicioPublico.Should().Be(
+            "El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular.");
+    }
+
+    [Theory]
+    [InlineData(S.Pendiente)]
+    [InlineData(S.Enviando)]
+    [InlineData(S.Enviado)]
+    public void Servicio_publico_fuera_de_CONSULTANDO_RUNT_es_invalido(S desde)
+    {
+        var act = () => Aplicar(desde, new EventoItem.ServicioPublico());
+
+        act.Should().Throw<TransicionInvalida>();
+    }
+
+    [Fact]
+    public void NO_APLICA_no_se_relanza_ni_lo_toca_el_cierre_manual()
+    {
+        var relanzar = () => Aplicar(S.NoAplica, new EventoItem.Relanzar());
+        var cerrar = () => Aplicar(S.NoAplica, new EventoItem.CierreManual());
+
+        relanzar.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
+        cerrar.Should().Throw<TransicionInvalida>();
     }
 
     [Fact]
@@ -201,12 +236,12 @@ public sealed class TransicionesItemTests
     }
 
     [Fact]
-    public void Relanzar_un_incierto_que_requiere_decision_crea_otra_individual_y_no_cambia_el_item()
+    public void Relanzar_un_incierto_que_requiere_decision_abre_un_nuevo_intento_en_PENDIENTE()
     {
-        var r = Aplicar(S.InciertoRequiereDecision, new EventoItem.Relanzar());
+        var r = TransicionesItem.Aplicar(new SituacionItem(S.InciertoRequiereDecision, IntentosRunt: 2, IntentosReenvio: 1), new EventoItem.Relanzar());
 
-        r.Nueva.Estado.Should().Be(S.InciertoRequiereDecision);
-        r.CrearRelanzamiento.Should().BeTrue();
+        r.Nueva.Should().Be(new SituacionItem(S.Pendiente), "el nuevo intento nace como un ítem que entra a la cola, sin contadores ni error");
+        r.NuevoIntento.Should().BeTrue();
     }
 
     [Fact]
@@ -216,19 +251,31 @@ public sealed class TransicionesItemTests
         var deDatos = () => TransicionesItem.Aplicar(new SituacionItem(S.Error, ClaseError: ClaseError.CorregirDatos), new EventoItem.Relanzar());
         var exitoso = () => TransicionesItem.Aplicar(new SituacionItem(S.Exitoso), new EventoItem.Relanzar());
 
-        reintentable.Nueva.Estado.Should().Be(S.Error);
-        reintentable.CrearRelanzamiento.Should().BeTrue();
+        reintentable.Nueva.Should().Be(new SituacionItem(S.Pendiente));
+        reintentable.NuevoIntento.Should().BeTrue();
         deDatos.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
         exitoso.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
     }
 
     [Fact]
-    public void Relanzar_datos_incompletos_crea_otra_individual_y_no_cambia_el_item()
+    public void Relanzar_datos_incompletos_abre_un_nuevo_intento_en_PENDIENTE()
     {
         var r = Aplicar(S.DatosIncompletos, new EventoItem.Relanzar());
 
-        r.Nueva.Estado.Should().Be(S.DatosIncompletos);
-        r.CrearRelanzamiento.Should().BeTrue();
+        r.Nueva.Estado.Should().Be(S.Pendiente);
+        r.NuevoIntento.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(S.Pendiente)]
+    [InlineData(S.ConsultandoRunt)]
+    [InlineData(S.ReintentoProgramado)]
+    [InlineData(S.Enviando)]
+    public void Un_item_en_vuelo_no_se_relanza(S desde)
+    {
+        var relanzar = () => Aplicar(desde, new EventoItem.Relanzar());
+
+        relanzar.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
     }
 
     [Theory]
@@ -239,9 +286,8 @@ public sealed class TransicionesItemTests
         var r = TransicionesItem.Aplicar(
             new SituacionItem(S.Error, ClaseError: ClaseError.Depende, ErrorCodigo: "portal_rejected", ErrorMensaje: mensaje), new EventoItem.Relanzar());
 
-        r.Nueva.Estado.Should().Be(S.Error);
-        r.Nueva.ClaseError.Should().Be(ClaseError.Depende, "no hay clase nueva");
-        r.CrearRelanzamiento.Should().BeTrue();
+        r.Nueva.Should().Be(new SituacionItem(S.Pendiente), "el nuevo intento limpia el error");
+        r.NuevoIntento.Should().BeTrue();
         ClasificacionErrores.EsPlacaNoInscrita("portal_rejected", mensaje).Should().BeTrue();
     }
 

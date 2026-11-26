@@ -59,6 +59,7 @@ public sealed class LiquidacionIndividualEndpointsTests
         raiz.GetProperty("creadaPor").GetProperty("nombre").GetString().Should().Be("operador@empresa.test", "creada_por_nombre (1.2.0)");
         raiz.GetProperty("empresa").GetProperty("id").GetGuid().Should().Be(empresa);
         raiz.GetProperty("contadores").GetProperty("pendientes").GetInt32().Should().Be(1);
+        raiz.GetProperty("contadores").GetProperty("noAplica").GetInt32().Should().Be(0, "contador de la 1.3.0");
         var copia = raiz.GetProperty("configCopia");
         copia.GetProperty("maxRegistrosLote").GetInt32().Should().Be(500);
         copia.GetProperty("departamentosHabilitados").ValueKind.Should().Be(JsonValueKind.Null);
@@ -284,7 +285,7 @@ public sealed class LiquidacionIndividualEndpointsTests
     }
 
     [Fact]
-    public void El_contrato_declara_placaNoInscrita_en_ResumenLiquidacion_y_esta_en_la_1_2_3()
+    public void El_contrato_declara_placaNoInscrita_en_ResumenLiquidacion_desde_la_1_2_3()
     {
         var lineas = File.ReadAllLines(RutaContrato());
         var inicio = Array.FindIndex(lineas, l => l.TrimEnd() == "    ResumenLiquidacion:");
@@ -292,7 +293,8 @@ public sealed class LiquidacionIndividualEndpointsTests
 
         inicio.Should().BeGreaterThan(0);
         lineas[inicio..fin].Should().Contain(l => l.TrimStart().StartsWith("placaNoInscrita: { type: boolean, nullable: true", StringComparison.Ordinal));
-        lineas.Should().Contain("  version: \"1.2.3\"");
+        var version = lineas.Single(l => l.StartsWith("  version: ", StringComparison.Ordinal))["  version: ".Length..].Trim('"');
+        Version.Parse(version).Should().BeGreaterThanOrEqualTo(new Version(1, 2, 3), "placaNoInscrita llegó en la 1.2.3 (la 1.3.0 la conserva)");
     }
 
     private static string RutaContrato()

@@ -39,7 +39,8 @@ public sealed record LiquidacionSolicitada(Guid LiquidacionId, Guid ItemId)
 ///   pasa a <c>INCIERTO</c> sin volver a llamar.</item>
 ///   <item>Con el <see cref="FrenoGlobal"/> en pausa deja el ítem para el fin de la pausa sin consultar nada.</item>
 ///   <item>RUNT por <c>svc-impuestos</c> (<see cref="IClienteRunt"/>), homologación de la secretaría, <c>/fuentes</c> de la caché y
-///   <see cref="ConstructorSolicitud"/> con la copia de configuración del lote. Datos incompletos, departamento no habilitado o placa
+///   <see cref="ConstructorSolicitud"/> con la copia de configuración del lote. Un vehículo que el RUNT reporta de servicio público
+///   (<see cref="ServicioVehiculo.EsPublico"/>) queda <c>NO_APLICA</c> antes de todo eso, sin llamar al proveedor (R3). Datos incompletos, departamento no habilitado o placa
 ///   que el RUNT no registra cierran el ítem sin llamar al API; un RUNT transitorio lo reprograma (30 s, 2 min; al tercero,
 ///   <c>ERROR</c> reintentable).</item>
 ///   <item>Registro previo: <c>ENVIANDO</c>, hash del token nuevo, <c>con_callback</c>, <c>enviado_en</c> y la PII cifrada se
@@ -135,7 +136,7 @@ public sealed partial class ConsumidorLiquidacion(
         item.Estado = nueva.Estado;
         item.IntentosRunt = nueva.IntentosRunt;
         item.IntentosReenvio = nueva.IntentosReenvio;
-        if (nueva.Estado == EstadoItem.Error)
+        if (nueva.Estado is EstadoItem.Error or EstadoItem.NoAplica)
         {
             item.ErrorClase = nueva.ClaseError;
             item.ErrorCodigo = resultado.ErrorCodigo is { Length: > LargoCodigoError } largo ? largo[..LargoCodigoError] : resultado.ErrorCodigo;
@@ -182,6 +183,14 @@ public sealed partial class ConsumidorLiquidacion(
         }
 
         var datos = encontrado.Datos;
+        if (!reenvio && ServicioVehiculo.EsPublico(datos.TipoServicio))
+        {
+            // R3: el servicio público no paga impuesto vehicular. Final, sin homologar, sin construir la solicitud y sin el proveedor.
+            await AplicarAsync(tenant, item.Id, new EventoItem.ServicioPublico(), i => i.ErrorMensaje = TransicionesItem.MensajeServicioPublico, ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
         var secretaria = await homologacion.HomologarAsync(null, datos.OrganismoNombre, ct).ConfigureAwait(false);
         var copia = CopiaConfiguracion.DesdeJson(await db.Set<Liquidacion>().AsNoTracking().Where(l => l.Id == item.LiquidacionId)
             .Select(l => l.ConfigCopia).SingleAsync(ct).ConfigureAwait(false));
