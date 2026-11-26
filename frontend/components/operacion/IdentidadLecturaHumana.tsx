@@ -201,7 +201,7 @@ const TONO_PUNTO: Record<TonoIdentidad, string> = {
   neutro: 'var(--color-flit-brand)',
 };
 
-function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
+export function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
   return (
     <li className="relative">
       <span
@@ -217,6 +217,9 @@ function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
       <p className="text-xs font-semibold text-flit-primary dark:text-white">{hito.titulo}</p>
       {hito.detalle ? (
         <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{hito.detalle}</p>
+      ) : null}
+      {hito.activadoPor ? (
+        <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{hito.activadoPor}</p>
       ) : null}
       {hito.revisadoPor ? (
         <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{hito.revisadoPor}</p>

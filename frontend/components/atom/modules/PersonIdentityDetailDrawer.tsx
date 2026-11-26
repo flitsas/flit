@@ -6,7 +6,7 @@ import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
-import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
+import { IdentidadTrackingTimeline } from '@/components/atom/modules/IdentidadTrackingTimeline';
 import {
   AssociatedProceduresList,
   buildAssociatedProcedures,
@@ -553,20 +553,11 @@ function ValidationAccordionItem({
           )}
 
           <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
-            <p className="mb-1 text-[13px] font-semibold text-foreground">
-              Tracking de auditoría y proceso (tiempo real)
+            <p className="mb-1 text-[13px] font-semibold text-foreground">Tracking de la validación</p>
+            <p className="mb-3 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
+              Historial del proceso, del más reciente al más antiguo.
             </p>
-            <p className="mb-2 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
-              Historial cronológico de eventos, cifrado y respuestas del proveedor.
-            </p>
-            <IdentityValidationTrackingPanel
-              validationId={v.id}
-              refreshKey={trackingTick}
-              defaultOpen
-              embebido
-              detailLayout
-              network={red}
-            />
+            <IdentidadTrackingTimeline validation={v} refreshKey={trackingTick} network={red} />
           </div>
         </div>
       )}

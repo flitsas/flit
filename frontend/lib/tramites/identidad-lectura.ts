@@ -42,6 +42,10 @@ export interface HitoIdentidad {
   tono: TonoIdentidad;
   /** «Revisado por …»: texto aparte del detalle. Solo en aprobación/rechazo manual y solo para el Super Admin. */
   revisadoPor?: string | null;
+  /** «Activado por …»: quién activó el flujo manual. Solo en `manual_activado` y solo para el Super Admin. */
+  activadoPor?: string | null;
+  /** Primer envío del enlace de una captura (`send` / `manual_activado`): abre un intento nuevo en la línea de tiempo. */
+  inicioCiclo?: boolean;
 }
 
 /**
@@ -214,7 +218,9 @@ export function hitosDeIdentidad(
       case 'send':
       case 'resend':
       case 'manual_activado':
-      case 'manual_enlace_regenerado':
+      case 'manual_enlace_regenerado': {
+        // Quién activó el flujo manual: el backend solo lo manda al Super Admin; sin él no se muestra nada.
+        const activador = e.stage === 'manual_activado' ? descripcionRevisor(e.revisor) : null;
         return {
           ...base,
           titulo: e.stage === 'resend' || e.stage === 'manual_enlace_regenerado' ? 'Se reenvió el enlace' : 'Se envió el enlace',
@@ -222,7 +228,10 @@ export function hitosDeIdentidad(
           // «no le llega» que en realidad es una dirección mal escrita.
           detalle: v.email?.trim() ? `A ${v.email.trim()}` : null,
           tono: 'neutro',
+          ...(activador ? { activadoPor: `Flujo manual activado por ${activador}` } : {}),
+          ...(e.stage === 'send' || e.stage === 'manual_activado' ? { inicioCiclo: true } : {}),
         };
+      }
 
       case 'send_error':
       case 'manual_correo_fallido':

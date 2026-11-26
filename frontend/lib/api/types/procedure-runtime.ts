@@ -1864,7 +1864,7 @@ export interface IdentityAuditEvent {
   // puntual: a diferencia de BiometricValidation.rejectionReason (que la siguiente captura borra),
   // este queda fijo en la bitácora. Ya es texto seguro, se ve igual para todos.
   rejectionReasonLabel?: string | null;
-  /** Quién aprobó/rechazó (solo manual_aprobado/manual_rechazado y solo para el Super Admin FLIT). */
+  /** Quién activó (manual_activado) o aprobó/rechazó (manual_aprobado/manual_rechazado); solo para el Super Admin FLIT. */
   revisor?: { name: string | null; email: string | null; role: string | null } | null;
 }
 
