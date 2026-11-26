@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Infrastructure.Ai.Routing;
+using Flit.Infrastructure.Ocr;
 using Flit.Platform.Sdk.IaConsumo;
 using Microsoft.Extensions.Logging;
 
@@ -37,20 +38,57 @@ internal sealed class OpenAiCompatibleClient(
         int? maxTokens = null,
         int? timeoutSeconds = null)
     {
-        var dataUrl = $"data:{mediaType};base64,{base64}";
-        var content = new object[]
+        var modelo = model ?? options.ResolveVisionModel();
+        var tope = maxTokens ?? options.MaxTokens;
+        var bytes = IaConsumoTexto.BytesDeBase64(base64);
+
+        var content = new List<object> { new OpenAiTextPart("text", prompt) };
+        if (EsPdf(mediaType))
         {
-            new OpenAiTextPart("text", prompt),
-            new OpenAiImagePart("image_url", new OpenAiImageUrl(dataUrl)),
-        };
+            // Chat Completions (OpenAI, Moonshot) no acepta PDF en image_url: una imagen por página.
+            var paginas = RasterizarPdf(base64);
+            if (paginas is null)
+            {
+                OpenAiCompatLog.PdfNoRasterizable(logger);
+                using var operacion = _consumo.Contexto.Iniciar(new IaAmbito());
+                new Medicion(_consumo, options.CodigoProveedor, IaTiposTarea.Ocr, modelo, tope, prompt, null, mediaType, bytes)
+                    .Registrar(DateTimeOffset.UtcNow, 1, IaResultados.Rechazado, 0, null, "pdf_no_rasterizable", null, null);
+                return Task.FromResult(AiProviderCallResult.Fail(503, MsgManual));
+            }
+
+            foreach (var pagina in paginas)
+                content.Add(new OpenAiImagePart("image_url", new OpenAiImageUrl($"data:image/jpeg;base64,{Convert.ToBase64String(pagina)}")));
+        }
+        else
+        {
+            content.Add(new OpenAiImagePart("image_url", new OpenAiImageUrl($"data:{mediaType};base64,{base64}")));
+        }
 
         var payload = new OpenAiChatRequest(
-            Model: model ?? options.ResolveVisionModel(),
-            MaxTokens: maxTokens ?? options.MaxTokens,
+            Model: modelo,
+            MaxTokens: tope,
             Messages: [new OpenAiMessage("user", content)]);
 
         return SendAsync(options, payload, timeoutSeconds ?? options.TimeoutSeconds, IaTiposTarea.Ocr,
-            prompt, promptBase: null, mediaType, IaConsumoTexto.BytesDeBase64(base64), ct);
+            prompt, promptBase: null, mediaType, bytes, ct);
+    }
+
+    private static bool EsPdf(string mediaType) =>
+        string.Equals(mediaType?.Trim(), "application/pdf", StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<byte[]>? RasterizarPdf(string base64)
+    {
+        byte[] pdf;
+        try
+        {
+            pdf = Convert.FromBase64String(base64);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        return PdfPaginasVision.AJpeg(pdf);
     }
 
     public Task<AiProviderCallResult> SendChatAsync(
@@ -355,4 +393,7 @@ internal static partial class OpenAiCompatLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OpenAI-compatible: respuesta no interpretable (JSON)")]
     public static partial void InvalidResponse(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenAI-compatible: el PDF no se pudo convertir en imágenes; no se llama al proveedor")]
+    public static partial void PdfNoRasterizable(ILogger logger);
 }
