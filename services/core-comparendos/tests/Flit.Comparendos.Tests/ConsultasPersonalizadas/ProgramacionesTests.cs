@@ -52,6 +52,14 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         Programaciones.Proxima(Programaciones.Semanal, 6, null, new TimeOnly(1, 0), Col(2026, 10, 9, 23)).Should().Be(Col(2026, 10, 10, 1));
     }
 
+    [Fact]
+    public void Correo_CuentaLosComparendosEnSingularYPlural()
+    {
+        EnvioConsultasProgramadas.Cantidad(1).Should().Be("1 comparendo");
+        EnvioConsultasProgramadas.Cantidad(0).Should().Be("0 comparendos");
+        EnvioConsultasProgramadas.Cantidad(12345).Should().Be("12.345 comparendos");
+    }
+
     // ── Endpoints ─────────────────────────────────────────────────────────────────────────────
 
     private async Task<(Guid Empresa, HttpClient Cliente, Guid Consulta)> EmpresaConConsultaAsync(string nombre, object? definicion = null)
