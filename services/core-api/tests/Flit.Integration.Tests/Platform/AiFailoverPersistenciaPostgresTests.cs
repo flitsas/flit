@@ -3,7 +3,9 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
 using FluentAssertions;
+using Flit.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace Flit.Integration.Tests.Platform;
@@ -23,7 +25,7 @@ public sealed class AiFailoverPersistenciaPostgresTests(PostgresDatabaseFixture 
         await SembrarOcrAsync(ct);
 
         // Contexto con reintento, como el de producto: la transacción tiene que ir dentro de la estrategia.
-        await using (var db = NewRetryingContext())
+        await using (var db = ContextoConReintento())
         {
             await new AiToolProviderSettingsRepository(db)
                 .RecordFailoverAsync(AiToolCodes.Ocr, AiProviderCodes.Anthropic, AiProviderCodes.OpenAi, "invalid x-api-key", ct);
@@ -51,7 +53,7 @@ public sealed class AiFailoverPersistenciaPostgresTests(PostgresDatabaseFixture 
         await SembrarOcrAsync(ct);
 
         // El mismo contexto (scoped en la request) recibe los dos: lo guardado del primero no se reinserta.
-        await using (var db = NewRetryingContext())
+        await using (var db = ContextoConReintento())
         {
             var repo = new AiToolProviderSettingsRepository(db);
             await repo.RecordFailoverAsync(AiToolCodes.Ocr, AiProviderCodes.Anthropic, AiProviderCodes.OpenAi, null, ct);
@@ -71,7 +73,7 @@ public sealed class AiFailoverPersistenciaPostgresTests(PostgresDatabaseFixture 
         var ct = TestContext.Current.CancellationToken;
         await SembrarOcrAsync(ct);
 
-        await using (var db = NewRetryingContext())
+        await using (var db = ContextoConReintento())
         {
             var repo = new AiToolProviderSettingsRepository(db);
             await repo.RecordFailoverAsync(AiToolCodes.Ocr, AiProviderCodes.Anthropic, AiProviderCodes.OpenAi, null, ct);
@@ -93,7 +95,7 @@ public sealed class AiFailoverPersistenciaPostgresTests(PostgresDatabaseFixture 
         await SembrarOcrAsync(ct, activo: AiProviderCodes.Kimi);
 
         // El router creía que el activo era openai, pero alguien ya lo había puesto en kimi.
-        await using (var db = NewRetryingContext())
+        await using (var db = ContextoConReintento())
         {
             await new AiToolProviderSettingsRepository(db)
                 .RecordAutoReturnAsync(AiToolCodes.Ocr, AiProviderCodes.OpenAi, AiProviderCodes.Anthropic, ct);
@@ -104,6 +106,17 @@ public sealed class AiFailoverPersistenciaPostgresTests(PostgresDatabaseFixture 
             .ActiveProvider.Should().Be(AiProviderCodes.Kimi);
         (await ctx.AiProviderTransitions.CountAsync(ct)).Should().Be(0);
     }
+
+    /// <summary>
+    /// Contexto con reintento automático, como el de producto: con <c>EnableRetryOnFailure</c> la transacción
+    /// tiene que ir dentro de la estrategia de ejecución, o EF la rechaza.
+    /// </summary>
+    private FlitDbContext ContextoConReintento() =>
+        new(new DbContextOptionsBuilder<FlitDbContext>()
+            .UseNpgsql(Fixture.ConnectionString, npgsql => npgsql.EnableRetryOnFailure(3))
+            .UseSnakeCaseNamingConvention()
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options);
 
     private async Task SembrarOcrAsync(CancellationToken ct, string activo = AiProviderCodes.Anthropic)
     {
