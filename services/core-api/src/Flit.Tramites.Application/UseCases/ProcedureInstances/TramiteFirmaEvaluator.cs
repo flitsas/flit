@@ -63,6 +63,8 @@ public static class FirmaTextos
 {
     public const string Completas = "Firmas completas";
     public const string Faltan = "Faltan firmas";
+    /// <summary>Trámite sin ninguna parte que firme: no se afirma «completas», porque nadie firmó.</summary>
+    public const string SinPartes = "Sin partes que firmen";
     public const string Firmo = "Firmó";
     public const string Pendiente = "Pendiente";
     public const string Rechazada = "Rechazada";
@@ -94,9 +96,9 @@ public sealed record TramiteFirmaResultado(
     /// <summary>Partes que ya firmaron (N de «N de M»).</summary>
     public int Firmaron => Partes.Count(p => p.Firmo);
 
-    /// <summary>«2 de 3 · Faltan firmas» / «3 de 3 · Firmas completas»; sin partes que firmen: «Firmas completas».</summary>
+    /// <summary>«2 de 3 · Faltan firmas» / «3 de 3 · Firmas completas»; sin partes que firmen: «Sin partes que firmen».</summary>
     public string TextoResumen => TotalPartes == 0
-        ? FirmaTextos.Completas
+        ? FirmaTextos.SinPartes
         : $"{Firmaron} de {TotalPartes} · {(FirmadoPorTodas ? FirmaTextos.Completas : FirmaTextos.Faltan)}";
 
     /// <summary><c>Vendedor: A · Comprador: B</c>; vacío si no falta nadie.</summary>

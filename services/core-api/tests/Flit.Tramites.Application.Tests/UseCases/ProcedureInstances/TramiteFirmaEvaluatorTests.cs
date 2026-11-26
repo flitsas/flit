@@ -223,6 +223,8 @@ public sealed class TramiteFirmaEvaluatorTests
         // Sin actores no hay a quién pedirle firma: no se reporta pendiente alguno.
         r.FirmadoPorTodas.Should().BeTrue();
         r.Pendientes.Should().BeEmpty();
+        // Y el texto no afirma «Firmas completas» donde nadie firmó.
+        r.TextoResumen.Should().Be("Sin partes que firmen");
     }
 
     [Fact]
