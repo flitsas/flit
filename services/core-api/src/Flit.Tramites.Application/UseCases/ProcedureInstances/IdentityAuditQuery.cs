@@ -24,7 +24,7 @@ public sealed record IdentityAuditEventDto(
     // aunque la validación ya se haya vuelto a intentar o aprobar. Ya es texto seguro (no delata el
     // mecanismo), así que se expone igual a todos (ver IdentityAuditParaCliente.Equivalente).
     string? RejectionReasonLabel = null,
-    // Quién aprobó/rechazó (nombre, correo, rol): SOLO para Super Admin y solo en manual_aprobado/manual_rechazado.
+    // Quién activó (manual_activado) o aprobó/rechazó (manual_aprobado/manual_rechazado) (nombre, correo, rol): SOLO para Super Admin.
     // Se resuelve al leer (la auditoría no guarda PII); null para cualquier otro caller.
     ReviewerInfo? Revisor = null,
     // Solo uso interno (resolver al revisor): nunca se serializa.
@@ -35,17 +35,22 @@ public static class IdentityAuditRevisor
 {
     private static readonly Regex UsuarioEnDetalle = new(@"usuario=([0-9a-fA-F-]{36})", RegexOptions.Compiled);
 
-    /// <summary>Extrae el guid de <c>usuario=&lt;guid&gt;</c> del Detail de un evento manual_aprobado/manual_rechazado.</summary>
+    /// <summary>
+    /// Extrae el guid de <c>usuario=&lt;guid&gt;</c> del Detail de un evento manual_activado (quien activó el flujo manual) o
+    /// manual_aprobado/manual_rechazado (quien lo resolvió).
+    /// </summary>
     public static Guid? ExtraerUsuario(string stage, string? detail)
     {
-        if (stage is not (IdentityValidationAuditStages.ManualAprobado or IdentityValidationAuditStages.ManualRechazado))
+        if (stage is not (IdentityValidationAuditStages.ManualActivado
+            or IdentityValidationAuditStages.ManualAprobado
+            or IdentityValidationAuditStages.ManualRechazado))
             return null;
         var m = detail is null ? null : UsuarioEnDetalle.Match(detail);
         return m is { Success: true } && Guid.TryParse(m.Groups[1].Value, out var id) ? id : null;
     }
 
     /// <summary>
-    /// Rellena <c>Revisor</c> en los eventos manual_aprobado/manual_rechazado. El llamador DEBE haber verificado que es Super Admin.
+    /// Rellena <c>Revisor</c> en los eventos manual_activado/manual_aprobado/manual_rechazado. El llamador DEBE haber verificado que es Super Admin.
     /// </summary>
     public static async Task<IdentityAuditResponse> AplicarAsync(
         IdentityAuditResponse response, IReviewerDirectory directory, CancellationToken ct = default)
