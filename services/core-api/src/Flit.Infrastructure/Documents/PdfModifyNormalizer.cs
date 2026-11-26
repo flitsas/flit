@@ -219,14 +219,14 @@ internal static class PdfModifyNormalizer
             or FormatException;
 
     /// <summary>DllNotFound / BadImageFormat / TypeLoad al cargar libpdfium o Skia en Alpine/musl.</summary>
-    private static bool IsNativePdfiumFailure(Exception ex) =>
+    internal static bool IsNativePdfiumFailure(Exception ex) =>
         ex is DllNotFoundException
             or BadImageFormatException
             or TypeLoadException
             or EntryPointNotFoundException;
 
     /// <summary>Excepciones del paquete PDFtoImage (PdfInvalidFormatException, etc.).</summary>
-    private static bool IsPdfiumLibraryException(Exception ex)
+    internal static bool IsPdfiumLibraryException(Exception ex)
     {
         for (var cur = ex; cur is not null; cur = cur.InnerException)
         {
