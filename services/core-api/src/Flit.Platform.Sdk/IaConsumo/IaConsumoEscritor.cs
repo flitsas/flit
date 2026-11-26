@@ -88,7 +88,8 @@ public sealed partial class IaCalculadoraCosto(IaConsumoOpciones opciones, TimeP
     /// <summary>
     /// Costo en USD de <paramref name="fila"/> con la tarifa vigente (<c>vigente_desde &lt;= fecha_inicio</c>, la más
     /// reciente) de (proveedor, modelo_respondido o, si es null, modelo_solicitado). Primero el id exacto, luego el id sin
-    /// sufijo de fecha (<c>claude-haiku-4-5-20251001</c> → <c>claude-haiku-4-5</c>).
+    /// sufijo de fecha: el de Anthropic (<c>claude-haiku-4-5-20251001</c> → <c>claude-haiku-4-5</c>) y el de OpenAI, con
+    /// guiones (<c>gpt-4o-2024-08-06</c> → <c>gpt-4o</c>).
     /// </summary>
     public static decimal? Calcular(IReadOnlyList<IaTarifaModelo> tarifas, IaConsumoLog fila)
     {
@@ -124,7 +125,7 @@ public sealed partial class IaCalculadoraCosto(IaConsumoOpciones opciones, TimeP
             .OrderByDescending(t => t.VigenteDesde)
             .FirstOrDefault();
 
-    [GeneratedRegex(@"-\d{8}$")]
+    [GeneratedRegex(@"-(\d{8}|\d{4}-\d{2}-\d{2})$")]
     private static partial Regex SufijoFecha();
 }
 
