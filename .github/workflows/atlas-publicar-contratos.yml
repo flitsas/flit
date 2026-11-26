@@ -1,7 +1,10 @@
 name: Contratos → Flit Atlas
 
 # Publica los contratos de FLIT 2.0 (OpenAPI, AsyncAPI y proto de contracts/, más los proto de core-ict) en Flit Atlas con el
-# workflow reutilizable de flit-atlas (atlas-publicar.yml, ATLAS-ADR-0035 de Atlas). Un job por contrato:
+# workflow reutilizable de flit-atlas (atlas-publicar.yml, ATLAS-ADR-0035 de Atlas). Un job por contrato, con la lista en
+# .github/ci/contratos-atlas.yml. En los PR y en develop solo corren los contratos cuyo archivo cambió (job «seleccion»,
+# .github/scripts/ci-contratos-atlas-seleccion.py): cada job se cobra redondeado al minuto y ~30 jobs de ~1 min por PR
+# eran ~2.650 min/semana. staging, release y workflow_dispatch corren todos.
 #   - pull_request: solo valida (vacuum y, en OpenAPI, oasdiff breaking contra la rama release o la rama base).
 #   - push a develop, staging o release (y workflow_dispatch): valida y publica con el token OIDC de GitHub Actions,
 #     sin secretos. develop publica X.Y.Z-dev.<sha7>, staging X.Y.Z-rc.<sha7> y release la versión estable X.Y.Z.
@@ -30,10 +33,16 @@ on:
     paths:
       - 'contracts/**'
       - '.github/workflows/atlas-publicar-contratos.yml'
+      - '.github/ci/contratos-atlas.yml'
+      - '.github/scripts/ci-contratos-atlas-seleccion.py'
+      - 'services/core-ict/src/Flit.Ict.Grpc.Contracts/Protos/**'
   pull_request:
     paths:
       - 'contracts/**'
       - '.github/workflows/atlas-publicar-contratos.yml'
+      - '.github/ci/contratos-atlas.yml'
+      - '.github/scripts/ci-contratos-atlas-seleccion.py'
+      - 'services/core-ict/src/Flit.Ict.Grpc.Contracts/Protos/**'
   workflow_dispatch:
 
 permissions: {}
@@ -43,54 +52,41 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  seleccion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matriz: ${{ steps.elegir.outputs.matriz }}
+      hay: ${{ steps.elegir.outputs.hay }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - id: elegir
+        env:
+          EVENTO: ${{ github.event_name }}
+          RAMA: ${{ github.ref_name }}
+          BASE: ${{ github.base_ref }}
+          ANTES: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          CONTRATOS: ${{ runner.temp }}/contratos-atlas.json
+        run: |
+          yq -o=json '.' .github/ci/contratos-atlas.yml > "$CONTRATOS"
+          python3 .github/scripts/ci-contratos-atlas-seleccion.py
+
   contrato:
     name: ${{ matrix.contrato }} (${{ matrix.tipo }})
+    needs: seleccion
+    if: needs.seleccion.outputs.hay == 'true'
     permissions:
       contents: read
       id-token: write
     strategy:
       fail-fast: false
-      matrix: &contratos
-        include:
-          # OpenAPI. Compartibles (los usan clientes de integración): external-api y core-ict.
-          # core-api: breaking como advertencia temporalmente por el Bug #14627. `validationId` de
-          # /api/v1/admin/tramites/{id}/validaciones-identidad/{reenviables,reenviar} pasa a nullable
-          # (antes siempre traía valor); oasdiff lo ve como incompatible. El único consumidor es el
-          # panel admin, que se actualiza en el mismo PR. Quitarlo cuando este cambio esté en release.
-          - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
-          # core-ict de staging aún no cumple lo compartible (45 errores de vacuum): lint: advertencia hasta que llegue la 1.1.0 de develop.
-          - { contrato: core-ict, aplicativo: flit2-core-ict, tipo: openapi, ruta: contracts/openapi/core-ict.v1.yaml, ruleset: compartible, lint: advertencia }
-          # diagnostico: breaking como advertencia solo para la 1.1.0. Agrega PLACA_MOTOCARRO al enum tipo_identificador de
-          # las respuestas (placa 123ABC, ajustes de Diagnóstico 2026-11-11, P7), que oasdiff ve como incompatible. El único
-          # consumidor es frontend-diagnostico, que se actualiza en el mismo PR. Quitarlo cuando la 1.1.0 esté en release.
-          - { contrato: diagnostico, aplicativo: flit2-core-diagnostico, tipo: openapi, ruta: contracts/openapi/diagnostico.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
-          - { contrato: external-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/external-api.v1.json, ruleset: compartible, lint: advertencia }
-          - { contrato: platform, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/platform.v1.yaml, ruleset: interno, lint: advertencia }
-          - { contrato: python-ml, aplicativo: flit2-python-ml, tipo: openapi, ruta: contracts/openapi/python-ml.v1.yaml, ruleset: interno, lint: advertencia }
-          # AsyncAPI 2.6 (ruleset de Atlas por defecto; vacuum no revisa 2.x). comun/sobre.v1.yaml no es un contrato:
-          # el workflow reutilizable resuelve sus $ref y publica cada documento completo.
-          - { contrato: consultas-events, aplicativo: flit2-core-consultas, tipo: asyncapi, ruta: contracts/asyncapi/consultas-events.v1.yaml }
-          - { contrato: domain-events, aplicativo: flit2-core-api, tipo: asyncapi, ruta: contracts/asyncapi/domain-events.v1.yaml }
-          - { contrato: notificaciones-events, aplicativo: flit2-core-notificaciones, tipo: asyncapi, ruta: contracts/asyncapi/notificaciones-events.v1.yaml }
-          - { contrato: plataforma-events, aplicativo: flit2-core-identity, tipo: asyncapi, ruta: contracts/asyncapi/plataforma-events.v1.yaml }
-          - { contrato: tramites-events, aplicativo: flit2-core-api, tipo: asyncapi, ruta: contracts/asyncapi/tramites-events.v1.yaml }
-          # proto (un archivo por contrato; los import entre archivos son advertencias en Atlas). Versión obligatoria.
-          - { contrato: comparendos, aplicativo: flit2-core-comparendos, tipo: proto, ruta: contracts/proto/flit/comparendos/v1/comparendos.proto, version: 1.0.0 }
-          - { contrato: consultas-administracion, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/administracion.proto, version: 1.0.0 }
-          - { contrato: consultas-certificaciones, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/certificaciones.proto, version: 1.0.0 }
-          - { contrato: consultas, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/consultas.proto, version: 1.0.0 }
-          - { contrato: consultas-fuentes-comparendos, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/fuentes_comparendos.proto, version: 1.1.0 }
-          - { contrato: consultas-resultado, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/resultado.proto, version: 1.0.0 }
-          - { contrato: consultas-validacion-identidad, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/validacion_identidad.proto, version: 1.0.0 }
-          - { contrato: identidad, aplicativo: flit2-core-identity, tipo: proto, ruta: contracts/proto/flit/identidad/v1/identidad.proto, version: 1.0.0 }
-          - { contrato: notificaciones-mensajes-muertos, aplicativo: flit2-core-notificaciones, tipo: proto, ruta: contracts/proto/flit/notificaciones/v1/mensajes_muertos.proto, version: 1.0.0 }
-          - { contrato: notificaciones, aplicativo: flit2-core-notificaciones, tipo: proto, ruta: contracts/proto/flit/notificaciones/v1/notificaciones.proto, version: 1.0.0 }
-          - { contrato: platform-errores, aplicativo: flit2-plataforma, tipo: proto, ruta: contracts/proto/flit/platform/v1/errores.proto, version: 1.0.0 }
-          - { contrato: platform-tipos, aplicativo: flit2-plataforma, tipo: proto, ruta: contracts/proto/flit/platform/v1/tipos.proto, version: 1.0.0 }
-          - { contrato: tramites-catalogos, aplicativo: flit2-core-api, tipo: proto, ruta: contracts/proto/flit/tramites/v1/catalogos.proto, version: 1.0.0 }
-          # flit.ict.v1 vive en core-ict, no en contracts/.
-          - { contrato: ict-orchestration, aplicativo: flit2-core-ict, tipo: proto, ruta: services/core-ict/src/Flit.Ict.Grpc.Contracts/Protos/ict_orchestration.proto, version: 1.0.0 }
-          - { contrato: ict-state-callback, aplicativo: flit2-core-ict, tipo: proto, ruta: services/core-ict/src/Flit.Ict.Grpc.Contracts/Protos/ict_state_callback.proto, version: 1.0.0 }
+      matrix: ${{ fromJSON(needs.seleccion.outputs.matriz) }}
     uses: flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@v1
     with:
       aplicativo: ${{ matrix.aplicativo }}
@@ -106,13 +102,14 @@ jobs:
 
   contratos-qa:
     name: QA · ${{ matrix.contrato }} (${{ matrix.tipo }})
-    if: github.ref_name == 'staging' && github.event_name != 'pull_request' && vars.ATLAS_URL_QA != ''
+    needs: seleccion
+    if: github.ref_name == 'staging' && github.event_name != 'pull_request' && vars.ATLAS_URL_QA != '' && needs.seleccion.outputs.hay == 'true'
     permissions:
       contents: read
       id-token: write
     strategy:
       fail-fast: false
-      matrix: *contratos
+      matrix: ${{ fromJSON(needs.seleccion.outputs.matriz) }}
     uses: flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@v1
     with:
       aplicativo: ${{ matrix.aplicativo }}
