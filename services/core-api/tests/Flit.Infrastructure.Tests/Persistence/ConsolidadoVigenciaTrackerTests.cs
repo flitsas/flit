@@ -334,6 +334,46 @@ public sealed class ConsolidadoVigenciaTrackerTests
     }
 
     [Fact]
+    public async Task SondeoQueRefrescaElPayloadDelProveedor_NoInvalidaNiSellaElExpediente()
+    {
+        // Bug #14631 (validación en PDN) — rechazo de Kyverum con intentos disponibles: el sondeo refresca
+        // provider_status/provider_payload (motivo del último intento para la UI), que cambia en cada
+        // consulta. FT2-0000446 seguía regenerándose cada 10 min tras el primer arreglo.
+        var dbName = Guid.NewGuid().ToString();
+        var id = await SeedAsync(dbName);
+        var validacionId = await SeedValidacionAsync(dbName, id);
+
+        await using (var db = NewDb(dbName))
+        {
+            var instancia = await db.ProcedureInstances.SingleAsync(p => p.Id == id, Ct);
+            Adjuntar(db, instancia, "fur");
+            await db.SaveChangesAsync(Ct);
+        }
+        await using (var db = NewDb(dbName))
+        {
+            var instancia = await db.ProcedureInstances.SingleAsync(p => p.Id == id, Ct);
+            instancia.ConsolidadoMaestroVigente = true;
+            instancia.ConsolidadoWizardVigente = true;
+            instancia.ExpedienteActualizadoEn = null;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using (var db = NewDb(dbName))
+        {
+            var v = await db.Set<ProcedureInstanceBiometricValidation>().SingleAsync(x => x.Id == validacionId, Ct);
+            v.ProviderStatus = "rechazado";
+            v.ProviderPayload = "{\"motivo\":\"rostro_no_coincide\",\"consultado\":\"2026-11-19T21:21:39Z\"}";
+            v.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        (await LeerMarcasAsync(dbName, id)).Should().Be((true, true));
+        await using var check = NewDb(dbName);
+        (await check.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == id, Ct))
+            .ExpedienteActualizadoEn.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ValidacionQueCambiaDeEstado_SiInvalidaAmbosConsolidados()
     {
         // La otra cara: cuando el sondeo SÍ trae novedad (aprobada, rechazada) el FUR cambia (sellos de
