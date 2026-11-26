@@ -110,11 +110,13 @@ public static class Programaciones
 /// <summary>Las programaciones de una empresa: solo sobre consultas guardadas de la empresa, nunca sobre una de fábrica.</summary>
 public sealed class RepositorioProgramaciones(ComparendosDb db, Reloj reloj)
 {
-    public async Task<IReadOnlyList<ConsultaProgramadaDto>> ListarAsync(Guid tenant, CancellationToken ct)
+    /// <summary>Los envíos de la empresa. Con <paramref name="dueno"/> solo los suyos (cada usuario ve y toca lo que programó);
+    /// sin él, todos: es la vista de soporte del SuperAdmin.</summary>
+    public async Task<IReadOnlyList<ConsultaProgramadaDto>> ListarAsync(Guid tenant, Guid? dueno, CancellationToken ct)
     {
         var filas = await (from p in db.ConsultasProgramadas.AsNoTracking()
                            join q in db.ConsultasGuardadas.AsNoTracking() on p.ConsultaId equals q.Id
-                           where p.TenantId == tenant
+                           where p.TenantId == tenant && (dueno == null || p.CreadoPor == dueno)
                            orderby q.Nombre, p.CreadoEn
                            select new { p, q.Nombre }).ToListAsync(ct).ConfigureAwait(false);
         return filas.Select(x => Programaciones.Dto(x.p, x.Nombre)).ToList();
@@ -132,8 +134,9 @@ public sealed class RepositorioProgramaciones(ComparendosDb db, Reloj reloj)
                 : "Solo se programan tus propias consultas guardadas.");
 
         ConsultaProgramada? p = null;
+        // Solo su dueño la edita: con el id de otro usuario de la empresa, la reasignaría y le cambiaría el envío sin saberlo.
         if (pedido.Id is { } id)
-            p = await db.ConsultasProgramadas.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenant, ct).ConfigureAwait(false)
+            p = await db.ConsultasProgramadas.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenant && x.CreadoPor == usuario, ct).ConfigureAwait(false)
                 ?? throw ReglaException.NoEncontrado("La programación");
         if (p is null)
         {
@@ -152,9 +155,11 @@ public sealed class RepositorioProgramaciones(ComparendosDb db, Reloj reloj)
         return Programaciones.Dto(p, consulta.Nombre);
     }
 
-    public async Task BorrarAsync(Guid tenant, Guid id, CancellationToken ct)
+    /// <summary>Solo su dueño la borra; la de otro usuario de la empresa responde igual que una que no existe.</summary>
+    public async Task BorrarAsync(Guid tenant, Guid usuario, Guid id, CancellationToken ct)
     {
-        var borradas = await db.ConsultasProgramadas.Where(x => x.Id == id && x.TenantId == tenant).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        var borradas = await db.ConsultasProgramadas.Where(x => x.Id == id && x.TenantId == tenant && x.CreadoPor == usuario)
+            .ExecuteDeleteAsync(ct).ConfigureAwait(false);
         if (borradas == 0)
             throw ReglaException.NoEncontrado("La programación");
     }
