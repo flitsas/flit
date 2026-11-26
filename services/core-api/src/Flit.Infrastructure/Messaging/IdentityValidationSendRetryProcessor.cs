@@ -70,12 +70,13 @@ internal sealed class IdentityValidationSendRetryProcessor(
         var resolver = scope.ServiceProvider.GetRequiredService<IIdentityValidationProviderResolver>();
         var secretProtector = scope.ServiceProvider.GetRequiredService<IWebhookSecretProtector>();
         var events = scope.ServiceProvider.GetRequiredService<IIdentityValidationEventPublisher>();
+        var audit = scope.ServiceProvider.GetRequiredService<IIdentityValidationAuditLog>();
 
         // El DbContext usa EnableRetryOnFailure → las transacciones manuales deben ejecutarse dentro de la
         // execution strategy (que reintenta el bloque completo ante fallos transitorios de BD).
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
-            await ProcessOneAsync(db, resolver, secretProtector, events, ct));
+            await ProcessOneAsync(db, resolver, secretProtector, events, audit, ct));
     }
 
     private async Task<bool> ProcessOneAsync(
@@ -83,6 +84,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
         IIdentityValidationProviderResolver resolver,
         IWebhookSecretProtector secretProtector,
         IIdentityValidationEventPublisher events,
+        IIdentityValidationAuditLog audit,
         CancellationToken ct)
     {
         db.ChangeTracker.Clear(); // estado limpio en cada (re)intento de la strategy
@@ -146,6 +148,12 @@ internal sealed class IdentityValidationSendRetryProcessor(
                 Parte = v.PartyRole,
                 ProviderVerificationId = result.VerificationId,
             }, ct);
+
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Send, IdentityValidationAuditOutcomes.Ok,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: result.VerificationId, PartyRole: v.PartyRole,
+                Message: "Enlace de captura creado en Kyverum tras la cola de envío."), ct);
 
             SendRetryLog.Sent(logger, v.Id, v.Provider, intentosDeEnvio);
         }

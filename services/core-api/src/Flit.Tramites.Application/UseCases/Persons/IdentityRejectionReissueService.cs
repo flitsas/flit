@@ -61,6 +61,11 @@ internal sealed class IdentityRejectionReissueService(
                     PartyRole: validation.PartyRole,
                     Message: $"Ronda {rondaCerrada + 1} abierta: enlace nuevo con 0 de {validation.MaxAttempts} intentos.",
                     Detail: $"ronda={rondaCerrada + 1}"), ct);
+                await audit.LogAsync(new IdentityValidationAuditEntry(
+                    IdentityValidationAuditStages.Resend, IdentityValidationAuditOutcomes.Ok,
+                    TenantId: validation.TenantId, ValidationId: validation.Id, KyverumVerificationId: validation.KyverumVerificationId,
+                    PartyRole: validation.PartyRole,
+                    Message: "Enlace de captura reenviado a la persona tras el rechazo (reemisión automática)."), ct);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

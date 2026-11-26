@@ -57,12 +57,28 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
 
     public async Task<int> CountRoundsForPersonAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default)
     {
+        // Un ciclo de rondas empieza de cero cuando venció una aprobación: desde esa fecha solo cuentan las
+        // validaciones creadas después. Las aprobadas no cuentan como ronda (aprobar no es un intento fallido);
+        // el historial sigue en la bitácora.
         const string sql = """
-            SELECT COUNT(*)::int + COALESCE(SUM(resend_count), 0)::int
-            FROM tramites.procedure_instance_biometric_validations
-            WHERE tenant_id = @tenant
-              AND upper(btrim(document_type)) = upper(btrim(@tipo))
-              AND upper(btrim(document_number)) = upper(btrim(@documento))
+            WITH reinicio AS (
+                SELECT MAX(valid_until) AS hasta
+                FROM tramites.procedure_instance_biometric_validations
+                WHERE tenant_id = @tenant
+                  AND upper(btrim(document_type)) = upper(btrim(@tipo))
+                  AND upper(btrim(document_number)) = upper(btrim(@documento))
+                  AND status = 'aprobado'
+                  AND valid_until IS NOT NULL
+                  AND valid_until <= now()
+            )
+            SELECT COUNT(*)::int + COALESCE(SUM(v.resend_count), 0)::int
+            FROM tramites.procedure_instance_biometric_validations v
+            CROSS JOIN reinicio r
+            WHERE v.tenant_id = @tenant
+              AND upper(btrim(v.document_type)) = upper(btrim(@tipo))
+              AND upper(btrim(v.document_number)) = upper(btrim(@documento))
+              AND v.status <> 'aprobado'
+              AND (r.hasta IS NULL OR v.created_at >= r.hasta)
             """;
         var total = await WithCommandAsync(sql, cmd =>
         {
