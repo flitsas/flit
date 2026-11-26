@@ -157,7 +157,8 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
     private static bool PideColumnaFirma(QueryDefinition definition) =>
         definition.Columnas.Any(c =>
-            c == OtQueryFieldCatalog.FaltaFirmar || c == OtQueryFieldCatalog.FirmadoPorTodas);
+            c == OtQueryFieldCatalog.FaltaFirmar || c == OtQueryFieldCatalog.FirmadoPorTodas
+            || c == OtQueryFieldCatalog.FirmaVendedor || c == OtQueryFieldCatalog.FirmaComprador);
 
     /// <summary>
     /// Carga el grafo de los trámites (tipo, actores, validaciones; siempre acotado al organismo y a sus
@@ -544,7 +545,9 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 ? causales.GetValueOrDefault(ev, [])
                 : [],
             FirmadoPorTodas: row.Firma?.FirmadoPorTodas,
-            FaltaFirmar: row.Firma?.TextoPendientes);
+            FaltaFirmar: row.Firma?.TextoPendientes,
+            FirmasResumen: row.Firma?.TextoResumen,
+            FirmasPersonas: FirmaDtoMapper.Personas(row.Firma));
 
     // ── Catálogo de campos ────────────────────────────────────────────────────────────────────
 

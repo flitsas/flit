@@ -108,7 +108,11 @@ public sealed record CompanyQueryRowDto(
     /// <summary>HU #14699: ¿firmaron todas las partes? <c>null</c> si la consulta no lo calculó.</summary>
     bool? FirmadoPorTodas = null,
     /// <summary>HU #14699: «Vendedor: A · Comprador: B (rechazada)»; vacío si ya firmaron; <c>null</c> si no se calculó.</summary>
-    string? FaltaFirmar = null);
+    string? FaltaFirmar = null,
+    /// <summary>Resumen «2 de 3 · Faltan firmas»; <c>null</c> si la consulta no calculó la firma.</summary>
+    string? FirmasResumen = null,
+    /// <summary>Firma por persona que debe firmar; <c>null</c> si la consulta no calculó la firma.</summary>
+    IReadOnlyList<Flit.Queries.Domain.FirmaPersonaDto>? FirmasPersonas = null);
 
 /// <summary>
 /// El resultado de una consulta de empresa.

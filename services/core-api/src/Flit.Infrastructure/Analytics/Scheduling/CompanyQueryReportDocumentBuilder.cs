@@ -31,7 +31,7 @@ internal sealed class CompanyQueryReportDocumentBuilder(
             return null;
 
         return await ExecuteAsync(
-            saved, page => repo.ExecuteAsync(tenantId, page, ct));
+            saved, page => repo.ExecuteAsync(tenantId, page, ct), todasCompanias: false);
     }
 
     /// <summary>Alcance "superadmin": SavedQuery de equipo, ejecutada sobre todas las compañías.
@@ -43,11 +43,11 @@ internal sealed class CompanyQueryReportDocumentBuilder(
             return null;
 
         return await ExecuteAsync(
-            saved, page => repo.ExecuteForSuperAdminAsync(page, ct));
+            saved, page => repo.ExecuteForSuperAdminAsync(page, ct), todasCompanias: true);
     }
 
     private static async Task<Result> ExecuteAsync(
-        SavedQueryDto saved, Func<QueryRequest, Task<CompanyQueryResultDto>> execute)
+        SavedQueryDto saved, Func<QueryRequest, Task<CompanyQueryResultDto>> execute, bool todasCompanias)
     {
         var rows = new List<CompanyQueryRowDto>();
         var maxActores = default(MaxActoresPorRolDto);
@@ -76,7 +76,15 @@ internal sealed class CompanyQueryReportDocumentBuilder(
             rows = rows.Take(RowCap).ToList();
 
         var sheet = CompanyQueryReportColumns.BuildSheet("Consulta", saved.Definition.Columnas, rows, maxActores);
-        var bytes = TabularWorkbookWriter.Write([sheet]);
+        var sheets = new List<TabularWorkbookWriter.Sheet> { sheet };
+        // Misma lista de filas que la hoja principal: una fila por persona que debe firmar.
+        var firmas = FirmasPorPersonaSheet.Build(
+            rows.Select(r => new FirmasPorPersonaSheet.Fila(
+                r.ReferenceNumber, r.TransitOfficeName, r.CompaniaNombre, r.ProcedureTypeName, r.FirmasPersonas)).ToList(),
+            incluirOrganismo: true, incluirCompania: todasCompanias);
+        if (firmas is not null)
+            sheets.Add(firmas);
+        var bytes = TabularWorkbookWriter.Write(sheets);
         return new Result(bytes, saved.Nombre, total, truncated);
     }
 }

@@ -42,6 +42,12 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
     /// <summary>Épica #14666 / HU #14700 (A3): quién falta por firmar. Solo columna, sin filtro.</summary>
     public const string FaltaFirmar = "falta_firmar";
 
+    /// <summary>Estado de firma por vendedor (una columna por persona en el Excel). Solo columna.</summary>
+    public const string FirmaVendedor = "firma_vendedor";
+
+    /// <summary>Estado de firma por comprador (una columna por persona en el Excel). Solo columna.</summary>
+    public const string FirmaComprador = "firma_comprador";
+
     public const string GrupoVehiculo = "Vehículo";
     public const string GrupoPersonas = "Personas";
     public const string GrupoTramite = "Trámite";
@@ -80,6 +86,12 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         new("revocado", "Revocado"),
     ];
 
+    private static readonly QueryFieldOptionDto[] FirmasOptions =
+    [
+        new("true", "Completas"),
+        new("false", "Faltan firmas"),
+    ];
+
     private static readonly QueryFieldOptionDto[] SiNoOptions =
     [
         new("true", "Sí"),
@@ -96,7 +108,7 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
 
     /// <summary>Ayudas del campo «Firmado por todas las partes»: IDÉNTICAS a las de las consultas del gestor.</summary>
     public const string FirmadoPorTodasHint =
-        "Sí: todas las partes del trámite ya firmaron. No: falta firmar al menos una.";
+        "Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una.";
 
     /// <summary>Ayuda del campo «Falta firmar»: idéntica a la de las consultas del gestor.</summary>
     public const string FaltaFirmarHint =
@@ -108,11 +120,15 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
     /// </summary>
     internal static QueryFieldDto[] CamposFirma { get; } =
     [
-        new(FirmadoPorTodas, "Firmado por todas las partes", QueryFieldKind.Booleano, GrupoPersonas,
-            BooleanoOperators, SiNoOptions, FirmadoPorTodasHint, AdmiteLista: false),
+        new(FirmadoPorTodas, "Firmas", QueryFieldKind.Booleano, GrupoPersonas,
+            BooleanoOperators, FirmasOptions, FirmadoPorTodasHint, AdmiteLista: false),
         // Sin operadores = solo columna: el normalizador descarta cualquier condición sobre él.
         new(FaltaFirmar, "Falta firmar", QueryFieldKind.Texto, GrupoPersonas, [], [],
             FaltaFirmarHint, AdmiteLista: false),
+        new(FirmaVendedor, "Firma vendedor", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Firmó, Pendiente o Rechazada, por cada vendedor.", AdmiteLista: false),
+        new(FirmaComprador, "Firma comprador", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Firmó, Pendiente o Rechazada, por cada comprador.", AdmiteLista: false),
     ];
 
     private static readonly QueryFieldDto[] All =

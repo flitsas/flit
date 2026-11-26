@@ -153,6 +153,38 @@ public sealed class TramiteFirmaEvaluatorTests
     }
 
     [Fact]
+    public void Resumen_dos_de_tres_y_estado_por_persona()
+    {
+        var t = Tramite(ProcedureTypeFixture.Traspaso,
+            ("vendedor", "Ana Vendedora", "9000000001"),
+            ("comprador", "Comprador Uno", "9000000002"), ("comprador", "Comprador Dos", "9000000004"));
+        t.BiometricValidations.Add(Validacion("comprador", "9000000004", BiometricEstados.Rechazado));
+
+        var r = _sut.Evaluar(t, Ctx("9000000001", "9000000002"), Now);
+
+        r.TotalPartes.Should().Be(3);
+        r.Firmaron.Should().Be(2);
+        r.TextoResumen.Should().Be("2 de 3 · Faltan firmas");
+        r.Partes.Select(p => (p.Rol, p.Ordinal, p.Estado)).Should().Equal(
+            ("Vendedor", 1, "Firmó"), ("Comprador", 1, "Firmó"), ("Comprador", 2, "Rechazada"));
+        r.Partes[0].Documento.Should().Be("9000000001");
+    }
+
+    [Fact]
+    public void Persona_sin_validacion_es_sin_validar_y_completas_dice_firmas_completas()
+    {
+        var t = Tramite(ProcedureTypeFixture.Matricula, ("comprador", "Luis Comprador", "9000000002"));
+
+        var sin = _sut.Evaluar(t, Ctx(), Now);
+        var con = _sut.Evaluar(t, Ctx("9000000002"), Now);
+
+        sin.Partes.Single().Estado.Should().Be("Sin validar");
+        sin.TextoResumen.Should().Be("0 de 1 · Faltan firmas");
+        con.TextoResumen.Should().Be("1 de 1 · Firmas completas");
+        con.Partes.Single().Estado.Should().Be("Firmó");
+    }
+
+    [Fact]
     public void Firma_previa_vigente_de_otro_tramite_cuenta_como_firmada()
     {
         // La identidad vigente de la PERSONA (clave en lote) acredita sin fila propia en el trámite.

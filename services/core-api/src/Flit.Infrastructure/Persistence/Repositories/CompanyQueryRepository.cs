@@ -181,7 +181,8 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
     private static bool PideColumnaFirma(QueryDefinition definition) =>
         definition.Columnas.Any(c =>
-            c == CompanyQueryFieldCatalog.FaltaFirmar || c == CompanyQueryFieldCatalog.FirmadoPorTodas);
+            c == CompanyQueryFieldCatalog.FaltaFirmar || c == CompanyQueryFieldCatalog.FirmadoPorTodas
+            || c == CompanyQueryFieldCatalog.FirmaVendedor || c == CompanyQueryFieldCatalog.FirmaComprador);
 
     /// <summary>
     /// Carga el grafo de los trámites (tipo, actores, validaciones; siempre acotado a los tenants de la
@@ -665,9 +666,11 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 : null,
             DiasEnOrganismo: row.DiasEnOrganismo,
             Devoluciones: row.Devoluciones,
-            Actores: actores.GetValueOrDefault(row.Instance.Id) ?? [],
+            Actores: FirmaDtoMapper.ConFirma(actores.GetValueOrDefault(row.Instance.Id) ?? [], row.Firma),
             FirmadoPorTodas: row.Firma?.FirmadoPorTodas,
-            FaltaFirmar: row.Firma?.TextoPendientes);
+            FaltaFirmar: row.Firma?.TextoPendientes,
+            FirmasResumen: row.Firma?.TextoResumen,
+            FirmasPersonas: FirmaDtoMapper.Personas(row.Firma));
 
     // ── Validación de identidad por persona ───────────────────────────────────────────────────
 
