@@ -36,7 +36,8 @@ internal sealed class AiProviderRouter(
         CancellationToken cancellationToken,
         string? model = null,
         int? maxTokens = null,
-        int? timeoutSeconds = null) =>
+        int? timeoutSeconds = null,
+        AiVisionPerfil perfil = AiVisionPerfil.Lectura) =>
         InvokeAsync(
             toolCode,
             async (providerCode, ct) =>
@@ -45,7 +46,7 @@ internal sealed class AiProviderRouter(
                     return AiProviderCallResult.Fail(503, "provider_adapter_missing");
 
                 return await provider
-                    .SendVisionAsync(base64, mediaType, prompt, ct, model, maxTokens, timeoutSeconds)
+                    .SendVisionAsync(base64, mediaType, prompt, ct, model, maxTokens, timeoutSeconds, perfil)
                     .ConfigureAwait(false);
             },
             cancellationToken);

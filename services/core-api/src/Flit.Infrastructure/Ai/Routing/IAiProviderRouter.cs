@@ -13,7 +13,8 @@ internal interface IAiProviderRouter
         CancellationToken cancellationToken,
         string? model = null,
         int? maxTokens = null,
-        int? timeoutSeconds = null);
+        int? timeoutSeconds = null,
+        AiVisionPerfil perfil = AiVisionPerfil.Lectura);
 
     Task<AiRouterResult> InvokeChatAsync(
         string toolCode,
