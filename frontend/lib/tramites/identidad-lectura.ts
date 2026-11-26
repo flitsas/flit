@@ -64,6 +64,10 @@ const ETAPAS_VISIBLES = new Set([
   'expired',
   'webhook_received',
   'webhook_applied',
+  // Rondas de identidad: cierre de una ronda por rechazo, reemisión y agotamiento.
+  'ronda_rechazada',
+  'ronda_reemitida',
+  'ronda_agotada',
   // Flujo manual (Épica #13202). Se omiten consentimiento, enlace copiado e imágenes consultadas:
   // son actos internos de soporte que no le dicen nada al gestor.
   'manual_activado',
@@ -203,7 +207,15 @@ export function hitosDeIdentidad(
   v: BiometricValidation,
   eventos: readonly IdentityAuditEvent[],
 ): HitoIdentidad[] {
-  const visibles = colapsarRepetidos(eventos.filter((e) => ETAPAS_VISIBLES.has(e.stage)));
+  // Una consulta de respaldo a Kyverum solo se muestra cuando cierra la validación (aprobada o rechazada);
+  // los sondeos que siguen pendientes no le dicen nada a la persona ni al gestor.
+  const visibles = colapsarRepetidos(
+    eventos.filter(
+      (e) =>
+        ETAPAS_VISIBLES.has(e.stage) ||
+        (e.stage === 'reconcile' && (e.outcome === 'aprobado' || e.outcome === 'rechazado')),
+    ),
+  );
   const envio = [...visibles]
     .reverse()
     .find((e) => ['send', 'resend', 'manual_activado', 'manual_enlace_regenerado'].includes(e.stage))
@@ -248,6 +260,30 @@ export function hitosDeIdentidad(
           titulo: 'Se corrigieron sus datos de contacto',
           detalle: null,
           tono: 'neutro',
+        };
+
+      case 'ronda_rechazada':
+        return {
+          ...base,
+          titulo: 'Ronda cerrada en rechazo',
+          detalle: e.message?.trim() || null,
+          tono: 'alerta',
+        };
+
+      case 'ronda_reemitida':
+        return {
+          ...base,
+          titulo: 'Se abrió una ronda nueva con enlace nuevo',
+          detalle: e.message?.trim() || null,
+          tono: 'neutro',
+        };
+
+      case 'ronda_agotada':
+        return {
+          ...base,
+          titulo: 'Se agotaron las rondas de la persona',
+          detalle: e.message?.trim() || null,
+          tono: 'alerta',
         };
 
       case 'expired':

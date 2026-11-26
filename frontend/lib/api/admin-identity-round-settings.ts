@@ -19,9 +19,16 @@ export interface IdentityRoundSettings {
   rondasMaximas: number;
   disparadorAlerta: DisparadorAlerta;
   correosAlerta: string[];
+  /** false: sin límite de rondas; soporte recibe alerta cada `umbralAlertaSoporte` validaciones. */
+  limiteActivo?: boolean;
+  umbralAlertaSoporte?: number;
 }
 
-export type CampoRondas = "rondasMaximas" | "disparadorAlerta" | "correosAlerta";
+export const UMBRAL_MIN = 1;
+export const UMBRAL_MAX = 20;
+export const UMBRAL_POR_DEFECTO = 3;
+
+export type CampoRondas = "rondasMaximas" | "disparadorAlerta" | "correosAlerta" | "umbralAlertaSoporte";
 
 export function getIdentityRoundSettings(signal?: AbortSignal): Promise<IdentityRoundSettings> {
   return apiFetch<IdentityRoundSettings>(RUTA, { method: "GET", signal });
@@ -34,6 +41,8 @@ export function putIdentityRoundSettings(body: IdentityRoundSettings): Promise<I
       rondasMaximas: body.rondasMaximas,
       disparadorAlerta: body.disparadorAlerta,
       correosAlerta: body.correosAlerta,
+      limiteActivo: body.limiteActivo ?? true,
+      umbralAlertaSoporte: body.umbralAlertaSoporte ?? UMBRAL_POR_DEFECTO,
     },
   });
 }

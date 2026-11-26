@@ -27,6 +27,58 @@ public sealed class IdentityRoundsTests
     // ── Validación de la configuración (dominio) ─────────────────────────────────
 
     [Fact]
+    public void SinLimite_NoBloqueaNingunaRonda_AunqueSuperenElMaximo()
+    {
+        var config = IdentityRoundsConfig.Create(3, IdentityRoundsAlertTriggers.AlMaximo, [], limiteActivo: false);
+
+        config.AllowsNewRound(3).Should().BeTrue();
+        config.AllowsNewRound(50).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SinLimite_AvisaASoporteCadaUmbralDeValidacionesDeLaPersona()
+    {
+        var config = IdentityRoundsConfig.Create(3, IdentityRoundsAlertTriggers.AlMaximo, [], limiteActivo: false, umbralAlertaSoporte: 3);
+
+        config.ShouldAlert(1).Should().BeFalse();
+        config.ShouldAlert(2).Should().BeFalse();
+        config.ShouldAlert(3).Should().BeTrue();
+        config.ShouldAlert(4).Should().BeFalse();
+        config.ShouldAlert(6).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ConLimite_LaRegla_NoCambia()
+    {
+        var config = IdentityRoundsConfig.Create(3, IdentityRoundsAlertTriggers.AlMaximo, []);
+
+        config.LimiteActivo.Should().BeTrue();
+        config.AllowsNewRound(2).Should().BeTrue();
+        config.AllowsNewRound(3).Should().BeFalse();
+        config.ShouldAlert(2).Should().BeFalse();
+        config.ShouldAlert(3).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(21)]
+    public void Create_RechazaUmbralFueraDeRango(int umbral)
+    {
+        var act = () => IdentityRoundsConfig.Create(3, IdentityRoundsAlertTriggers.AlMaximo, [], umbralAlertaSoporte: umbral);
+
+        act.Should().Throw<IdentityRoundsConfigException>()
+            .Which.Errors.Should().ContainKey("umbralAlertaSoporte");
+    }
+
+    [Fact]
+    public void Default_TrayectoriaDeFabricaConLimiteActivoYUmbralTres()
+    {
+        IdentityRoundsConfig.Default.LimiteActivo.Should().BeTrue();
+        IdentityRoundsConfig.Default.UmbralAlertaSoporte.Should().Be(3);
+    }
+
+
+    [Fact]
     public void Default_Es3RondasAlMaximoSinCorreos()
     {
         var d = IdentityRoundsConfig.Default;

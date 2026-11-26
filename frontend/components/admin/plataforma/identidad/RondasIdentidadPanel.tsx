@@ -4,11 +4,16 @@ import { buttonClass } from "@flit/ui/Button";
 import { Icono } from "@flit/ui/Icono";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OptionCard } from "@/components/admin/companies/ConfigUi";
+import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { CarLoader } from "@/components/atom/CarLoader";
 import { InlineAlert } from "@/components/atom/InlineAlert";
+import { useToast } from "@/components/admin/Toast";
 import {
   MAX_CORREOS,
   RONDAS_MAX,
+  UMBRAL_MAX,
+  UMBRAL_MIN,
+  UMBRAL_POR_DEFECTO,
   RONDAS_MIN,
   getIdentityRoundSettings,
   interpretarErrorRondas,
@@ -28,6 +33,8 @@ interface Borrador {
   rondas: string;
   disparador: DisparadorAlerta;
   correos: string[];
+  limite: boolean;
+  umbral: string;
 }
 
 type Errores = Partial<Record<CampoRondas, string>>;
@@ -45,6 +52,8 @@ function aBorrador(s: IdentityRoundSettings): Borrador {
     rondas: String(s.rondasMaximas),
     disparador: s.disparadorAlerta,
     correos: s.correosAlerta.map(normalizarCorreo),
+    limite: s.limiteActivo ?? true,
+    umbral: String(s.umbralAlertaSoporte ?? UMBRAL_POR_DEFECTO),
   };
 }
 
@@ -52,6 +61,8 @@ function iguales(a: Borrador, b: Borrador): boolean {
   return (
     a.rondas.trim() === b.rondas.trim() &&
     a.disparador === b.disparador &&
+    a.limite === b.limite &&
+    a.umbral.trim() === b.umbral.trim() &&
     a.correos.length === b.correos.length &&
     a.correos.every((c, i) => c === b.correos[i])
   );
@@ -72,7 +83,7 @@ export function RondasIdentidadPanel() {
   const [nuevoCorreo, setNuevoCorreo] = useState("");
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [resultado, setResultado] = useState<{ ok: boolean; texto: string } | null>(null);
+  const { show } = useToast();
   const rondasRef = useRef<HTMLInputElement>(null);
   const correoRef = useRef<HTMLInputElement>(null);
 
@@ -112,7 +123,6 @@ export function RondasIdentidadPanel() {
   const cambiarRondas = (v: string) => {
     setBorrador((b) => (b ? { ...b, rondas: v } : b));
     setErrores((e) => ({ ...e, rondasMaximas: undefined }));
-    setResultado(null);
   };
 
   const agregarCorreo = () => {
@@ -127,14 +137,12 @@ export function RondasIdentidadPanel() {
     setNuevoCorreo("");
     setErrorNuevo(null);
     setErrores((e) => ({ ...e, correosAlerta: undefined }));
-    setResultado(null);
     correoRef.current?.focus();
   };
 
   const quitarCorreo = (correo: string) => {
     setBorrador((b) => (b ? { ...b, correos: b.correos.filter((c) => c !== correo) } : b));
     setErrores((e) => ({ ...e, correosAlerta: undefined }));
-    setResultado(null);
     correoRef.current?.focus();
   };
 
@@ -144,13 +152,11 @@ export function RondasIdentidadPanel() {
     setErrorGeneral(null);
     setNuevoCorreo("");
     setErrorNuevo(null);
-    setResultado(null);
   };
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!borrador || !puedeGuardar) return;
-    setResultado(null);
     setErrorGeneral(null);
     setErrores({});
     setGuardando(true);
@@ -159,21 +165,23 @@ export function RondasIdentidadPanel() {
         rondasMaximas: Number(borrador.rondas.trim()),
         disparadorAlerta: borrador.disparador,
         correosAlerta: borrador.correos,
+        limiteActivo: borrador.limite,
+        umbralAlertaSoporte: Number(borrador.umbral.trim()),
       });
       setPersistido(guardado);
       setBorrador(aBorrador(guardado));
-      setResultado({ ok: true, texto: "Configuración guardada. Aplica a las próximas validaciones de identidad." });
+      show("Configuración guardada. Aplica a las próximas validaciones de identidad.", "success");
     } catch (err) {
       const r = interpretarErrorRondas(err);
       if (r.tipo === "invalido") {
         setErrores(r.errores);
         setErrorGeneral(r.general);
-        setResultado({ ok: false, texto: "No se guardó: revisa los campos marcados." });
+        show("No se guardó: revisa los campos marcados.", "error");
         if (r.errores.rondasMaximas) rondasRef.current?.focus();
         else if (r.errores.correosAlerta) correoRef.current?.focus();
       } else {
         setErrorGeneral(r.mensaje);
-        setResultado({ ok: false, texto: `No se guardó. ${r.mensaje}` });
+        show(`No se guardó. ${r.mensaje}`, "error");
       }
     } finally {
       setGuardando(false);
@@ -255,6 +263,54 @@ export function RondasIdentidadPanel() {
         ) : null}
       </div>
 
+      <div data-testid="rondas-identidad-limite">
+        <ToggleSwitch
+          id="limite-rondas-activo"
+          label="Límite de rondas"
+          description={
+            borrador.limite
+              ? "Cuando una persona llega al máximo de rondas, no puede pedir otra validación de identidad."
+              : "Sin límite: ninguna validación se bloquea por rondas. Operación recibe una alerta cada cierto número de validaciones de la persona."
+          }
+          hint="Por defecto: activado."
+          state={{ on: "Activo", off: "Sin límite", onTone: "success", offTone: "warning" }}
+          checked={borrador.limite}
+          disabled={guardando}
+          onChange={(checked) => {
+            setBorrador((b) => (b ? { ...b, limite: checked } : b));
+          }}
+        />
+        {!borrador.limite ? (
+          <div className="mt-3 flex flex-col gap-1">
+            <label htmlFor="umbral-alerta" className="text-xs font-semibold text-flit-primary">
+              Avisar a operación cada
+            </label>
+            <input
+              id="umbral-alerta"
+              name="umbralAlertaSoporte"
+              type="number"
+              inputMode="numeric"
+              step={1}
+              min={UMBRAL_MIN}
+              max={UMBRAL_MAX}
+              value={borrador.umbral}
+              onChange={(e) => {
+                setBorrador((b) => (b ? { ...b, umbral: e.target.value } : b));
+              }}
+              disabled={guardando}
+              aria-invalid={errores.umbralAlertaSoporte ? true : undefined}
+              className="w-28 rounded-xl border border-border bg-card px-3 py-2 font-mono text-sm text-flit-primary"
+            />
+            <span className="text-xs text-muted-foreground">validaciones de la misma persona ({UMBRAL_MIN} a {UMBRAL_MAX}).</span>
+            {errores.umbralAlertaSoporte ? (
+              <p role="alert" className="text-xs font-semibold text-[color:var(--badge-danger-fg)]">
+                {errores.umbralAlertaSoporte}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       <fieldset className="rounded-2xl border border-border bg-card p-4" aria-describedby="disparador-hint">
         <legend className="px-1 text-sm font-semibold text-flit-primary">Cuándo avisar a operación</legend>
         <p id="disparador-hint" className="mt-0.5 text-xs leading-snug text-muted-foreground">
@@ -272,7 +328,6 @@ export function RondasIdentidadPanel() {
               disabled={guardando}
               onChange={() => {
                 setBorrador((b) => (b ? { ...b, disparador: d.valor } : b));
-                setResultado(null);
               }}
             />
           ))}
@@ -399,14 +454,7 @@ export function RondasIdentidadPanel() {
         </button>
       </div>
 
-      <p
-        data-testid="rondas-identidad-resultado"
-        role="status"
-        aria-live="polite"
-        className={`text-xs font-semibold ${resultado && !resultado.ok ? "text-[color:var(--badge-danger-fg)]" : "text-flit-primary"}`}
-      >
-        {resultado?.texto ?? ""}
-      </p>
+
     </form>
   );
 }

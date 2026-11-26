@@ -387,6 +387,15 @@ public sealed class IniciarPrevalidacionHandler(
 
         procedureRepo.Add(validation);
 
+        if (audit is not null)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Send, IdentityValidationAuditOutcomes.Ok,
+                TenantId: tenantId, ValidationId: validation.Id, KyverumVerificationId: provider.VerificationId,
+                PartyRole: ParteDe(mandateSignerId, portal),
+                Message: "Enlace de captura creado en Kyverum."), ct);
+        }
+
         await events.PublishAsync(new IdentityValidationRequested
         {
             TenantId = tenantId,
