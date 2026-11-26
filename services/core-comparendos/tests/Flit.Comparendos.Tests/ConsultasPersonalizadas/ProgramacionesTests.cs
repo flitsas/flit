@@ -52,6 +52,14 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         Programaciones.Proxima(Programaciones.Semanal, 6, null, new TimeOnly(1, 0), Col(2026, 10, 9, 23)).Should().Be(Col(2026, 10, 10, 1));
     }
 
+    [Fact]
+    public void Correo_CuentaLosComparendosEnSingularYPlural()
+    {
+        EnvioConsultasProgramadas.Cantidad(1).Should().Be("1 comparendo");
+        EnvioConsultasProgramadas.Cantidad(0).Should().Be("0 comparendos");
+        EnvioConsultasProgramadas.Cantidad(12345).Should().Be("12.345 comparendos");
+    }
+
     // ── Endpoints ─────────────────────────────────────────────────────────────────────────────
 
     private async Task<(Guid Empresa, HttpClient Cliente, Guid Consulta)> EmpresaConConsultaAsync(string nombre, object? definicion = null)
@@ -150,6 +158,43 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         var (otraEmpresa, otroCliente, _) = await EmpresaConConsultaAsync("Borra");
         otraEmpresa.Should().NotBe(empresa);
         (await otroCliente.DeleteAsync($"{Ruta}/programaciones/{id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await cliente.DeleteAsync($"{Ruta}/programaciones/{id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Programaciones_OtroUsuarioDeLaEmpresa_NiLaBorraNiLaEditaNiSeLaQueda()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, cliente, consulta, dueno) = await EmpresaConDuenoAsync("Dueño");
+        var envio = await (await cliente.PostAsJsonAsync($"{Ruta}/programaciones", Semanal(consulta, "dueno@cliente.test"), Ct)).Content.ReadFromJsonAsync<JsonElement>(Ct);
+        var id = envio.GetProperty("id").GetGuid();
+
+        // Otro admin de la MISMA empresa, con su propia consulta guardada.
+        var otro = api.Cliente(Admin(empresa));
+        var suya = (await (await otro.PostAsJsonAsync($"{Ruta}/saved", new { nombre = "La del otro", definition = new { } }, Ct))
+            .Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetGuid();
+
+        (await otro.GetFromJsonAsync<JsonElement>($"{Ruta}/programaciones", Ct)).GetArrayLength().Should().Be(0, "no ve los envíos de otro usuario ni sus destinatarios");
+        (await cliente.GetFromJsonAsync<JsonElement>($"{Ruta}/programaciones", Ct)).GetArrayLength().Should().Be(1, "su dueño sí lo ve");
+        (await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).GetFromJsonAsync<JsonElement>($"{Ruta}/programaciones?empresa={empresa}", Ct))
+            .GetArrayLength().Should().Be(1, "el SuperAdmin ve todos los de la empresa");
+
+        var borrar = await otro.DeleteAsync($"{Ruta}/programaciones/{id}", Ct);
+        borrar.StatusCode.Should().Be(HttpStatusCode.NotFound, "el envío es de otro usuario");
+        var editar = await otro.PostAsJsonAsync($"{Ruta}/programaciones", new
+        {
+            id, consultaId = suya, periodicidad = "semanal", diaSemana = 1, diaMes = (int?)null, hora = "06:00",
+            destinatarios = new[] { "otro@cliente.test" }, activa = true,
+        }, Ct);
+        editar.StatusCode.Should().Be(HttpStatusCode.NotFound, "con el id ajeno no se edita ni se reasigna");
+
+        await api.EnDbAsync(async db =>
+        {
+            var p = await db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
+            (p.CreadoPor, p.ConsultaId, p.Destinatarios.Single(), p.Hora).Should().Be((dueno.Id, consulta, "dueno@cliente.test", new TimeOnly(8, 0)));
+        });
+
+        // Su dueño sí.
         (await cliente.DeleteAsync($"{Ruta}/programaciones/{id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 

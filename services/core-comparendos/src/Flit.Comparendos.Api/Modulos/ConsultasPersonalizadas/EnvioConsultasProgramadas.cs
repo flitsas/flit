@@ -172,7 +172,7 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
         var flit = conjunto != ConjuntoPlantillas.Renting;
         var cuerpo = $"""
             <p>Adjunto va el resultado de la consulta <b>{WebUtility.HtmlEncode(consulta)}</b> de <b>{WebUtility.HtmlEncode(empresa)}</b>,
-            del {Formato.Fecha(r.Desde)} al {Formato.Fecha(r.Hasta)}: {Miles(r.Total)} comparendos.</p>
+            del {Formato.Fecha(r.Desde)} al {Formato.Fecha(r.Hasta)}: {Cantidad(r.Total)}.</p>
             {(flit ? HtmlCorreo.Boton("Abrir Reportes", $"{correo.AppUrl}/reportes/consultas") : $"<p><a href=\"{correo.AppUrl}/reportes/consultas\">Abrir Reportes</a></p>")}
             """;
         return HtmlCorreo.DeEmpresa(conjunto, consulta, cuerpo, empresa, $"{correo.AppUrl}/assets/correo");
@@ -186,6 +186,9 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
 
     [LoggerMessage(Level = LogLevel.Error, Message = "No se pudo enviar la consulta programada {Programacion} de la empresa {Empresa}")]
     private static partial void FalloEnvio(ILogger logger, Exception ex, Guid programacion, Guid empresa);
+
+    /// <summary>«1 comparendo», «0 comparendos», «12.345 comparendos».</summary>
+    internal static string Cantidad(int total) => total == 1 ? "1 comparendo" : $"{Miles(total)} comparendos";
 
     /// <summary>Miles con punto, como se escriben en Colombia (12.345), sin depender de la cultura del proceso.</summary>
     private static string Miles(int n) => n.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');

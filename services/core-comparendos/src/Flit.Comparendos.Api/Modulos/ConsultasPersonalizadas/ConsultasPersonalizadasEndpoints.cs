@@ -104,7 +104,7 @@ public static class ConsultasPersonalizadasEndpoints
         var tenant = usuario.EmpresaLectura(empresa, obligatoria: true)!.Value;
         if (!usuario.EsSuperAdmin)
             await capacidades.ExigirAsync(tenant, Capacidad.Reportes, ct).ConfigureAwait(false);
-        return Results.Ok(await new RepositorioProgramaciones(db, reloj).ListarAsync(tenant, ct).ConfigureAwait(false));
+        return Results.Ok(await new RepositorioProgramaciones(db, reloj).ListarAsync(tenant, usuario.EsSuperAdmin ? null : usuario.Id, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> GuardarProgramacion([FromBody] GuardarProgramacionRequest? body, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
@@ -118,7 +118,7 @@ public static class ConsultasPersonalizadasEndpoints
     private static async Task<IResult> BorrarProgramacion(Guid id, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
     {
         var tenant = await EmpresaProgramacionAsync(usuario, capacidades, ct).ConfigureAwait(false);
-        await new RepositorioProgramaciones(db, reloj).BorrarAsync(tenant, id, ct).ConfigureAwait(false);
+        await new RepositorioProgramaciones(db, reloj).BorrarAsync(tenant, usuario.Id, id, ct).ConfigureAwait(false);
         return Results.NoContent();
     }
 
