@@ -12,5 +12,6 @@ internal interface IAiVisionProvider
         CancellationToken cancellationToken,
         string? model = null,
         int? maxTokens = null,
-        int? timeoutSeconds = null);
+        int? timeoutSeconds = null,
+        AiVisionPerfil perfil = AiVisionPerfil.Lectura);
 }
