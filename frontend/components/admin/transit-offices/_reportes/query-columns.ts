@@ -276,8 +276,8 @@ export const QUERY_PRESETS: ColumnPreset[] = [
   {
     id: "personas",
     label: "Quién es quién",
-    hint: "Comprador, vendedor y quién decidió.",
-    columns: ["referencia", "placa", "empresa", "comprador", "vendedor", "decidido_por", "estado"],
+    hint: "Comprador, vendedor, firmas y quién decidió.",
+    columns: ["referencia", "placa", "empresa", "comprador", "vendedor", "firmado_por_todas", "decidido_por", "estado"],
   },
   {
     id: "gestion",

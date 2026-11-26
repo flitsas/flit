@@ -134,12 +134,14 @@ describe("ClientProceduresTable — columnas VIN/placa/actores/gestor", () => {
 
     expect(screen.getByRole("button", { name: /Ordenar por VIN/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ordenar por Placa/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ordenar por Propietario \/ vendedor/i })).toBeInTheDocument();
+    // El rótulo de la columna es «Vendedor» desde el glosario de HU #12694 (antes «Propietario / vendedor»).
+    expect(screen.getByRole("button", { name: /Ordenar por Vendedor/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ordenar por Comprador/i })).toBeInTheDocument();
     // HU #12219 — «Empresa / Gestor» apila dos datos, así que su cabecera dejó de ser un clic
     // simple (que solo sabía ordenar por gestor, prometiendo un orden por empresa inexistente) y
     // pasó a ser un desplegable con las dos opciones.
-    expect(screen.getByRole("button", { name: /Ordenar Empresa \/ Gestor/i })).toBeInTheDocument();
+    // La cabecera se llama «Gestor» desde el glosario (COPY.A06); sigue siendo un desplegable.
+    expect(screen.getByRole("button", { name: /Ordenar Gestor/i })).toBeInTheDocument();
 
     expect(screen.getByText("9BWZZZ377VT004251")).toBeInTheDocument();
     expect(screen.getByText("ABC123")).toBeInTheDocument();

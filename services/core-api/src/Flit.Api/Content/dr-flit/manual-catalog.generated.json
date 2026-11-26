@@ -1319,20 +1319,21 @@
           "id": "consultas-firma",
           "title": "5. Consultas personalizadas: saber quién falta por firmar",
           "paragraphs": [
-            "En la pestaña «Consultas personalizadas» puedes buscar y ver qué trámites ya firmaron todas las partes y quién falta por firmar. Hay un filtro y dos columnas, y se guardan y exportan como cualquier otro campo."
+            "En la pestaña «Consultas personalizadas» ves, trámite por trámite, quién ya firmó y quién falta. La columna «Firmas» muestra el resumen «N de M»: cuántas partes que deben firmar ya firmaron, de cuántas en total."
           ],
           "bullets": [
-            "Paso 1. Pulsa «Agregar filtro», busca el grupo «Personas» y elige «Firmado por todas las partes».",
-            "Paso 2. Marca «Sí» para ver solo los trámites en los que todos ya firmaron, o «No» para ver los que tienen al menos una parte pendiente o que rechazó firmar. Aplica el filtro; la tabla y el contador cambian.",
-            "Paso 3. Abre el selector de columnas y activa «Firmado por todas las partes» (muestra Sí o No) y «Falta firmar» (nombre y rol de quien aún no ha firmado; queda vacía si ya firmaron todos). Si una parte rechazó firmar, aparece marcada como «(rechazada)».",
-            "Paso 4. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro, el valor y las columnas que dejaste visibles.",
-            "Paso 5. Pulsa exportar a Excel: el archivo trae las mismas columnas visibles y los mismos valores de la tabla; si ocultaste las dos columnas de firma, no se incluyen."
+            "Paso 1. Pulsa «+ Filtro», busca el grupo «Personas» y elige «Firmas».",
+            "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, o «Faltan firmas» para ver los que tienen al menos una parte pendiente. Pulsa «Aplicar»; la tabla y el contador cambian.",
+            "Paso 3. Sin filtro, la columna «Firmas» muestra el resumen del trámite («2 de 3 · Faltan firmas») y, debajo, una línea por persona con su estado: Firmó, Pendiente, Rechazada, Expirada o Sin validar. Si el trámite no tiene partes que deban firmar, dice «Sin partes que firmen».",
+            "Paso 4. Para ver cada parte en su propia columna, abre el selector de columnas y activa «Firma comprador» y «Firma vendedor».",
+            "Paso 5. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro y las columnas que dejaste visibles.",
+            "Paso 6. Pulsa «Exportar a Excel»: el archivo trae las mismas columnas y los mismos valores que ves en la tabla."
           ],
           "callouts": [
             {
               "variant": "info",
               "title": null,
-              "text": "«Falta firmar» solo se puede ver como columna: no se ofrece como filtro. Para filtrar usa «Firmado por todas las partes». Las consultas guardadas antes de este cambio funcionan igual que siempre y puedes agregarles estos campos después. Si una consulta no calculó la firma, la celda muestra «—» en lugar de un «No»."
+              "text": "Las columnas de firma se calculan al ejecutar la consulta. Si una consulta no las trae, la celda muestra «—». Las consultas guardadas antes de este cambio funcionan igual que siempre; puedes agregarles la columna «Firmas» después."
             }
           ]
         }
@@ -1822,20 +1823,21 @@
           "id": "consultas-firma",
           "title": "5. Consultas personalizadas: saber quién falta por firmar",
           "paragraphs": [
-            "En la pestaña «Consultas personalizadas» puedes buscar y ver qué trámites ya firmaron todas las partes y quién falta por firmar. Hay un filtro y dos columnas, y se guardan y exportan como cualquier otro campo."
+            "En la pestaña «Consultas personalizadas» ves, trámite por trámite, quién ya firmó y quién falta. La columna «Firmas» muestra el resumen «N de M»: cuántas partes que deben firmar ya firmaron, de cuántas en total."
           ],
           "bullets": [
-            "Paso 1. Pulsa «Agregar filtro», busca el grupo «Personas» y elige «Firmado por todas las partes».",
-            "Paso 2. Marca «Sí» para ver solo los trámites en los que todos ya firmaron, o «No» para ver los que tienen al menos una parte pendiente o que rechazó firmar. Aplica el filtro; la tabla y el contador cambian.",
-            "Paso 3. Abre el selector de columnas y activa «Firmado por todas las partes» (muestra Sí o No) y «Falta firmar» (nombre y rol de quien aún no ha firmado; queda vacía si ya firmaron todos). Si una parte rechazó firmar, aparece marcada como «(rechazada)».",
-            "Paso 4. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro, el valor y las columnas que dejaste visibles.",
-            "Paso 5. Pulsa exportar a Excel: el archivo trae las mismas columnas visibles y los mismos valores de la tabla; si ocultaste las dos columnas de firma, no se incluyen."
+            "Paso 1. Pulsa «+ Filtro», busca el grupo «Personas» y elige «Firmas».",
+            "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, o «Faltan firmas» para ver los que tienen al menos una parte pendiente. Pulsa «Aplicar»; la tabla y el contador cambian.",
+            "Paso 3. Sin filtro, la columna «Firmas» muestra el resumen del trámite («2 de 3 · Faltan firmas») y, debajo, una línea por persona con su estado: Firmó, Pendiente, Rechazada, Expirada o Sin validar. Si el trámite no tiene partes que deban firmar, dice «Sin partes que firmen».",
+            "Paso 4. Para ver cada parte en su propia columna, abre el selector de columnas y activa «Firma comprador» y «Firma vendedor».",
+            "Paso 5. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro y las columnas que dejaste visibles.",
+            "Paso 6. Pulsa «Exportar a Excel»: el archivo trae las mismas columnas y los mismos valores que ves en la tabla."
           ],
           "callouts": [
             {
               "variant": "info",
               "title": null,
-              "text": "«Falta firmar» solo se puede ver como columna: no se ofrece como filtro. Para filtrar usa «Firmado por todas las partes». Las consultas guardadas antes de este cambio funcionan igual que siempre y puedes agregarles estos campos después. Si una consulta no calculó la firma, la celda muestra «—» en lugar de un «No»."
+              "text": "Las columnas de firma se calculan al ejecutar la consulta. Si una consulta no las trae, la celda muestra «—». Las consultas guardadas antes de este cambio funcionan igual que siempre; puedes agregarles la columna «Firmas» después."
             }
           ]
         }

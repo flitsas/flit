@@ -43,6 +43,7 @@ export function OtQueriesTab({ transitOfficeId, onScheduleQuery }: OtQueriesTabP
       defaultDateField: "radicacion",
       columnsStorageKey: "flit-ot-consultas-columnas",
       exportPrefix: "consulta",
+      anchoPorActorDesdeFilas: true,
       rowNoun: ["trámite", "trámites"],
       fetchFields: (signal) => fetchOtQueryFields(transitOfficeId, signal),
       run: (definition, options) => runOtQuery(definition, { ...options, transitOfficeId }),

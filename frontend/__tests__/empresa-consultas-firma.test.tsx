@@ -370,6 +370,20 @@ describe("HU #14704 — guardar, reabrir y exportar con los campos de firma", ()
     expect(screen.getByRole("columnheader", { name: "Firmas" })).toBeInTheDocument();
   });
 
+  it("sin filtro de firma, la consulta pide la columna Firmas para que la tabla la muestre", async () => {
+    render(<ConsultasTab />);
+    await userEvent.click(await screen.findByTestId("empresa-query-column-picker"));
+    await userEvent.click(
+      within(screen.getByTestId("empresa-query-column-picker-panel")).getByRole("checkbox", { name: "Firmas" }),
+    );
+    await waitFor(() =>
+      expect(mocks.runCompanyQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ columnas: expect.arrayContaining(["firmado_por_todas"]) }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("exporta a Excel las columnas visibles con los valores de la tabla y solo las filas filtradas", async () => {
     const filtradas = [
       row({
@@ -389,8 +403,15 @@ describe("HU #14704 — guardar, reabrir y exportar con los campos de firma", ()
         firmasPersonas: [{ rol: "Comprador", ordinal: 1, nombre: "Cándida", firmo: false, estado: "Rechazada" }],
       }),
     ];
-    mocks.runCompanyQuery.mockResolvedValueOnce(result([row({ firmadoPorTodas: true }), ...filtradas]));
-    mocks.runCompanyQuery.mockResolvedValue(result(filtradas));
+    // Responde según el filtro que llega, no según cuántas veces se llamó: cambiar columnas también
+    // vuelve a consultar, y una cola de respuestas «una vez» se filtraría a las pruebas siguientes.
+    mocks.runCompanyQuery.mockImplementation(async (definition: { condiciones: { fieldId: string }[] }) =>
+      result(
+        definition.condiciones.some((c: { fieldId: string }) => c.fieldId === "firmado_por_todas")
+          ? filtradas
+          : [row({ firmadoPorTodas: true }), ...filtradas],
+      ),
+    );
     render(<ConsultasTab />);
     const panel = await abrirColumnas();
     await userEvent.click(within(panel).getByRole("checkbox", { name: "Firmas" }));
