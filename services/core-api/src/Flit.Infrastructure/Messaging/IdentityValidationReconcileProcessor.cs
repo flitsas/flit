@@ -25,7 +25,7 @@ internal sealed class IdentityValidationReconcileProcessor(
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(20);
     /// <summary>No se sondea una validación tocada hace menos de esto (deja espacio al webhook y al poll del front).</summary>
-    private static readonly TimeSpan Staleness = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan Staleness = TimeSpan.FromSeconds(60);
     /// <summary>
     /// Presupuesto de sondeos por ventana de actividad: solo se reclaman validaciones con
     /// <c>reconcile_poll_count &lt; MaxReconcilePolls</c>. Tras cada intento (o (re)envío) el presupuesto se

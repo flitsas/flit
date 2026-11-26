@@ -40,12 +40,12 @@ describe("admin-identity-round-settings — cliente", () => {
     expect(r).toEqual(AJUSTES);
   });
 
-  it("PUT envía solo los tres campos del contrato y devuelve el objeto guardado", async () => {
+  it("PUT envía los campos del contrato (con el límite activo y el umbral de fábrica) y devuelve el objeto guardado", async () => {
     const nuevo = { ...AJUSTES, rondasMaximas: 5 };
     fetchMock.mockResolvedValue(respuesta(200, nuevo));
     const r = await putIdentityRoundSettings(nuevo);
     expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(nuevo);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ ...nuevo, limiteActivo: true, umbralAlertaSoporte: 3 });
     expect(r).toEqual(nuevo);
   });
 

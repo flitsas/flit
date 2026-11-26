@@ -128,8 +128,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>
     /// Cuántas veces el worker de reconciliación (<c>IdentityValidationReconcileProcessor</c>) ya sondeó a
     /// Kyverum en la ventana de espera ACTUAL. El worker solo reclama validaciones con
-    /// <c>ReconcilePollCount &lt; <see cref="BiometricRules.KyverumMaxReconcilePolls"/></c> (3): así, si el
-    /// cliente hace un intento y se queda quieto, el worker sondea a lo sumo 3 veces (~6 min) y luego CALLA en
+    /// <c>ReconcilePollCount &lt; <see cref="BiometricRules.KyverumMaxReconcilePolls"/></c> (10): así, si el
+    /// cliente hace un intento y se queda quieto, el worker sondea a lo sumo 10 veces (~10 min) y luego CALLA en
     /// vez de pegarle a Kyverum cada 2 min durante horas. Se REINICIA a 0 cuando hay señal de actividad nueva:
     /// un intento nuevo por webhook, el (re)envío de la validación, o un reconcile manual del gestor.
     /// </summary>
@@ -736,7 +736,7 @@ public static class BiometricRules
     /// por webhook o un reconcile manual) para volver a sondear. Ver
     /// <see cref="ProcedureInstanceBiometricValidation.ReconcilePollCount"/>.
     /// </summary>
-    public const int KyverumMaxReconcilePolls = 3;
+    public const int KyverumMaxReconcilePolls = 10;
 
     /// <summary>
     /// ¿Es un rechazo de Kyverum aplicado ANTES de agotar los intentos? Pasaba cuando la consulta de estado traía

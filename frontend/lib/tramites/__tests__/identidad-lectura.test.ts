@@ -108,6 +108,25 @@ describe('hitosDeIdentidad', () => {
     evento('webhook_applied', '2026-08-27T11:51:01Z', { outcome: 'aprobado' }),
   ];
 
+  it('las rondas de reemisión aparecen en el historial con su mensaje', () => {
+    const hitos = hitosDeIdentidad(validacion(), [
+      evento('ronda_rechazada', '2026-08-27T11:51:00Z', { outcome: 'rechazado', message: 'Ronda 1 cerrada en rechazo: el enlace usó 3 de 3 intentos.' }),
+      evento('ronda_reemitida', '2026-08-27T11:51:06Z', { outcome: 'ok', message: 'Ronda 2 abierta: enlace nuevo con 0 de 3 intentos.' }),
+    ]);
+    const titulos = hitos.map((h) => h.titulo);
+    expect(titulos).toContain('Ronda cerrada en rechazo');
+    expect(titulos).toContain('Se abrió una ronda nueva con enlace nuevo');
+    expect(hitos.find((h) => h.titulo === 'Ronda cerrada en rechazo')?.detalle).toContain('3 de 3 intentos');
+  });
+
+  it('la consulta de Kyverum solo aparece cuando cierra la validación', () => {
+    const hitos = hitosDeIdentidad(validacion(), [
+      evento('reconcile', '2026-08-27T11:50:00Z', { outcome: 'pendiente' }),
+      evento('reconcile', '2026-08-27T11:51:00Z', { outcome: 'aprobado' }),
+    ]);
+    expect(hitos.map((h) => h.titulo)).toEqual(['Identidad aprobada']);
+  });
+
   it('cada hito nombra a la persona, no a una etapa del sistema', () => {
     const hitos = hitosDeIdentidad(validacion(), eventos);
     expect(hitos.map((h) => h.titulo)).toContain('Laura completó la validación');
