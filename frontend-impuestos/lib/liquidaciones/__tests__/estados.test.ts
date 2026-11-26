@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipItem, esPlacaNoInscrita, esRelanzable, mensajeError, mensajePlacaNoInscrita } from "@/lib/liquidaciones/estados";
+import { chipFila, chipItem, esPlacaNoInscrita, esRelanzable, mensajeError, mensajePlacaNoInscrita } from "@/lib/liquidaciones/estados";
 
 // Uso de ejemplo: mensajeError({ estado: "ERROR", errorCodigo: "source_inactive", errorMensaje: null, departamento: { nombre: "Boyacá" } })
 // → «El proveedor tiene deshabilitado temporalmente el departamento de Boyacá. Puedes relanzar la placa más tarde.»
@@ -113,5 +113,32 @@ describe("chipItem — placa no inscrita en advertencia", () => {
 
   it("otro ERROR sigue en danger", () => {
     expect(chipItem(ficha({ errorCodigo: "portal_rejected", errorMensaje: "Documento no coincide.", resultadoStatus: "error" }))).toEqual({ texto: "Con error", tono: "danger" });
+  });
+});
+
+describe("chipFila — placa no inscrita en la tabla principal (ResumenLiquidacion.placaNoInscrita)", () => {
+  const contadores = { exitosas: 0, conDeuda: 0, pazYSalvo: 0, error: 1, datosIncompletos: 0, departamentoNoHabilitado: 0, incierto: 0, sinResultado: 0, pendientes: 0 };
+  const individual = { tipo: "INDIVIDUAL", estado: "COMPLETADO_CON_NOVEDADES", estadoItem: "ERROR", contadores } as const;
+
+  it("individual en ERROR con placaNoInscrita true: «Con novedad» en warning", () => {
+    expect(chipFila({ ...individual, placaNoInscrita: true })).toEqual({ texto: "Con novedad", tono: "warning" });
+  });
+
+  it("individual en ERROR sin el campo (backend viejo), con null o con false: «Con error» en danger", () => {
+    expect(chipFila(individual)).toEqual({ texto: "Con error", tono: "danger" });
+    expect(chipFila({ ...individual, placaNoInscrita: null })).toEqual({ texto: "Con error", tono: "danger" });
+    expect(chipFila({ ...individual, placaNoInscrita: false })).toEqual({ texto: "Con error", tono: "danger" });
+  });
+
+  it("placaNoInscrita true solo cuenta en ERROR: otro estadoItem sigue con su chip", () => {
+    expect(chipFila({ ...individual, estadoItem: "DATOS_INCOMPLETOS", placaNoInscrita: true })).toEqual(
+      chipFila({ ...individual, estadoItem: "DATOS_INCOMPLETOS" }),
+    );
+  });
+
+  it("la masiva no cambia: lleva el chip del lote aunque llegue placaNoInscrita", () => {
+    const masiva = { tipo: "MASIVA", estado: "COMPLETADO_CON_NOVEDADES", estadoItem: null, contadores } as const;
+    expect(chipFila({ ...masiva, placaNoInscrita: true })).toEqual(chipFila(masiva));
+    expect(chipFila({ ...masiva, placaNoInscrita: null })).toEqual(chipFila(masiva));
   });
 });

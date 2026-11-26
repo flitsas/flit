@@ -217,9 +217,12 @@ export function chipItem(item: Pick<Item, "estado" | "resultadoStatus"> & Partia
  * Chip de una fila del grid. La masiva lleva el del lote; la individual, el de su única placa: `estadoItem` (contrato
  * 1.1.0, delta 4) y, en EXITOSO, el resultado que dicen los contadores (el resumen no trae `resultadoStatus`). Una
  * respuesta sin `estadoItem` (backend anterior a la 1.1.0) lo deduce de los contadores y, si no deciden, el del lote.
+ * Una individual en ERROR con `placaNoInscrita === true` dice «Con novedad» en `warning`, como en el detalle; sin el campo
+ * (backend anterior) sigue «Con error».
  */
-export function chipFila(r: Pick<ResumenLiquidacion, "tipo" | "estado" | "contadores" | "estadoItem">): Chip {
+export function chipFila(r: Pick<ResumenLiquidacion, "tipo" | "estado" | "contadores" | "estadoItem" | "placaNoInscrita">): Chip {
   if (r.tipo !== "INDIVIDUAL") return chipLote(r.estado);
+  if (r.estadoItem === "ERROR" && r.placaNoInscrita === true) return { texto: CHIP_PLACA_NO_INSCRITA, tono: "warning" };
   if (r.estadoItem) {
     const c = r.contadores;
     const resultadoStatus = c && c.conDeuda > 0 ? "con_deuda" : c && c.pazYSalvo > 0 ? "paz_y_salvo" : null;

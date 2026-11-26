@@ -253,6 +253,58 @@ public sealed class LiquidacionIndividualEndpointsTests
     }
 
     [Fact]
+    public async Task El_grid_marca_placaNoInscrita_solo_en_la_individual_con_error_de_placa_no_inscrita()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await EntornoEjecucion.ConApiAsync(new ApiLiquidacionDePrueba(), new RuntDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoEjecucion.SembrarEmpresaAsync(api, empresa, ct);
+        var ahora = DateTimeOffset.UtcNow;
+        var (noInscrita, _) = await Reportes.EntornoReportes.SembrarAsync(api, empresa, TipoLiquidacion.Individual, Guid.NewGuid(), ct, ahora.AddMinutes(-3),
+            new Reportes.ItemSemilla("NOI123", EstadoItem.Error, ErrorCodigo: ClasificacionErrores.CodigoPortalRechazo,
+                ErrorMensaje: "La placa ingresada no se encuentra inscrita en nuestra base de datos."));
+        var (otroError, _) = await Reportes.EntornoReportes.SembrarAsync(api, empresa, TipoLiquidacion.Individual, Guid.NewGuid(), ct, ahora.AddMinutes(-2),
+            new Reportes.ItemSemilla("OTR123", EstadoItem.Error, ErrorCodigo: "portal_unavailable", ErrorMensaje: "Mantenimiento del portal."));
+        var (masiva, _) = await Reportes.EntornoReportes.SembrarAsync(api, empresa, TipoLiquidacion.Masiva, Guid.NewGuid(), ct, ahora.AddMinutes(-1),
+            new Reportes.ItemSemilla("AAA111", EstadoItem.Error, ErrorCodigo: ClasificacionErrores.CodigoPortalRechazo,
+                ErrorMensaje: "La placa ingresada no se encuentra inscrita en nuestra base de datos."),
+            new Reportes.ItemSemilla("BBB222"));
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: [Permisos.LiquidacionesVer]));
+
+        using var pagina = JsonDocument.Parse(await cliente.GetStringAsync(Lista, ct));
+
+        var filas = pagina.RootElement.GetProperty("items").EnumerateArray().ToDictionary(f => f.GetProperty("id").GetGuid());
+        filas[noInscrita].GetProperty("placaNoInscrita").GetBoolean().Should().BeTrue("ERROR portal_rejected con «no se encuentra inscrita»");
+        filas[otroError].GetProperty("placaNoInscrita").GetBoolean().Should().BeFalse("otro error no es placa no inscrita");
+        filas[masiva].GetProperty("placaNoInscrita").ValueKind.Should().Be(JsonValueKind.Null, "en la masiva va null, como estadoItem");
+
+        using var detalle = JsonDocument.Parse(await cliente.GetStringAsync($"{Lista}/{noInscrita}", ct));
+        detalle.RootElement.GetProperty("placaNoInscrita").GetBoolean().Should().BeTrue("Liquidacion extiende ResumenLiquidacion");
+    }
+
+    [Fact]
+    public void El_contrato_declara_placaNoInscrita_en_ResumenLiquidacion_y_esta_en_la_1_2_3()
+    {
+        var lineas = File.ReadAllLines(RutaContrato());
+        var inicio = Array.FindIndex(lineas, l => l.TrimEnd() == "    ResumenLiquidacion:");
+        var fin = Array.FindIndex(lineas, inicio + 1, l => l.Length > 4 && l.StartsWith("    ", StringComparison.Ordinal) && !l.StartsWith("     ", StringComparison.Ordinal));
+
+        inicio.Should().BeGreaterThan(0);
+        lineas[inicio..fin].Should().Contain(l => l.TrimStart().StartsWith("placaNoInscrita: { type: boolean, nullable: true", StringComparison.Ordinal));
+        lineas.Should().Contain("  version: \"1.2.3\"");
+    }
+
+    private static string RutaContrato()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "contracts", "openapi", "impuestos.v1.yaml")))
+            dir = dir.Parent;
+        dir.Should().NotBeNull("las pruebas corren dentro del repo");
+        return Path.Combine(dir!.FullName, "contracts", "openapi", "impuestos.v1.yaml");
+    }
+
+    [Fact]
     public async Task Filtros_y_paginacion_invalidos_responden_400_con_su_literal()
     {
         var ct = TestContext.Current.CancellationToken;

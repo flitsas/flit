@@ -129,7 +129,7 @@ internal static class CalculadoraEstadisticas
         var individuales = ultimos.Where(l => l.Tipo == TipoLiquidacion.Individual).Select(l => l.Id).ToList();
         var unicas = individuales.Count == 0
             ? []
-            : await fuente.Items.Where(i => individuales.Contains(i.LiquidacionId)).Select(i => new { i.LiquidacionId, i.Id, i.Placa, i.Estado })
+            : await fuente.Items.Where(i => individuales.Contains(i.LiquidacionId)).Select(i => new { i.LiquidacionId, i.Id, i.Placa, i.Estado, i.ErrorCodigo, i.ErrorMensaje })
                 .ToListAsync(ct).ConfigureAwait(false);
         var porLote = unicas.GroupBy(p => p.LiquidacionId).ToDictionary(g => g.Key, g => g.First());
         var resumenes = ultimos.Select(l =>
@@ -138,7 +138,8 @@ internal static class CalculadoraEstadisticas
             return new ResumenLiquidacionDto(l.Id, CodigosDeEnum.Codigo(l.Tipo), CodigosDeEnum.Codigo(l.Estado), l.TotalItems,
                 new ContadoresDto(l.CExitosas, l.CConDeuda, l.CPazYSalvo, l.CError, l.CDatosIncompletos, l.CDptoNoHabilitado, l.CIncierto, l.CSinResultado, l.CPendientes),
                 l.CreadaEn, ConsultaLiquidaciones.CreadorDe(l), alcance.Referencia(l.TenantId), l.NombreArchivo,
-                unico?.Placa, unico?.Id, unico is null ? null : CodigosDeEnum.Codigo(unico.Estado));
+                unico?.Placa, unico?.Id, unico is null ? null : CodigosDeEnum.Codigo(unico.Estado),
+                unico is null ? null : ConsultaLiquidaciones.PlacaNoInscrita(unico.Estado, unico.ErrorCodigo, unico.ErrorMensaje));
         }).ToList();
         return Calcular(rango, new AgregadosEstadistica(porEstado, porDia, porDepartamento, porEmpresa), enProceso, resumenes, alcance);
     }

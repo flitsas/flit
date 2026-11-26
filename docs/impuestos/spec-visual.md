@@ -291,6 +291,7 @@ Pagination
   - Avance: `BarraProgreso` de `h-2` + «{terminadas}/{total}».
   - Tipo: `TipoLiquidacion.x-flit-etiquetas` («Individual» / «Masiva»). Las pestañas siguen diciendo «Por placa» y «Masivas» (texto de navegación de esta spec, no etiqueta de enum).
   - Estado: chip de §1.1. En `INDIVIDUAL` se muestra el chip del ítem (§1.2) a partir de `ResumenLiquidacion.estadoItem` (1.1.0, delta 4); en `EXITOSO`, el resultado («Con deuda» / «Paz y salvo») sale de `contadores`, porque el resumen no trae `resultadoStatus`. Los `contadores` solos son el respaldo para una respuesta sin `estadoItem` (`chipFila`; H-15 cerrado).
+  - Placa no inscrita en la fila individual: `estadoItem` `ERROR` con `ResumenLiquidacion.placaNoInscrita === true` muestra «Con novedad» en `warning` (como en el detalle, §1.2); sin el campo (backend anterior) sigue «Con error».
   - Creada por: `creadaPor.nombre`.
 - Paginación: `Pagination` de `@flit/ui/Pagination` (`noun="liquidaciones"`, tamaños de `usePaginacion`).
 

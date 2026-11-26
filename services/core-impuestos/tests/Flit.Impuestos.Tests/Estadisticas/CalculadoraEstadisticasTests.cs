@@ -153,6 +153,28 @@ public sealed class CalculadoraEstadisticasTests(ApiReportesFixture fixture) : I
     }
 
     [Fact]
+    public async Task Los_ultimos_lotes_marcan_placaNoInscrita_solo_en_la_individual()
+    {
+        var ct = Preparar();
+        var empresa = await EmpresaAsync(ct);
+        var ahora = DateTimeOffset.UtcNow;
+        await E.SembrarAsync(Api, empresa, TipoLiquidacion.Individual, Guid.NewGuid(), ct, ahora.AddMinutes(-3),
+            new ItemSemilla("NOI001", EstadoItem.Error, ErrorCodigo: ClasificacionErrores.CodigoPortalRechazo,
+                ErrorMensaje: "La placa ingresada no se encuentra inscrita en nuestra base de datos."));
+        await E.SembrarAsync(Api, empresa, TipoLiquidacion.Individual, Guid.NewGuid(), ct, ahora.AddMinutes(-2),
+            new ItemSemilla("OTR001", EstadoItem.Error, ErrorCodigo: "portal_unavailable", ErrorMensaje: "Mantenimiento del portal."));
+        await E.SembrarAsync(Api, empresa, TipoLiquidacion.Masiva, Guid.NewGuid(), ct, ahora.AddMinutes(-1), new ItemSemilla("MAS001"), new ItemSemilla("MAS002"));
+
+        var d = await DashboardAsync(empresa, string.Empty, ct);
+
+        var lotes = d.GetProperty("ultimosLotes").EnumerateArray().ToList();
+        lotes.Should().HaveCount(3);
+        lotes[0].GetProperty("placaNoInscrita").ValueKind.Should().Be(JsonValueKind.Null, "la masiva lleva null");
+        lotes[1].GetProperty("placaNoInscrita").GetBoolean().Should().BeFalse("OTR001: otro error");
+        lotes[2].GetProperty("placaNoInscrita").GetBoolean().Should().BeTrue("NOI001: placa no inscrita");
+    }
+
+    [Fact]
     public async Task El_rango_por_defecto_es_de_30_dias_y_lo_de_antes_no_cuenta()
     {
         var ct = Preparar();

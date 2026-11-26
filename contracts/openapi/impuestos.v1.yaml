@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Impuestos
-  version: "1.2.2"
+  version: "1.2.3"
   description: >
     Endpoints REST del producto Impuestos (core-impuestos) bajo /api/v1/impuestos (HU #14694, ADR-0093; plan
     docs/impuestos/plan-implementacion.md §5.1; deltas de la 1.1.0 en §5.7 y de la 1.2.0 en §5.8). La app web llega por el gateway con el
@@ -36,6 +36,11 @@ info:
     uuid en una lectura auditada del Super Admin, la carga de credenciales del backoffice o la gestión de usuarios) y
     VALOR_INVALIDO (422, un CHECK de la base, sin su detalle). Pueden salir en cualquier ruta que lea o escriba con esas
     reglas; el `error` es el literal y el front lo muestra tal cual.
+
+
+    Delta 1.2.3 (aditivo): ResumenLiquidacion.placaNoInscrita (boolean nullable; también en Liquidacion,
+    LiquidacionConItems y Dashboard.ultimosLotes, que lo extienden o lo usan). Solo en INDIVIDUAL: true si su único ítem
+    quedó en ERROR `portal_rejected` de placa no inscrita, false en otro caso; null en MASIVA, como estadoItem.
 
 
     Toda ruta de negocio pasa por el guard de suscripción (producto `impuestos` encendido para la compañía y sus
@@ -1476,6 +1481,7 @@ components:
         placa: { type: string, nullable: true, description: "Solo en INDIVIDUAL." }
         itemId: { type: string, format: uuid, nullable: true, description: "Solo en INDIVIDUAL: id de su único ítem, para enlazar al detalle de la placa (1.1.0)." }
         estadoItem: { type: string, allOf: [{ $ref: "#/components/schemas/EstadoItem" }], nullable: true, description: "Solo en INDIVIDUAL: estado de su único ítem (1.1.0); null en MASIVA." }
+        placaNoInscrita: { type: boolean, nullable: true, description: "Solo en INDIVIDUAL: true si su único ítem quedó en ERROR de placa no inscrita (portal_rejected), false si no (1.2.3); null en MASIVA." }
 
     Liquidacion:
       allOf:

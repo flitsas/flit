@@ -70,7 +70,7 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         var d = await LiquidacionAsync(empresa, id, empresaRef, ct).ConfigureAwait(false);
         var items = await ItemsAsync(empresa, id, null, null, 1, 200, ct).ConfigureAwait(false);
         return new LiquidacionConItemsDto(d.Id, d.Tipo, d.Estado, d.TotalItems, d.Contadores, d.CreadaEn, d.CreadaPor, d.Empresa, d.NombreArchivo, d.Placa,
-            d.ItemId, d.EstadoItem, d.TerminadaEn, d.CerradaPor, d.CerradaEn, d.MotivoCierre, d.ConfigCopia, items.Items);
+            d.ItemId, d.EstadoItem, d.PlacaNoInscrita, d.TerminadaEn, d.CerradaPor, d.CerradaEn, d.MotivoCierre, d.ConfigCopia, items.Items);
     }
 
     /// <summary>Placas del lote por fila del archivo (o por placa en la individual); 404 si el lote no es de la compañía.</summary>
@@ -183,34 +183,53 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         return doc.RootElement.Clone();
     }
 
-    private static async Task<Dictionary<Guid, (Guid Id, string Placa, EstadoItem Estado)>> ItemsIndividualesAsync(
+    /// <summary>
+    /// El único ítem de cada individual de <paramref name="lotes"/>: id, placa, estado y si es placa no inscrita. Solo se proyectan
+    /// <c>error_codigo</c> y <c>error_mensaje</c> además de lo que ya salía; la clasificación se hace tras materializar.
+    /// </summary>
+    private static async Task<Dictionary<Guid, ItemIndividual>> ItemsIndividualesAsync(
         ImpuestosDb db, IReadOnlyList<Liquidacion> lotes, CancellationToken ct)
     {
         var ids = lotes.Where(l => l.Tipo == TipoLiquidacion.Individual).Select(l => l.Id).ToList();
         if (ids.Count == 0)
             return [];
         var items = await db.Set<LiquidacionItem>().AsNoTracking().Where(i => ids.Contains(i.LiquidacionId))
-            .Select(i => new { i.LiquidacionId, i.Id, i.Placa, i.Estado }).ToListAsync(ct).ConfigureAwait(false);
-        return items.GroupBy(i => i.LiquidacionId).ToDictionary(g => g.Key, g => { var i = g.First(); return (i.Id, i.Placa, i.Estado); });
+            .Select(i => new { i.LiquidacionId, i.Id, i.Placa, i.Estado, i.ErrorCodigo, i.ErrorMensaje }).ToListAsync(ct).ConfigureAwait(false);
+        return items.GroupBy(i => i.LiquidacionId).ToDictionary(g => g.Key, g =>
+        {
+            var i = g.First();
+            return new ItemIndividual(i.Id, i.Placa, i.Estado, PlacaNoInscrita(i.Estado, i.ErrorCodigo, i.ErrorMensaje));
+        });
     }
 
-    private static ResumenLiquidacionDto Resumen(Liquidacion l, ReferenciaDto empresaRef, (Guid Id, string Placa, EstadoItem Estado) individual)
+    /// <summary>
+    /// <c>placaNoInscrita</c> del resumen (1.2.3): el ítem está en <c>ERROR</c> y su error es de placa no inscrita
+    /// (<see cref="ClasificacionErrores.EsPlacaNoInscrita"/>). Lo usan el grid y los últimos lotes del dashboard.
+    /// </summary>
+    internal static bool PlacaNoInscrita(EstadoItem estado, string? errorCodigo, string? errorMensaje) =>
+        estado == EstadoItem.Error && ClasificacionErrores.EsPlacaNoInscrita(errorCodigo, errorMensaje);
+
+    private static ResumenLiquidacionDto Resumen(Liquidacion l, ReferenciaDto empresaRef, ItemIndividual? individual)
     {
-        var esIndividual = l.Tipo == TipoLiquidacion.Individual && individual.Id != Guid.Empty;
+        var esIndividual = l.Tipo == TipoLiquidacion.Individual && individual is not null;
         return new ResumenLiquidacionDto(l.Id, CodigosDeEnum.Codigo(l.Tipo), CodigosDeEnum.Codigo(l.Estado), l.TotalItems, Contadores(l), l.CreadaEn,
             CreadorDe(l), empresaRef, l.NombreArchivo,
-            esIndividual ? individual.Placa : null, esIndividual ? individual.Id : null, esIndividual ? CodigosDeEnum.Codigo(individual.Estado) : null);
+            esIndividual ? individual!.Placa : null, esIndividual ? individual!.Id : null, esIndividual ? CodigosDeEnum.Codigo(individual!.Estado) : null,
+            esIndividual ? individual!.PlacaNoInscrita : null);
     }
 
-    private static LiquidacionDto Detalle(Liquidacion l, ReferenciaDto empresaRef, (Guid Id, string Placa, EstadoItem Estado) individual)
+    private static LiquidacionDto Detalle(Liquidacion l, ReferenciaDto empresaRef, ItemIndividual? individual)
     {
         var r = Resumen(l, empresaRef, individual);
         var copia = CopiaConfiguracion.DesdeJson(l.ConfigCopia);
         return new LiquidacionDto(r.Id, r.Tipo, r.Estado, r.TotalItems, r.Contadores, r.CreadaEn, r.CreadaPor, r.Empresa, r.NombreArchivo, r.Placa, r.ItemId,
-            r.EstadoItem, l.TerminadaEn, l.CerradaPor is { } p ? new ReferenciaDto(p, l.CerradaPorNombre ?? string.Empty) : null, l.CerradaEn, MotivoCierreDe(l),
+            r.EstadoItem, r.PlacaNoInscrita, l.TerminadaEn, l.CerradaPor is { } p ? new ReferenciaDto(p, l.CerradaPorNombre ?? string.Empty) : null, l.CerradaEn, MotivoCierreDe(l),
             new ConfigCopiaDto(copia.MaxRegistros, copia.DepartamentosHabilitados, copia.Concurrencia));
     }
 
     private static ContadoresDto Contadores(Liquidacion l) => new(
         l.CExitosas, l.CConDeuda, l.CPazYSalvo, l.CError, l.CDatosIncompletos, l.CDptoNoHabilitado, l.CIncierto, l.CSinResultado, l.CPendientes);
+
+    /// <summary>El único ítem de una individual tal como lo pinta el resumen.</summary>
+    private sealed record ItemIndividual(Guid Id, string Placa, EstadoItem Estado, bool PlacaNoInscrita);
 }

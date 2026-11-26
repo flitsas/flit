@@ -17,11 +17,13 @@ public sealed record ContadoresDto(
 
 /// <summary>
 /// Esquema <c>ResumenLiquidacion</c> (fila del grid). <see cref="Placa"/>, <see cref="ItemId"/> y <see cref="EstadoItem"/> solo en la
-/// individual (delta 4 de la 1.1.0); null en la masiva. Los enums van con su código (<c>INDIVIDUAL</c>, <c>EN_PROCESO</c>).
+/// individual (delta 4 de la 1.1.0); null en la masiva. <see cref="PlacaNoInscrita"/> (1.2.3) también solo en la individual: true si su
+/// ítem quedó en <c>ERROR</c> de placa no inscrita (<see cref="ClasificacionErrores.EsPlacaNoInscrita"/>). Los enums van con su código
+/// (<c>INDIVIDUAL</c>, <c>EN_PROCESO</c>).
 /// </summary>
 public record ResumenLiquidacionDto(
     Guid Id, string Tipo, string Estado, int TotalItems, ContadoresDto Contadores, DateTimeOffset CreadaEn, ReferenciaDto CreadaPor,
-    ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem);
+    ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem, bool? PlacaNoInscrita);
 
 /// <summary>Copia de configuración de la cabecera (<c>configCopia</c>; en la base <c>maxRegistros</c>, en el contrato <c>maxRegistrosLote</c>).</summary>
 public sealed record ConfigCopiaDto(int MaxRegistrosLote, IReadOnlyList<string>? DepartamentosHabilitados, int Concurrencia);
@@ -32,17 +34,17 @@ public sealed record ConfigCopiaDto(int MaxRegistrosLote, IReadOnlyList<string>?
 /// </summary>
 public record LiquidacionDto(
     Guid Id, string Tipo, string Estado, int TotalItems, ContadoresDto Contadores, DateTimeOffset CreadaEn, ReferenciaDto CreadaPor,
-    ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem,
+    ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem, bool? PlacaNoInscrita,
     DateTimeOffset? TerminadaEn, ReferenciaDto? CerradaPor, DateTimeOffset? CerradaEn, string? MotivoCierre, ConfigCopiaDto ConfigCopia)
-    : ResumenLiquidacionDto(Id, Tipo, Estado, TotalItems, Contadores, CreadaEn, CreadaPor, Empresa, NombreArchivo, Placa, ItemId, EstadoItem);
+    : ResumenLiquidacionDto(Id, Tipo, Estado, TotalItems, Contadores, CreadaEn, CreadaPor, Empresa, NombreArchivo, Placa, ItemId, EstadoItem, PlacaNoInscrita);
 
 /// <summary>Esquema <c>LiquidacionConItems</c>: respuesta 201 de la individual con <c>items[0]</c>.</summary>
 public sealed record LiquidacionConItemsDto(
     Guid Id, string Tipo, string Estado, int TotalItems, ContadoresDto Contadores, DateTimeOffset CreadaEn, ReferenciaDto CreadaPor,
-    ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem,
+    ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem, bool? PlacaNoInscrita,
     DateTimeOffset? TerminadaEn, ReferenciaDto? CerradaPor, DateTimeOffset? CerradaEn, string? MotivoCierre, ConfigCopiaDto ConfigCopia,
     IReadOnlyList<ItemDto> Items)
-    : LiquidacionDto(Id, Tipo, Estado, TotalItems, Contadores, CreadaEn, CreadaPor, Empresa, NombreArchivo, Placa, ItemId, EstadoItem,
+    : LiquidacionDto(Id, Tipo, Estado, TotalItems, Contadores, CreadaEn, CreadaPor, Empresa, NombreArchivo, Placa, ItemId, EstadoItem, PlacaNoInscrita,
         TerminadaEn, CerradaPor, CerradaEn, MotivoCierre, ConfigCopia);
 
 /// <summary>Esquema <c>Departamento</c> del ítem.</summary>

@@ -50,11 +50,12 @@ public sealed partial class LiteralesErroresTransversalesTests(ApiReportesFixtur
     }
 
     [Fact]
-    public void El_contrato_esta_en_la_1_2_2()
+    public void El_contrato_esta_en_la_1_2_2_o_posterior()
     {
         var lineas = File.ReadAllLines(RutaContrato());
+        var version = lineas.Single(l => l.StartsWith("  version: ", StringComparison.Ordinal))["  version: ".Length..].Trim('"');
 
-        lineas.Should().Contain("  version: \"1.2.2\"");
+        Version.Parse(version).Should().BeGreaterThanOrEqualTo(new Version(1, 2, 2), "los literales transversales llegaron en la 1.2.2");
     }
 
     [Fact]

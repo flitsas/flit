@@ -287,6 +287,18 @@ describe("GridLiquidaciones — contrato 1.1.0 (delta 4: itemId y estadoItem de 
     expect(within(tabla).getByText("Con deuda")).toBeInTheDocument();
   });
 
+  it("una individual en ERROR con placaNoInscrita muestra «Con novedad»; sin el campo sigue «Con error»", async () => {
+    const NO_INSCRITA = { ...INDIVIDUAL_110, id: "0193ffff-0000-7000-8000-000000000005", placa: "XYZ987", estadoItem: "ERROR", placaNoInscrita: true, contadores: { ...CONTADORES_CERO, error: 1 } };
+    const CON_ERROR = { ...INDIVIDUAL_110, estadoItem: "ERROR", contadores: { ...CONTADORES_CERO, error: 1 } };
+    vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json(pagina([NO_INSCRITA, CON_ERROR]))]]));
+    render_();
+    const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
+    const [filaNoInscrita, filaError] = within(tabla).getAllByRole("row").slice(1);
+    expect(within(filaNoInscrita).getByText("Con novedad")).toBeInTheDocument();
+    expect(within(filaNoInscrita).queryByText("Con error")).toBeNull();
+    expect(within(filaError).getByText("Con error")).toBeInTheDocument();
+  });
+
   it("una individual sin itemId (respuesta vieja) sigue enlazando al lote, que redirige", async () => {
     vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json(pagina([INDIVIDUAL]))]]));
     render_();

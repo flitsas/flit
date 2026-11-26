@@ -60,6 +60,8 @@ export interface ResumenLiquidacion {
   itemId?: string | null;
   /** Solo en INDIVIDUAL (1.1.0, delta 4): estado de su único ítem; null en MASIVA. */
   estadoItem?: EstadoItem | null;
+  /** Solo en INDIVIDUAL: true si su único ítem es la placa no inscrita (ERROR del portal); null en MASIVA. Opcional: un backend anterior no lo manda. */
+  placaNoInscrita?: boolean | null;
 }
 
 export interface Liquidacion extends ResumenLiquidacion {
