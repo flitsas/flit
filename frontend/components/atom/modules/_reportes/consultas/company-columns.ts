@@ -12,6 +12,7 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
+import { columnasDeFirma } from "@/components/consultas/firmas";
 import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow, MaxActoresPorRol } from "@/lib/api/company-queries";
 import {
@@ -241,26 +242,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   },
   ...columnasDelRol("comprador"),
   ...columnasDelRol("vendedor"),
-  {
-    id: "firmado_por_todas",
-    label: "Firmado por todas las partes",
-    group: GRUPO_PERSONAS,
-    // `null`/ausente = el backend no lo calculó (consulta anterior): «—», no un «No» que afirmaría
-    // que falta alguien por firmar.
-    value: (r) => (typeof r.firmadoPorTodas === "boolean" ? siNo(r.firmadoPorTodas) : "—"),
-    raw: (r) => (typeof r.firmadoPorTodas === "boolean" ? siNo(r.firmadoPorTodas) : "—"),
-    width: 16,
-  },
-  {
-    id: "falta_firmar",
-    label: "Falta firmar",
-    group: GRUPO_PERSONAS,
-    // Vacío = ya firmaron todos; «—» = no calculado. Se muestra tal cual: el texto lo arma el backend.
-    value: (r) => (r.faltaFirmar == null ? "—" : r.faltaFirmar),
-    raw: (r) => (r.faltaFirmar == null ? "—" : r.faltaFirmar === "" ? null : r.faltaFirmar),
-    width: 40,
-    wrap: true,
-  },
+  ...columnasDeFirma<CompanyQueryRow>(GRUPO_PERSONAS),
   {
     id: "prenda",
     label: "Prenda",

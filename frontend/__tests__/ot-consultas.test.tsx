@@ -524,3 +524,54 @@ describe("El panel de consultas guardadas", () => {
     expect(screen.queryByTestId("ot-query-export-csv")).not.toBeInTheDocument();
   });
 });
+
+describe("HU #14696 — columnas de firma en la consola del organismo", () => {
+  it("el menú Columnas ofrece Firmas y las columnas por persona, y la tabla pinta N de M y una línea por persona", async () => {
+    mocks.runOtQuery.mockResolvedValue(
+      result({
+        filas: [
+          row({
+            firmadoPorTodas: false,
+            firmasResumen: "1 de 2 · Faltan firmas",
+            firmasPersonas: [
+              { rol: "Vendedor", ordinal: 1, nombre: "Vera Vendedora", firmo: true, estado: "Firmó" },
+              { rol: "Comprador", ordinal: 1, nombre: "Cándida Compradora", firmo: false, estado: "Pendiente" },
+            ],
+          }),
+        ],
+      }),
+    );
+    renderTab();
+    await screen.findByTestId("ot-query-resultado");
+    await userEvent.click(screen.getByTestId("ot-query-column-picker"));
+    const panel = screen.getByTestId("ot-query-column-picker-panel");
+
+    expect(within(panel).getByRole("checkbox", { name: "Firma vendedor" })).toBeInTheDocument();
+    expect(within(panel).getByRole("checkbox", { name: "Firma comprador" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("checkbox", { name: "Falta firmar" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(panel).getByRole("checkbox", { name: "Firmas" }));
+    const celda = await screen.findByTestId("firmas-celda");
+    expect(within(celda).getByTestId("firmas-resumen")).toHaveTextContent("1 de 2 · Faltan firmas");
+    const lineas = within(celda).getAllByTestId("firma-persona");
+    expect(lineas[0]).toHaveTextContent("Vera Vendedora");
+    expect(lineas[0]).toHaveTextContent("Firmó");
+    expect(lineas[1]).toHaveTextContent("Pendiente");
+  });
+
+  it("el Excel abre una columna por persona con su estado", () => {
+    const filas = [
+      row({
+        firmasResumen: "1 de 3 · Faltan firmas",
+        firmasPersonas: [
+          { rol: "Vendedor", ordinal: 1, nombre: "V", firmo: true, estado: "Firmó" },
+          { rol: "Comprador", ordinal: 1, nombre: "C1", firmo: false, estado: "Pendiente" },
+          { rol: "Comprador", ordinal: 2, nombre: "C2", firmo: false, estado: "Rechazada" },
+        ],
+      }),
+    ];
+    const csv = buildQueryCsv(filas, ["referencia", "firma_vendedor", "firma_comprador"]);
+    expect(csv).toContain('"Firma vendedor";"Firma comprador";"Firma comprador 2"');
+    expect(csv).toContain('"Firmó";"Pendiente";"Rechazada"');
+  });
+});
