@@ -38,29 +38,51 @@ public sealed record IdentityRoundsConfig
     public const int DefaultRondas = 3;
     public const int MaxCorreos = 20;
     public const int MaxCorreoLength = 254;
+    public const int MinUmbralAlertaSoporte = 1;
+    public const int MaxUmbralAlertaSoporte = 20;
+    public const int DefaultUmbralAlertaSoporte = 3;
 
     public int RondasMaximas { get; }
     public string DisparadorAlerta { get; }
     public IReadOnlyList<string> CorreosAlerta { get; }
 
-    private IdentityRoundsConfig(int rondasMaximas, string disparadorAlerta, IReadOnlyList<string> correosAlerta)
+    /// <summary>
+    /// <c>true</c> (valor de fábrica): el límite de rondas aplica. <c>false</c>: no se bloquea ninguna validación ni
+    /// reenvío por rondas, y soporte recibe alerta cada <see cref="UmbralAlertaSoporte"/> validaciones de la persona.
+    /// </summary>
+    public bool LimiteActivo { get; }
+
+    /// <summary>Cada cuántas validaciones de una persona se avisa a soporte cuando <see cref="LimiteActivo"/> es <c>false</c>.</summary>
+    public int UmbralAlertaSoporte { get; }
+
+    private IdentityRoundsConfig(
+        int rondasMaximas, string disparadorAlerta, IReadOnlyList<string> correosAlerta,
+        bool limiteActivo, int umbralAlertaSoporte)
     {
         RondasMaximas = rondasMaximas;
         DisparadorAlerta = disparadorAlerta;
         CorreosAlerta = correosAlerta;
+        LimiteActivo = limiteActivo;
+        UmbralAlertaSoporte = umbralAlertaSoporte;
     }
 
-    /// <summary>Valores de fábrica: 3 rondas, alerta al máximo, sin destinatarios.</summary>
-    public static IdentityRoundsConfig Default { get; } = new(DefaultRondas, IdentityRoundsAlertTriggers.AlMaximo, []);
+    /// <summary>Valores de fábrica: 3 rondas, alerta al máximo, sin destinatarios, límite activo y umbral de 3.</summary>
+    public static IdentityRoundsConfig Default { get; } = new(
+        DefaultRondas, IdentityRoundsAlertTriggers.AlMaximo, [], true, DefaultUmbralAlertaSoporte);
 
     /// <summary>
     /// Valida y normaliza (correos recortados y en minúscula). Cualquier error se devuelve junto, por campo
     /// (<c>rondasMaximas</c>, <c>disparadorAlerta</c>, <c>correosAlerta</c>).
     /// </summary>
     /// <exception cref="IdentityRoundsConfigException">Alguno de los valores no cumple las reglas.</exception>
-    public static IdentityRoundsConfig Create(int rondasMaximas, string? disparadorAlerta, IEnumerable<string?>? correosAlerta)
+    public static IdentityRoundsConfig Create(
+        int rondasMaximas, string? disparadorAlerta, IEnumerable<string?>? correosAlerta,
+        bool limiteActivo = true, int umbralAlertaSoporte = DefaultUmbralAlertaSoporte)
     {
         var errors = new Dictionary<string, string[]>();
+
+        if (umbralAlertaSoporte is < MinUmbralAlertaSoporte or > MaxUmbralAlertaSoporte)
+            errors["umbralAlertaSoporte"] = [$"El umbral de alerta debe estar entre {MinUmbralAlertaSoporte} y {MaxUmbralAlertaSoporte}."];
 
         if (rondasMaximas is < MinRondas or > MaxRondas)
             errors["rondasMaximas"] = [$"Las rondas máximas deben estar entre {MinRondas} y {MaxRondas}."];
@@ -98,7 +120,7 @@ public sealed record IdentityRoundsConfig
         if (errors.Count > 0)
             throw new IdentityRoundsConfigException(errors);
 
-        return new IdentityRoundsConfig(rondasMaximas, disparador!, correos);
+        return new IdentityRoundsConfig(rondasMaximas, disparador!, correos, limiteActivo, umbralAlertaSoporte);
     }
 
     /// <summary>
@@ -115,7 +137,7 @@ public sealed record IdentityRoundsConfig
     public bool AllowsNewRound(ProcedureInstanceBiometricValidation validation) => AllowsNewRound(RoundsUsed(validation));
 
     /// <summary>¿Cabe otra ronda con <paramref name="roundsUsed"/> ya usadas por la persona en la empresa?</summary>
-    public bool AllowsNewRound(int roundsUsed) => roundsUsed < RondasMaximas;
+    public bool AllowsNewRound(int roundsUsed) => !LimiteActivo || roundsUsed < RondasMaximas;
 
     /// <summary>
     /// ¿Corresponde alerta por correo cuando la ronda actual cierra en rechazo? <c>cada_ronda</c>: siempre; <c>al_maximo</c>: solo si es
@@ -124,9 +146,15 @@ public sealed record IdentityRoundsConfig
     public bool ShouldAlert(ProcedureInstanceBiometricValidation validation) => ShouldAlert(RoundsUsed(validation));
 
     /// <summary>Igual que <see cref="ShouldAlert(ProcedureInstanceBiometricValidation)"/>, con las rondas usadas por la persona.</summary>
-    public bool ShouldAlert(int roundsUsed) =>
-        string.Equals(DisparadorAlerta, IdentityRoundsAlertTriggers.CadaRonda, StringComparison.Ordinal)
-        || roundsUsed >= RondasMaximas;
+    public bool ShouldAlert(int roundsUsed)
+    {
+        // Sin límite, soporte no espera al máximo: avisa cada N validaciones de la persona (N = umbral).
+        if (!LimiteActivo)
+            return roundsUsed >= UmbralAlertaSoporte && roundsUsed % UmbralAlertaSoporte == 0;
+
+        return string.Equals(DisparadorAlerta, IdentityRoundsAlertTriggers.CadaRonda, StringComparison.Ordinal)
+            || roundsUsed >= RondasMaximas;
+    }
 
     private static bool EsCorreoValido(string correo)
     {

@@ -20,7 +20,7 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
 {
     public async Task<IdentityRoundsConfig> GetConfigAsync(CancellationToken ct = default)
     {
-        const string sql = "SELECT rondas_maximas, disparador_alerta, correos_alerta FROM admin.identity_rounds_config WHERE id = 1";
+        const string sql = "SELECT rondas_maximas, disparador_alerta, correos_alerta, limite_activo, umbral_alerta_soporte FROM admin.identity_rounds_config WHERE id = 1";
         return await WithCommandAsync(sql, _ => { }, async cmd =>
         {
             await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -28,7 +28,9 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
                 return IdentityRoundsConfig.Default;
 
             var correos = reader.IsDBNull(2) ? [] : (string[])reader.GetValue(2);
-            return IdentityRoundsConfig.Create(reader.GetInt32(0), reader.GetString(1), correos);
+            return IdentityRoundsConfig.Create(
+                reader.GetInt32(0), reader.GetString(1), correos,
+                limiteActivo: reader.GetBoolean(3), umbralAlertaSoporte: reader.GetInt32(4));
         }, ct).ConfigureAwait(false);
     }
 
@@ -36,12 +38,15 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
     {
         ArgumentNullException.ThrowIfNull(config);
         const string sql = """
-            INSERT INTO admin.identity_rounds_config (id, rondas_maximas, disparador_alerta, correos_alerta, updated_at, updated_by)
-            VALUES (1, @rondas, @disparador, @correos, @now, @by)
+            INSERT INTO admin.identity_rounds_config
+                (id, rondas_maximas, disparador_alerta, correos_alerta, limite_activo, umbral_alerta_soporte, updated_at, updated_by)
+            VALUES (1, @rondas, @disparador, @correos, @limite, @umbral, @now, @by)
             ON CONFLICT (id) DO UPDATE
                SET rondas_maximas = EXCLUDED.rondas_maximas,
                    disparador_alerta = EXCLUDED.disparador_alerta,
                    correos_alerta = EXCLUDED.correos_alerta,
+                   limite_activo = EXCLUDED.limite_activo,
+                   umbral_alerta_soporte = EXCLUDED.umbral_alerta_soporte,
                    updated_at = EXCLUDED.updated_at,
                    updated_by = EXCLUDED.updated_by
             """;
@@ -50,6 +55,8 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
             cmd.Parameters.Add(new NpgsqlParameter("rondas", NpgsqlDbType.Integer) { Value = config.RondasMaximas });
             cmd.Parameters.Add(new NpgsqlParameter("disparador", NpgsqlDbType.Text) { Value = config.DisparadorAlerta });
             cmd.Parameters.Add(new NpgsqlParameter("correos", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = config.CorreosAlerta.ToArray() });
+            cmd.Parameters.Add(new NpgsqlParameter("limite", NpgsqlDbType.Boolean) { Value = config.LimiteActivo });
+            cmd.Parameters.Add(new NpgsqlParameter("umbral", NpgsqlDbType.Integer) { Value = config.UmbralAlertaSoporte });
             cmd.Parameters.Add(new NpgsqlParameter("now", NpgsqlDbType.TimestampTz) { Value = now.ToUniversalTime() });
             cmd.Parameters.Add(new NpgsqlParameter("by", NpgsqlDbType.Uuid) { Value = (object?)updatedBy ?? DBNull.Value });
         }, async cmd => await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false), ct);

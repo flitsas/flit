@@ -4,6 +4,7 @@ import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { RondasIdentidadPanel } from "@/components/admin/plataforma/identidad/RondasIdentidadPanel";
+import { ToastProvider } from "@/components/admin/Toast";
 
 /**
  * SuperAdmin de FLIT — Plataforma → Rondas de identidad.
@@ -14,6 +15,7 @@ export default function AdminRondasIdentidadPage() {
   const router = useRouter();
 
   return (
+    <ToastProvider>
     <div className="flex flex-col gap-4 px-4 pt-6 pb-10 md:px-6">
       <button
         type="button"
@@ -31,5 +33,6 @@ export default function AdminRondasIdentidadPage() {
 
       <RondasIdentidadPanel />
     </div>
+    </ToastProvider>
   );
 }
