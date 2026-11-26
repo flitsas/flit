@@ -119,6 +119,56 @@ describe("DetalleItem — estado y relanzar", () => {
   });
 });
 
+describe("DetalleItem — mensajes propios por código, placa no inscrita y relanzables", () => {
+  const NO_INSCRITA = "EviewDetailVehicles: La placa ingresada no se encuentra inscrita en nuestra base de datos.";
+  const ERROR = { estado: "ERROR", resultadoStatus: "error", totalAPagar: null, periodos: [] };
+  /** Párrafo del título del aviso: el InlineAlert pinta su color con el token del tono. */
+  const tonoDelTitulo = (titulo: HTMLElement) => titulo.getAttribute("style") ?? "";
+
+  it("source_inactive sin errorMensaje: el texto propio con el departamento, no el respaldo genérico", async () => {
+    montar(detalle({ ...ERROR, errorClase: "REINTENTABLE", errorCodigo: "source_inactive", errorMensaje: null, departamento: { codigo: "15", nombre: "Boyacá" } }));
+    expect(
+      await screen.findByText("El proveedor tiene deshabilitado temporalmente el departamento de Boyacá. Puedes relanzar la placa más tarde."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("El proveedor no pudo liquidar esta placa.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Relanzar" })).toBeInTheDocument();
+  });
+
+  it("placa no inscrita: aviso warning «Errores encontrados», cuerpo ajustado, chip en advertencia y «Relanzar» con permiso", async () => {
+    montar(detalle({ ...ERROR, errorClase: "DEPENDE", errorCodigo: "portal_rejected", errorMensaje: NO_INSCRITA }));
+    const titulo = await screen.findByText("Errores encontrados");
+    expect(tonoDelTitulo(titulo)).toContain("--badge-warning-fg");
+    expect(
+      screen.getByText("EviewDetailVehicles: La placa ingresada no se encuentra inscrita en nuestra base de datos o no tiene vigencias pendientes."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Depende del mensaje")).toBeNull();
+    expect(screen.getByRole("status", { name: "Estado: Con novedad" })).toHaveAttribute("data-tono", "warning");
+    expect(screen.getByRole("button", { name: "Relanzar" })).toBeInTheDocument();
+  });
+
+  it("placa no inscrita sin permiso: sin «Relanzar»", async () => {
+    montar(detalle({ ...ERROR, errorClase: "DEPENDE", errorCodigo: "portal_rejected", errorMensaje: NO_INSCRITA }), { puedeRelanzar: false });
+    await screen.findByText("Errores encontrados");
+    expect(screen.queryByRole("button", { name: "Relanzar" })).toBeNull();
+  });
+
+  it("DATOS_INCOMPLETOS: mantiene el aviso y ofrece «Relanzar»", async () => {
+    montar(detalle({ estado: "DATOS_INCOMPLETOS", campoFaltante: "OwnerEmail", resultadoStatus: null, totalAPagar: null, periodos: [] }));
+    expect(await screen.findByText("Faltan datos del RUNT para liquidar: Correo del propietario.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Relanzar" })).toBeInTheDocument();
+  });
+
+  it("portal_rejected con otro mensaje: sigue en error, con el mensaje del proveedor y sin «Relanzar»", async () => {
+    montar(detalle({ ...ERROR, errorClase: "DEPENDE", errorCodigo: "portal_rejected", errorMensaje: "El documento del propietario no coincide." }));
+    const titulo = await screen.findByText("Depende del mensaje");
+    expect(tonoDelTitulo(titulo)).toContain("--badge-danger-fg");
+    expect(screen.getByText("El documento del propietario no coincide.")).toBeInTheDocument();
+    expect(screen.queryByText("Errores encontrados")).toBeNull();
+    expect(screen.getByRole("status", { name: "Estado: Con error" })).toHaveAttribute("data-tono", "danger");
+    expect(screen.queryByRole("button", { name: "Relanzar" })).toBeNull();
+  });
+});
+
 describe("DetalleItem — recibos por el proxy BFF", () => {
   const RECIBOS = [
     { id: "R-1", tipo: "VIGENCIA", periodos: ["2025"], estado: "GUARDADO", motivo: null, razon: null },

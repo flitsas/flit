@@ -197,12 +197,19 @@ export function chipLote(estado: string | null | undefined): Chip {
   return { texto: ESTADOS_LIQUIDACION[estado], tono: TONO_LOTE[estado], enProceso: estado === "EN_PROCESO" };
 }
 
-/** Chip del ítem (§1.2). Un EXITOSO muestra el resultado: «Con deuda» (warning) o «Paz y salvo» (success). */
-export function chipItem(item: Pick<Item, "estado" | "resultadoStatus">): Chip {
+/** Chip de la placa no inscrita (detalle y grilla del lote): no es un error para el usuario. */
+export const CHIP_PLACA_NO_INSCRITA = "Con novedad";
+
+/**
+ * Chip del ítem (§1.2). Un EXITOSO muestra el resultado: «Con deuda» (warning) o «Paz y salvo» (success). La placa no
+ * inscrita (`esPlacaNoInscrita`) dice «Con novedad» en `warning`.
+ */
+export function chipItem(item: Pick<Item, "estado" | "resultadoStatus"> & Partial<Pick<Item, "errorCodigo" | "errorMensaje">>): Chip {
   const { estado, resultadoStatus } = item;
   if (!tiene(ESTADOS_ITEM, estado)) return SIN_CLASIFICAR("estado de la placa", estado);
   if (estado === "EXITOSO" && resultadoStatus === "con_deuda") return { texto: RESULTADOS.con_deuda, tono: "warning" };
   if (estado === "EXITOSO" && resultadoStatus === "paz_y_salvo") return { texto: RESULTADOS.paz_y_salvo, tono: "success" };
+  if (esPlacaNoInscrita(item)) return { texto: CHIP_PLACA_NO_INSCRITA, tono: "warning" };
   return { texto: ESTADOS_ITEM[estado], tono: TONO_ITEM[estado] };
 }
 
@@ -268,9 +275,77 @@ export const itemEnCurso = (estado: string) => EN_CURSO.has(estado);
 /** El lote sigue abierto (CREADO o EN_PROCESO): se sondea y se puede cerrar a mano (DA-6b). */
 export const loteAbierto = (estado: string) => estado === "CREADO" || estado === "EN_PROCESO";
 
-/** Relanzable: INCIERTO_REQUIERE_DECISION o ERROR con clase REINTENTABLE (plan §3.2). */
-export function esRelanzable(item: Pick<Item, "estado" | "errorClase">): boolean {
-  return item.estado === "INCIERTO_REQUIERE_DECISION" || (item.estado === "ERROR" && item.errorClase === "REINTENTABLE");
+type ErrorDelItem = Pick<Item, "estado"> & Partial<Pick<Item, "errorCodigo" | "errorMensaje">>;
+
+/**
+ * «Placa no inscrita» (spec-visual §1.3): ERROR con `portal_rejected` y un mensaje del proveedor que dice «no se encuentra
+ * inscrita» (sin distinguir mayúsculas). No es una falla: el portal no tiene la placa o no le queda nada por liquidar. Se
+ * pinta como advertencia «Errores encontrados» y se puede relanzar.
+ */
+export function esPlacaNoInscrita(item: ErrorDelItem): boolean {
+  return item.estado === "ERROR" && item.errorCodigo === "portal_rejected" && Boolean(item.errorMensaje?.toLowerCase().includes("no se encuentra inscrita"));
+}
+
+/** Título del aviso de la placa no inscrita (§3.6). */
+export const TITULO_PLACA_NO_INSCRITA = "Errores encontrados";
+
+const FINAL_BASE_DE_DATOS = "en nuestra base de datos.";
+const FINAL_SIN_VIGENCIAS = " o no tiene vigencias pendientes.";
+
+/** Mensaje del proveedor con el final ajustado: «…en nuestra base de datos o no tiene vigencias pendientes.». */
+export function mensajePlacaNoInscrita(mensaje: string): string {
+  const texto = mensaje.trim();
+  if (texto.endsWith(FINAL_BASE_DE_DATOS)) return `${texto.slice(0, -1)}${FINAL_SIN_VIGENCIAS}`;
+  return `${texto.replace(/\.+$/, "")}${FINAL_SIN_VIGENCIAS}`;
+}
+
+/** Respaldo del aviso de ERROR cuando no hay mensaje del proveedor ni texto propio para el código. */
+export const MENSAJE_ERROR_RESPALDO = "El proveedor no pudo liquidar esta placa.";
+
+const PUEDES_MAS_TARDE = "Puedes relanzar la placa más tarde.";
+
+/**
+ * Texto propio de FLIT por `errorCodigo` (tabla de clases del backend, `ClasificacionErrores.Tabla`), para cuando el
+ * proveedor no manda `errorMensaje` (p. ej. 409 `source_inactive` al enviar). Recibe el departamento del ítem, o null.
+ */
+export const MENSAJES_ERROR: Readonly<Record<string, (departamento: string | null) => string>> = {
+  invalid_params: () => "Los datos enviados para esta placa no son válidos. Revísalos y crea una nueva liquidación.",
+  owner_validation_failed: () => "Los datos del propietario no coinciden con los del portal del departamento. Revísalos y crea una nueva liquidación.",
+  vehicle_data_required: () => "El portal del departamento pide datos del vehículo que no tenemos. Complétalos y crea una nueva liquidación.",
+  portal_rejected: () => "El portal del departamento rechazó la consulta de esta placa.",
+  captcha_blocked: () => "El portal del departamento bloqueó el ingreso. Relánzala en unos minutos.",
+  auth_failed: () => `No se pudo ingresar al portal del departamento. ${PUEDES_MAS_TARDE}`,
+  rate_limited: () => "El portal del departamento recibió demasiadas consultas. Relánzala en unos minutos.",
+  timeout: () => "El portal del departamento tardó demasiado en responder. Puedes relanzar la placa.",
+  http_status: () => `El portal del departamento respondió con una falla. ${PUEDES_MAS_TARDE}`,
+  proxy_failed: () => `No se pudo conectar con el portal del departamento. ${PUEDES_MAS_TARDE}`,
+  source_inactive: (departamento) =>
+    `El proveedor tiene deshabilitado temporalmente ${departamento ? `el departamento de ${departamento}` : "este departamento"}. ${PUEDES_MAS_TARDE}`,
+  adapter_unavailable: () => `La consulta para este departamento no está disponible por ahora. ${PUEDES_MAS_TARDE}`,
+  parse_error: () => "No se pudo leer la respuesta del portal del departamento. Puedes relanzar la placa.",
+  unexpected: () => "Ocurrió una falla inesperada al liquidar esta placa. Puedes relanzarla.",
+  worker_lost: () => "La consulta se interrumpió antes de terminar. Puedes relanzar la placa.",
+};
+
+/**
+ * Cuerpo del aviso de ERROR (§1.3): el `errorMensaje` del proveedor si lo trae; si no, el texto propio del código
+ * (`MENSAJES_ERROR`); si el código no se conoce, el respaldo. La placa no inscrita lleva además el final ajustado.
+ */
+export function mensajeError(item: ErrorDelItem & Partial<Pick<Item, "departamento">>): string {
+  const delProveedor = item.errorMensaje?.trim();
+  if (delProveedor) return esPlacaNoInscrita(item) ? mensajePlacaNoInscrita(delProveedor) : delProveedor;
+  const codigo = item.errorCodigo ?? "";
+  const propio = Object.prototype.hasOwnProperty.call(MENSAJES_ERROR, codigo) ? MENSAJES_ERROR[codigo] : null;
+  return propio ? propio(item.departamento?.nombre?.trim() || null) : MENSAJE_ERROR_RESPALDO;
+}
+
+/**
+ * Relanzable (plan §3.2): INCIERTO_REQUIERE_DECISION, DATOS_INCOMPLETOS, ERROR con clase REINTENTABLE y la placa no
+ * inscrita (`esPlacaNoInscrita`).
+ */
+export function esRelanzable(item: Pick<Item, "estado" | "errorClase"> & Partial<Pick<Item, "errorCodigo" | "errorMensaje">>): boolean {
+  if (item.estado === "INCIERTO_REQUIERE_DECISION" || item.estado === "DATOS_INCOMPLETOS") return true;
+  return item.estado === "ERROR" && (item.errorClase === "REINTENTABLE" || esPlacaNoInscrita(item));
 }
 
 /** Placas terminadas del lote para el avance: el total menos las pendientes (supuesto: `pendientes` cubre los no finales). */

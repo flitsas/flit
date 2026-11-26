@@ -49,6 +49,15 @@ public static class ClasificacionErrores
         ["worker_lost"] = ClaseError.Reintentable,
     };
 
+    /// <summary>Código con que el API rechaza la consulta cuando lo decide el portal (clase <see cref="ClaseError.Depende"/>).</summary>
+    public const string CodigoPortalRechazo = "portal_rejected";
+
+    /// <summary>
+    /// Fragmento del mensaje del portal cuando la placa no está inscrita, p. ej. «EviewDetailVehicles: La placa ingresada no se
+    /// encuentra inscrita en nuestra base de datos.».
+    /// </summary>
+    public const string FragmentoPlacaNoInscrita = "no se encuentra inscrita";
+
     private static readonly HashSet<string> Parciales = new(StringComparer.Ordinal) { "pdf_download_failed", "s3_error" };
 
     /// <summary>Clase del código; un código que la tabla no conoce (o vacío) es <see cref="ClaseError.Depende"/>.</summary>
@@ -57,4 +66,20 @@ public static class ClasificacionErrores
 
     /// <summary>El código acompaña un resultado parcial (los montos están, faltó un PDF).</summary>
     public static bool EsParcial(string? codigo) => codigo is not null && Parciales.Contains(codigo);
+
+    /// <summary>
+    /// El portal rechazó la consulta porque la placa no está inscrita: código <see cref="CodigoPortalRechazo"/> (exacto) y un mensaje
+    /// que contiene <see cref="FragmentoPlacaNoInscrita"/> sin distinguir mayúsculas. El ítem sigue en <c>ERROR</c> con clase
+    /// <see cref="ClaseError.Depende"/>, pero se puede relanzar (decisión del usuario, 2026-11-26).
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// ClasificacionErrores.EsPlacaNoInscrita("portal_rejected", "La placa ingresada no se encuentra inscrita en nuestra base de datos."); // true
+    /// ClasificacionErrores.EsPlacaNoInscrita("portal_rejected", "Mantenimiento del portal."); // false
+    /// </code>
+    /// </example>
+    public static bool EsPlacaNoInscrita(string? codigo, string? mensaje) =>
+        string.Equals(codigo, CodigoPortalRechazo, StringComparison.Ordinal)
+        && mensaje is not null
+        && mensaje.Contains(FragmentoPlacaNoInscrita, StringComparison.OrdinalIgnoreCase);
 }

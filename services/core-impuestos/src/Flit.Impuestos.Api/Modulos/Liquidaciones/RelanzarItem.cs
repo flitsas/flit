@@ -20,8 +20,9 @@ public sealed record RelanzarEntrada(bool? ConfirmarPosibleDuplicado);
 ///   <item>Regla de <c>?empresa</c> (<see cref="LiquidacionesEndpoints.EmpresaDeEscrituraAsync"/>).</item>
 ///   <item>Lote de otra compañía ⇒ 404 <c>LIQUIDACION_NO_ENCONTRADA</c>; ítem que no es del lote ⇒ 404 <c>ITEM_NO_ENCONTRADO</c>.</item>
 ///   <item>Sin <c>confirmarPosibleDuplicado: true</c> ⇒ 422 <c>CONFIRMACION_REQUERIDA</c>.</item>
-///   <item>Solo desde <c>INCIERTO_REQUIERE_DECISION</c> o <c>ERROR</c> <c>REINTENTABLE</c> (<see cref="EventoItem.Relanzar"/> del
-///   dominio) ⇒ si no, 409 <c>NO_RELANZABLE</c>.</item>
+///   <item>Solo desde <c>INCIERTO_REQUIERE_DECISION</c>, <c>DATOS_INCOMPLETOS</c>, <c>ERROR</c> <c>REINTENTABLE</c> o <c>ERROR</c>
+///   <c>portal_rejected</c> de placa no inscrita (<see cref="ClasificacionErrores.EsPlacaNoInscrita"/>; <see cref="EventoItem.Relanzar"/>
+///   del dominio) ⇒ si no, 409 <c>NO_RELANZABLE</c>.</item>
 ///   <item>Crea una individual nueva con <see cref="CrearLiquidacionIndividual"/> (mismo aprovisionamiento exigido, 409) con la placa
 ///   del ítem, <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. El ítem y el lote originales no cambian. La transacción que lo
 ///   crea bloquea el ítem original (<see cref="BloquearOriginalAsync"/>): varios relanzamientos del mismo ítem se permiten, en serie.</item>
@@ -78,7 +79,9 @@ public static class RelanzarItem
     {
         try
         {
-            TransicionesItem.Aplicar(new SituacionItem(item.Estado, item.IntentosRunt, item.IntentosReenvio, item.ErrorClase), new EventoItem.Relanzar());
+            TransicionesItem.Aplicar(
+                new SituacionItem(item.Estado, item.IntentosRunt, item.IntentosReenvio, item.ErrorClase, item.ErrorCodigo, item.ErrorMensaje),
+                new EventoItem.Relanzar());
         }
         catch (TransicionInvalida)
         {

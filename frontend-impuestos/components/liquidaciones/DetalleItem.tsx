@@ -24,9 +24,12 @@ import { obtenerItem, obtenerLiquidacion, useCargaConSondeo } from "@/lib/liquid
 import {
   ERRORES_LIQUIDACIONES,
   PANTALLA,
+  TITULO_PLACA_NO_INSCRITA,
   chipItem,
+  esPlacaNoInscrita,
   esRelanzable,
   itemEnCurso,
+  mensajeError,
   nombreCampoFaltante,
   nombreClaseError,
   nombreTipo,
@@ -99,11 +102,15 @@ function avisos(item: ItemDetalle, empresa: string | null): Array<{ tono: Inline
   if (item.estado === "INCIERTO_REQUIERE_DECISION")
     lista.push({ tono: "warning", texto: "No se pudo confirmar si el proveedor recibió la solicitud. Puedes relanzarla; si sí la recibió, puede quedar duplicada." });
   if (item.estado === "ERROR")
-    lista.push({
-      tono: "error",
-      titulo: item.errorClase ? nombreClaseError(item.errorClase) : "El proveedor no pudo liquidar esta placa",
-      texto: item.errorMensaje?.trim() || "El proveedor no pudo liquidar esta placa.",
-    });
+    lista.push(
+      esPlacaNoInscrita(item)
+        ? { tono: "warning", titulo: TITULO_PLACA_NO_INSCRITA, texto: mensajeError(item) }
+        : {
+            tono: "error",
+            titulo: item.errorClase ? nombreClaseError(item.errorClase) : "El proveedor no pudo liquidar esta placa",
+            texto: mensajeError(item),
+          },
+    );
   if (item.estado === "DATOS_INCOMPLETOS") lista.push({ tono: "warning", texto: `Faltan datos del RUNT para liquidar: ${nombreCampoFaltante(item.campoFaltante)}.` });
   if (item.estado === "DEPARTAMENTO_NO_HABILITADO")
     lista.push({ tono: "info", texto: `El departamento ${item.departamento?.nombre ?? ""} no está habilitado en el contrato de tu compañía.`.replace("  ", " ") });

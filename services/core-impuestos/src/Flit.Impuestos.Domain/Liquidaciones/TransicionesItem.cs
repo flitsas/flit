@@ -52,8 +52,17 @@ public abstract record EventoItem
     public sealed record CierreManual : EventoItem;
 }
 
-/// <summary>Foto del ítem que necesita la máquina de estados.</summary>
-public sealed record SituacionItem(EstadoItem Estado, int IntentosRunt = 0, int IntentosReenvio = 0, ClaseError? ClaseError = null);
+/// <summary>
+/// Foto del ítem que necesita la máquina de estados. <paramref name="ErrorCodigo"/> y <paramref name="ErrorMensaje"/> son los
+/// guardados en el ítem; solo los lee <see cref="EventoItem.Relanzar"/> (placa no inscrita, <see cref="ClasificacionErrores.EsPlacaNoInscrita"/>).
+/// </summary>
+public sealed record SituacionItem(
+    EstadoItem Estado,
+    int IntentosRunt = 0,
+    int IntentosReenvio = 0,
+    ClaseError? ClaseError = null,
+    string? ErrorCodigo = null,
+    string? ErrorMensaje = null);
 
 /// <summary>
 /// Resultado de una transición del ítem: la situación nueva y lo que quien la aplica debe hacer o guardar (código y campo del
@@ -94,7 +103,10 @@ public static class TransicionesItem
     /// <summary>El API respondió 401 a la api_key de la compañía al enviar.</summary>
     public const string CodigoCredencialRechazada = "CREDENCIAL_RECHAZADA";
 
-    /// <summary>Relanzar un ítem que no es <c>INCIERTO_REQUIERE_DECISION</c> ni <c>ERROR</c> reintentable (409 de la API).</summary>
+    /// <summary>
+    /// Relanzar un ítem que no es <c>INCIERTO_REQUIERE_DECISION</c>, <c>DATOS_INCOMPLETOS</c>, <c>ERROR</c> reintentable ni
+    /// <c>ERROR</c> de placa no inscrita (409 de la API).
+    /// </summary>
     public const string CodigoNoRelanzable = "NO_RELANZABLE";
 
     private const string Exitosa = "succeeded";
@@ -166,11 +178,23 @@ public static class TransicionesItem
         }
     }
 
+    /// <summary>
+    /// Se relanza desde <c>INCIERTO_REQUIERE_DECISION</c>, <c>DATOS_INCOMPLETOS</c> (faltó un dato del RUNT), <c>ERROR</c>
+    /// <see cref="ClaseError.Reintentable"/> o <c>ERROR</c> de placa no inscrita (<see cref="ClasificacionErrores.EsPlacaNoInscrita"/>,
+    /// clase <see cref="ClaseError.Depende"/>). El ítem no cambia; si no, <see cref="CodigoNoRelanzable"/>.
+    /// </summary>
     private static ResultadoItem Relanzar(SituacionItem actual) =>
-        actual.Estado == EstadoItem.InciertoRequiereDecision
-        || (actual.Estado == EstadoItem.Error && actual.ClaseError == ClaseError.Reintentable)
+        EsRelanzable(actual)
             ? new ResultadoItem(actual, CrearRelanzamiento: true)
             : throw TransicionInvalida.Con(CodigoNoRelanzable, "Este ítem no se puede relanzar.");
+
+    private static bool EsRelanzable(SituacionItem actual) => actual.Estado switch
+    {
+        EstadoItem.InciertoRequiereDecision or EstadoItem.DatosIncompletos => true,
+        EstadoItem.Error => actual.ClaseError == ClaseError.Reintentable
+            || ClasificacionErrores.EsPlacaNoInscrita(actual.ErrorCodigo, actual.ErrorMensaje),
+        _ => false,
+    };
 
     private static ResultadoItem Hacia(SituacionItem actual, EstadoItem estado) => new(actual with { Estado = estado });
 

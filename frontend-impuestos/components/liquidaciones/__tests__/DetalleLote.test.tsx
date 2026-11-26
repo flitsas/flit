@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { DetalleLote } from "@/components/liquidaciones/DetalleLote";
 import { CONTADORES_CERO, errorRegla, fetchPorRuta, item, lote } from "./fixtures";
 
@@ -160,5 +161,37 @@ describe("DetalleLote — tras «Cerrar lote» se releen las placas (F2, E2E liq
     await screen.findByText("Cerrado manualmente el 24/11/2026 14:05 por Usuaria Demo.");
     expect(await within(screen.getByRole("table", { name: "Placas del lote" })).findByText("Sin resultado (lote cerrado)")).toBeInTheDocument();
     expect(screen.queryByText("Reintento programado")).toBeNull();
+  });
+});
+
+describe("DetalleLote — grilla: placa no inscrita en advertencia y relanzable", () => {
+  const NO_INSCRITA = "EviewDetailVehicles: La placa ingresada no se encuentra inscrita en nuestra base de datos.";
+  const filaCon = (parcial: Record<string, unknown>) => {
+    vi.stubGlobal(
+      "fetch",
+      fetchPorRuta([
+        [ITEMS, () => Response.json(pagina([item({ liquidacionId: "L", estado: "ERROR", resultadoStatus: "error", totalAPagar: null, errorClase: "DEPENDE", errorCodigo: "portal_rejected", ...parcial })]))],
+        [LOTE, () => Response.json(lote({ id: "L", estado: "COMPLETADO_CON_NOVEDADES" }))],
+      ]),
+    );
+    render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} />);
+  };
+  const tonoDe = (el: HTMLElement) => el.style.getPropertyValue("--c");
+
+  it("el chip de la placa no inscrita usa el tono warning y la fila ofrece «Relanzar»", async () => {
+    filaCon({ errorMensaje: NO_INSCRITA });
+    const tabla = await screen.findByRole("table", { name: "Placas del lote" });
+    expect(tonoDe(within(tabla).getByText("Con novedad"))).toBe(etiquetaKit("warning").style["--c" as never]);
+    fireEvent.click(within(tabla).getByRole("button", { name: /Acciones de la placa/ }));
+    expect(await screen.findByRole("menuitem", { name: "Relanzar" })).toBeInTheDocument();
+  });
+
+  it("otro portal_rejected sigue en danger y sin «Relanzar»", async () => {
+    filaCon({ errorMensaje: "El documento del propietario no coincide." });
+    const tabla = await screen.findByRole("table", { name: "Placas del lote" });
+    expect(tonoDe(within(tabla).getByText("Con error"))).toBe(etiquetaKit("danger").style["--c" as never]);
+    fireEvent.click(within(tabla).getByRole("button", { name: /Acciones de la placa/ }));
+    await screen.findByRole("menuitem", { name: "Ver detalle" });
+    expect(screen.queryByRole("menuitem", { name: "Relanzar" })).toBeNull();
   });
 });

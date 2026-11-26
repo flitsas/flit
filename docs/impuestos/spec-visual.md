@@ -95,12 +95,12 @@ Literal = `EstadoItem.x-flit-etiquetas`; en `EXITOSO`, `ResultadoStatus.x-flit-e
 | `ENVIADO` | Esperando resultado | `info` | |
 | `INCIERTO` | Incierto | `purple` | Detalle: `pantalla.detalleIncierto` |
 | `INCIERTO_REQUIERE_DECISION` | Incierto — requiere decisión | `warning` | Permite relanzar |
-| `DATOS_INCOMPLETOS` | Datos incompletos | `warning` | Junto al estado, la etiqueta de `CampoFaltante` |
+| `DATOS_INCOMPLETOS` | Datos incompletos | `warning` | Junto al estado, la etiqueta de `CampoFaltante`. Permite relanzar |
 | `DEPARTAMENTO_NO_HABILITADO` | Departamento no habilitado | `neutral` | Junto al estado, el nombre del departamento |
 | `EXITOSO` + `paz_y_salvo` | Paz y salvo | `success` | El chip muestra el **resultado** |
 | `EXITOSO` + `con_deuda` | Con deuda | `warning` | El estado de la liquidación es exitoso; el chip muestra el **resultado** |
 | `EXITOSO` sin resultado | Exitosa | `success` | |
-| `ERROR` | Con error | `danger` | Clase de error (§1.3) junto al estado |
+| `ERROR` | Con error | `danger` | Clase de error (§1.3) junto al estado. **Placa no inscrita** (§1.3): chip «Con novedad» en `warning`, en el detalle y en la grilla del lote |
 | `SIN_RESULTADO_LOTE_CERRADO` | Sin resultado (lote cerrado) | `neutral` | |
 
 Marcas adicionales: chips pequeños junto al estado, siempre con texto (`x-flit-literales.pantalla`).
@@ -120,7 +120,32 @@ Marcas adicionales: chips pequeños junto al estado, siempre con texto (`x-flit-
 | `DEPENDE` | Depende del mensaje |
 | `REINTENTABLE` | Reintentable como nueva consulta |
 
-En el detalle de la placa (§3.6), el aviso de `ERROR` lleva la clase como título y **`errorMensaje`** como cuerpo: el contrato lo define como «texto del proveedor para el usuario» (`result.error.message`). Se pinta como texto plano (nunca HTML) y, si llega vacío, con el respaldo «El proveedor no pudo liquidar esta placa.». El Super Admin ve además «Código: {errorCodigo}» en `TEXTO_SECUNDARIO_CLS`.
+En el detalle de la placa (§3.6), el aviso de `ERROR` lleva la clase como título y **`errorMensaje`** como cuerpo: el contrato lo define como «texto del proveedor para el usuario» (`result.error.message`). Se pinta como texto plano (nunca HTML). Si llega vacío (p. ej. el proveedor rechazó la consulta al enviarla con 409 `source_inactive` y el backend guardó solo `errorCodigo` y `errorClase`), el cuerpo es el **texto propio de FLIT por `errorCodigo`** (`MENSAJES_ERROR` y `mensajeError` en `lib/liquidaciones/estados.ts`); un código que no está en la tabla usa el respaldo «El proveedor no pudo liquidar esta placa.». El Super Admin ve además «Código: {errorCodigo}» en `TEXTO_SECUNDARIO_CLS`.
+
+| `errorCodigo` | Texto propio (solo si no hay `errorMensaje`) |
+|---|---|
+| `invalid_params` | Los datos enviados para esta placa no son válidos. Revísalos y crea una nueva liquidación. |
+| `owner_validation_failed` | Los datos del propietario no coinciden con los del portal del departamento. Revísalos y crea una nueva liquidación. |
+| `vehicle_data_required` | El portal del departamento pide datos del vehículo que no tenemos. Complétalos y crea una nueva liquidación. |
+| `portal_rejected` | El portal del departamento rechazó la consulta de esta placa. |
+| `captcha_blocked` | El portal del departamento bloqueó el ingreso. Relánzala en unos minutos. |
+| `auth_failed` | No se pudo ingresar al portal del departamento. Puedes relanzar la placa más tarde. |
+| `rate_limited` | El portal del departamento recibió demasiadas consultas. Relánzala en unos minutos. |
+| `timeout` | El portal del departamento tardó demasiado en responder. Puedes relanzar la placa. |
+| `http_status` | El portal del departamento respondió con una falla. Puedes relanzar la placa más tarde. |
+| `proxy_failed` | No se pudo conectar con el portal del departamento. Puedes relanzar la placa más tarde. |
+| `source_inactive` | El proveedor tiene deshabilitado temporalmente el departamento de {departamento}. Puedes relanzar la placa más tarde. (Sin departamento: «…temporalmente este departamento. …») |
+| `adapter_unavailable` | La consulta para este departamento no está disponible por ahora. Puedes relanzar la placa más tarde. |
+| `parse_error` | No se pudo leer la respuesta del portal del departamento. Puedes relanzar la placa. |
+| `unexpected` | Ocurrió una falla inesperada al liquidar esta placa. Puedes relanzarla. |
+| `worker_lost` | La consulta se interrumpió antes de terminar. Puedes relanzar la placa. |
+| otro / vacío | El proveedor no pudo liquidar esta placa. |
+
+**Placa no inscrita** (`esPlacaNoInscrita` en `lib/liquidaciones/estados.ts`, única fuente del reconocimiento): `ERROR` con `errorCodigo` `portal_rejected` y un `errorMensaje` que contiene «no se encuentra inscrita» (sin distinguir mayúsculas). No se pinta como error:
+- Aviso `warning` con título exacto «Errores encontrados» (sin la etiqueta de la clase).
+- Cuerpo = el mensaje del proveedor con el final ajustado: si termina en «en nuestra base de datos.» se reemplaza por «en nuestra base de datos o no tiene vigencias pendientes.»; si no, se quita el punto final y se agrega « o no tiene vigencias pendientes.». Ejemplo: «EviewDetailVehicles: La placa ingresada no se encuentra inscrita en nuestra base de datos o no tiene vigencias pendientes.»
+- Chip «Con novedad» en `warning` (cabecera del detalle y grilla del lote).
+- Es relanzable (§3.5).
 
 ### 1.4 Recibo (`recibos.estado`)
 
@@ -346,7 +371,7 @@ Pagination
   - Etiquetas = `Contadores.x-flit-etiquetas`.
 - Sondeo mientras está `EN_PROCESO`: cada 5 s, se duplica si nada cambia hasta 30 s y se detiene al pasar a terminal. Si falla, `InlineAlert tone="warning"` «Datos desactualizados desde hh:mm» + «Reintentar», sin borrar lo leído.
 - `CERRADO_MANUALMENTE`: `InlineAlert tone="info" vivo={false}` «Cerrado manualmente el {fecha} por {nombre}.». Sin `cerradaPor`, o con `cerradaPor.nombre` vacío (un actor sin nombre cuenta como sin actor), «Cerrado manualmente el {fecha}.» (nunca «por .»). Si `Liquidacion.motivoCierre` (1.1.0) trae texto, va una segunda línea «Motivo: {texto}» en texto plano (nunca HTML), recortado; vacío o `null`, sin línea (H-16 cerrado).
-- Acciones por fila: `ActionsMenu` de `@flit/ui` (`ariaLabel="Acciones de la placa"`, descrito por la celda Placa) con «Ver detalle» y «Relanzar» (`pantalla.accionRelanzar`; solo en `INCIERTO_REQUIERE_DECISION` o `ERROR` `REINTENTABLE`, con `liquidaciones.crear`). La placa también es enlace al detalle.
+- Acciones por fila: `ActionsMenu` de `@flit/ui` (`ariaLabel="Acciones de la placa"`, descrito por la celda Placa) con «Ver detalle» y «Relanzar» (`pantalla.accionRelanzar`, con `liquidaciones.crear`). **Regla de relanzables** (`esRelanzable`, la misma en la grilla y en el detalle): `INCIERTO_REQUIERE_DECISION`, `DATOS_INCOMPLETOS`, `ERROR` con clase `REINTENTABLE` y la placa no inscrita (§1.3, `ERROR` `portal_rejected` de clase `DEPENDE`). Cualquier otro `ERROR` (`CORREGIR_DATOS` o `DEPENDE`) no se relanza. La placa también es enlace al detalle.
 - **`DialogoCerrarLote`** (`Modal` de `@flit/ui/Modal`, `size="md"`, `icono="alerta"`, `closeOnBackdrop={false}`, `busy` mientras envía):
   - Título «Cerrar lote».
   - Cuerpo: `pantalla.confirmarCerrarLote`.
@@ -390,8 +415,9 @@ Pagination
 - Aviso de resultado (`InlineAlert vivo={false}`), según el estado:
   - En proceso (`PENDIENTE`…`ENVIADO`): `EtiquetaEnProceso` + «Esperando el resultado del proveedor. Esta página se actualiza sola.» Sondeo como en §3.5.
   - `parcial`: `pending`, «Resultado parcial: el proveedor no pudo liquidar todas las vigencias.»
-  - `ERROR`: `error`, con título = etiqueta de la clase (§1.3; sin clase, «El proveedor no pudo liquidar esta placa») y cuerpo = `errorMensaje` en texto plano, con el respaldo de §1.3 si llega vacío.
-  - `DATOS_INCOMPLETOS`: `warning`, «Faltan datos del RUNT para liquidar: {campo}.», con `{campo}` = `CampoFaltante.x-flit-etiquetas`.
+  - `ERROR`: `error`, con título = etiqueta de la clase (§1.3; sin clase, «El proveedor no pudo liquidar esta placa») y cuerpo = `errorMensaje` en texto plano; si llega vacío, el texto propio del `errorCodigo` (§1.3) y, si el código no se conoce, el respaldo.
+  - `ERROR` de **placa no inscrita** (§1.3): `warning`, título «Errores encontrados», cuerpo = mensaje del proveedor con el final «… o no tiene vigencias pendientes.». Ofrece «Relanzar» con permiso.
+  - `DATOS_INCOMPLETOS`: `warning`, «Faltan datos del RUNT para liquidar: {campo}.», con `{campo}` = `CampoFaltante.x-flit-etiquetas`. Ofrece «Relanzar» con permiso.
   - `DEPARTAMENTO_NO_HABILITADO`: `info`, «El departamento {nombre} no está habilitado en el contrato de tu compañía.»
   - `INCIERTO`: `pending`, `pantalla.detalleIncierto`.
   - `INCIERTO_REQUIERE_DECISION`: `warning`, «No se pudo confirmar si el proveedor recibió la solicitud. Puedes relanzarla; si sí la recibió, puede quedar duplicada.»

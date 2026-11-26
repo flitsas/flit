@@ -222,6 +222,51 @@ public sealed class TransicionesItemTests
         exitoso.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
     }
 
+    [Fact]
+    public void Relanzar_datos_incompletos_crea_otra_individual_y_no_cambia_el_item()
+    {
+        var r = Aplicar(S.DatosIncompletos, new EventoItem.Relanzar());
+
+        r.Nueva.Estado.Should().Be(S.DatosIncompletos);
+        r.CrearRelanzamiento.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("EviewDetailVehicles: La placa ingresada no se encuentra inscrita en nuestra base de datos.")]
+    [InlineData("LA PLACA NO SE ENCUENTRA INSCRITA")]
+    public void Relanzar_un_error_de_placa_no_inscrita_del_portal_aunque_su_clase_sea_depende(string mensaje)
+    {
+        var r = TransicionesItem.Aplicar(
+            new SituacionItem(S.Error, ClaseError: ClaseError.Depende, ErrorCodigo: "portal_rejected", ErrorMensaje: mensaje), new EventoItem.Relanzar());
+
+        r.Nueva.Estado.Should().Be(S.Error);
+        r.Nueva.ClaseError.Should().Be(ClaseError.Depende, "no hay clase nueva");
+        r.CrearRelanzamiento.Should().BeTrue();
+        ClasificacionErrores.EsPlacaNoInscrita("portal_rejected", mensaje).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("portal_rejected", "El portal rechazó la consulta por mantenimiento.")]
+    [InlineData("portal_rejected", null)]
+    [InlineData("invalid_params", "La placa ingresada no se encuentra inscrita en nuestra base de datos.")]
+    public void Un_error_depende_que_no_es_placa_no_inscrita_sigue_sin_relanzarse(string codigo, string? mensaje)
+    {
+        var relanzar = () => TransicionesItem.Aplicar(
+            new SituacionItem(S.Error, ClaseError: ClaseError.Depende, ErrorCodigo: codigo, ErrorMensaje: mensaje), new EventoItem.Relanzar());
+
+        relanzar.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
+        ClasificacionErrores.EsPlacaNoInscrita(codigo, mensaje).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Un_error_de_corregir_datos_sigue_sin_relanzarse()
+    {
+        var relanzar = () => TransicionesItem.Aplicar(
+            new SituacionItem(S.Error, ClaseError: ClaseError.CorregirDatos, ErrorCodigo: "invalid_params", ErrorMensaje: "Placa inválida."), new EventoItem.Relanzar());
+
+        relanzar.Should().Throw<TransicionInvalida>().Which.Codigo.Should().Be(TransicionesItem.CodigoNoRelanzable);
+    }
+
     [Theory]
     [InlineData(S.Pendiente)]
     [InlineData(S.ConsultandoRunt)]
