@@ -72,6 +72,11 @@ internal static class ConsolidadoVigenciaTracker
     /// <c>expediente_actualizado_en</c> y encolaba la regeneración completa (FUR, compraventa, mandato,
     /// certificados y consolidado) de los trámites con consolidado: en PDN, ~1.190 regeneraciones por
     /// trámite en 9 días y ~70 % de las subidas al almacenamiento.
+    /// <para><c>ProviderStatus</c>/<c>ProviderPayload</c> (validado en PDN tras el despliegue): con un
+    /// rechazo de Kyverum que aún tiene intentos, el sondeo refresca el payload crudo del proveedor (el
+    /// motivo del último intento para la UI) y este cambia en cada consulta, así que FT2-0000446 seguía
+    /// regenerándose cada 10 min. El FUR no lee ninguno de los dos: sus sellos salen del estado, la serie
+    /// del certificado y la firma, que siguen contando como cambio.</para>
     /// </summary>
     private static readonly HashSet<string> CamposDeControl = new(StringComparer.Ordinal)
     {
@@ -79,6 +84,8 @@ internal static class ConsolidadoVigenciaTracker
         "UpdatedBy",
         "RowVersion",
         "ReconcilePollCount",
+        "ProviderStatus",
+        "ProviderPayload",
     };
 
     /// <summary>¿La fila modificada solo tocó <see cref="CamposDeControl"/>?</summary>
