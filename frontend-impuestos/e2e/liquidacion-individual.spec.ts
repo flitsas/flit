@@ -141,27 +141,20 @@ test.describe("HU #14694 liquidación por placa (Administrador)", () => {
     await page.getByRole("button", { name: "Relanzar", exact: true }).click();
     const dialogo = page.getByRole("dialog", { name: `Relanzar la placa ${placa}` });
     await expect(dialogo).toBeVisible();
-    await expect(dialogo.getByText("Relanzar crea una liquidación nueva para la placa. El proveedor puede haber recibido la solicitud anterior: podría quedar duplicada.")).toBeVisible();
-    // Foco inicial en Cancelar; Relanzar deshabilitado hasta aceptar el posible duplicado (422 CONFIRMACION_REQUERIDA si no).
+    await expect(dialogo.getByText("La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial.")).toBeVisible();
+    // 1.3.0: sin casilla de posible duplicado; Relanzar habilitado y foco inicial en Cancelar.
     await expect(dialogo.getByRole("button", { name: "Cancelar" })).toBeFocused();
     const confirmar = dialogo.getByRole("button", { name: "Relanzar", exact: true });
-    await expect(confirmar).toBeDisabled();
-    await expect(dialogo.getByText("Confirma que aceptas un posible duplicado en el proveedor.")).toBeVisible();
-    await dialogo.getByRole("checkbox", { name: "Entiendo que puede quedar duplicada" }).check();
     await expect(confirmar).toBeEnabled();
     await revisarTemas(page, "dialogo-relanzar", "LI-2");
     await confirmar.click();
 
-    await page.waitForURL((url) => /\/items\//.test(url.pathname) && url.pathname !== urlOriginal);
-    const nueva = idsDeUrl(page.url());
-    expect(nueva.liquidacionId, "el relanzamiento crea otra liquidación individual").not.toBe(original.liquidacionId);
-    await expect(page.getByText("Posible duplicado", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor.")).toBeVisible();
-    const verOriginal = page.getByRole("link", { name: "Ver la original" });
-    await alcanzarConTab(page, verOriginal);
-    await page.keyboard.press("Enter");
-    await page.waitForURL((url) => url.pathname === urlOriginal);
-    await expect(page.getByRole("heading", { level: 1, name: placa })).toBeVisible();
+    // El relanzamiento es un nuevo intento del mismo registro: no navega a otra liquidación.
+    await expect(dialogo).toBeHidden();
+    expect(new URL(page.url()).pathname, "relanzar no crea otra liquidación").toBe(urlOriginal);
+    expect(idsDeUrl(page.url()).liquidacionId).toBe(original.liquidacionId);
+    await expect(page.getByText("Intento 2", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial de intentos" })).toBeVisible();
   });
 });
 

@@ -195,3 +195,69 @@ describe("DetalleLote — grilla: placa no inscrita en advertencia y relanzable"
     expect(screen.queryByRole("menuitem", { name: "Relanzar" })).toBeNull();
   });
 });
+
+describe("DetalleLote — contrato 1.3.0: «No aplica» en el embudo y relanzar en el mismo lote", () => {
+  it("el embudo lista «No aplica» con su cifra y filtra la tabla por estado=NO_APLICA", async () => {
+    const fetchMock = montar({ estado: "COMPLETADO_CON_NOVEDADES", contadores: { ...CONTADORES_CERO, exitosas: 8, noAplica: 2 } });
+    const grupo = await screen.findByRole("group", { name: "Filtros del lote" });
+    const chip = within(grupo).getByRole("button", { name: /^2\s*No aplica$/ });
+    fireEvent.click(chip);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => /\/items\?.*estado=NO_APLICA/.test(String(u)))).toBe(true));
+  });
+
+  it("relanzar desde la tabla con 200: no navega, cierra el diálogo y vuelve a leer el lote y sus placas", async () => {
+    let relanzado = false;
+    const fetchMock = fetchPorRuta([
+      [/^POST \/api\/v1\/impuestos\/liquidaciones\/L\/items\/I-1\/relanzar$/, () => {
+        relanzado = true;
+        return Response.json({ ...lote({ id: "L", estado: "EN_PROCESO" }), items: [] });
+      }],
+      [
+        ITEMS,
+        () =>
+          Response.json(
+            pagina([
+              item({
+                id: "I-1",
+                liquidacionId: "L",
+                estado: relanzado ? "PENDIENTE" : "ERROR",
+                errorClase: relanzado ? null : "REINTENTABLE",
+                errorCodigo: relanzado ? null : "timeout",
+                resultadoStatus: null,
+                totalAPagar: null,
+              }),
+            ]),
+          ),
+      ],
+      [LOTE, () => Response.json(lote({ id: "L", estado: relanzado ? "EN_PROCESO" : "COMPLETADO_CON_NOVEDADES" }))],
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} />);
+
+    const tabla = await screen.findByRole("table", { name: "Placas del lote" });
+    fireEvent.click(within(tabla).getByRole("button", { name: /Acciones de la placa/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Relanzar" }));
+    const dialogo = await screen.findByRole("dialog", { name: "Relanzar la placa ABC123" });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Relanzar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await within(screen.getByRole("table", { name: "Placas del lote" })).findByText("Pendiente")).toBeInTheDocument();
+    // Sigue en el mismo lote: no redirige a otra liquidación.
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("con el lote CERRADO_MANUALMENTE la fila relanzable no ofrece «Relanzar»", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchPorRuta([
+        [ITEMS, () => Response.json(pagina([item({ liquidacionId: "L", estado: "ERROR", errorClase: "REINTENTABLE", errorCodigo: "timeout", resultadoStatus: "error", totalAPagar: null })]))],
+        [LOTE, () => Response.json(lote({ id: "L", estado: "CERRADO_MANUALMENTE", cerradaEn: "2026-11-24T19:05:00Z" }))],
+      ]),
+    );
+    render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} />);
+    const tabla = await screen.findByRole("table", { name: "Placas del lote" });
+    fireEvent.click(within(tabla).getByRole("button", { name: /Acciones de la placa/ }));
+    await screen.findByRole("menuitem", { name: "Ver detalle" });
+    expect(screen.queryByRole("menuitem", { name: "Relanzar" })).toBeNull();
+  });
+});

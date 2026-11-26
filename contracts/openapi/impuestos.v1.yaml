@@ -149,7 +149,7 @@ x-flit-literales:
     accionDescargarRecibo: Descargar recibo
     accionDescargarPlantilla: Descargar plantilla
     confirmarCerrarLote: "Cerrar el lote deja las placas pendientes en «Sin resultado (lote cerrado)». Si después llega un resultado, se aplica a la placa sin reabrir el lote."
-    confirmarRelanzar: "Relanzar crea una liquidación nueva para la placa. El proveedor puede haber recibido la solicitud anterior: podría quedar duplicada."
+    confirmarRelanzar: "La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial."
     detalleIncierto: Estamos verificando con el proveedor si recibió la solicitud.
     credencialConfigurada: Configurada
     credencialNoConfigurada: Sin configurar

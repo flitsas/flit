@@ -308,3 +308,113 @@ describe("DetalleItem — contrato 1.2.0: «Ver la original» (relanzadoDesdeLiq
     expect(screen.queryByRole("link", { name: "Ver la original" })).toBeNull();
   });
 });
+
+describe("DetalleItem — contrato 1.3.0: NO_APLICA, intentos y relanzar en el mismo registro", () => {
+  const LOTE = /^GET \/api\/v1\/impuestos\/liquidaciones\/L(\?|$)/;
+  const NO_APLICA = {
+    estado: "NO_APLICA",
+    errorCodigo: "servicio_publico",
+    errorMensaje: "El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular.",
+    resultadoStatus: null,
+    totalAPagar: null,
+    periodos: [],
+  };
+  const INTENTOS = [
+    {
+      numero: 2,
+      estado: "ERROR",
+      errorCodigo: "timeout",
+      errorMensaje: null,
+      totalAPagar: null,
+      registradoEn: "2026-11-25T15:30:00Z",
+      relanzadoPor: "Usuaria Demo",
+    },
+    {
+      numero: 1,
+      estado: "INCIERTO_REQUIERE_DECISION",
+      errorCodigo: null,
+      errorMensaje: null,
+      totalAPagar: 0,
+      registradoEn: "2026-11-24T19:05:00Z",
+      relanzadoPor: null,
+    },
+  ];
+
+  it("NO_APLICA: aviso informativo «No aplica» con el cuerpo acordado, chip «No aplica» con su ayuda y sin «Relanzar»", async () => {
+    montar(detalle({ ...NO_APLICA, numeroIntento: 1, intentos: [] }));
+    expect(await screen.findByText("No aplica", { selector: "p" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular, por eso no se consultó al proveedor.",
+      ),
+    ).toBeInTheDocument();
+    const chip = screen.getByRole("status", { name: "Estado: No aplica" });
+    expect(chip).toHaveAttribute("title", "Vehículo de servicio público: no paga impuesto vehicular");
+    expect(screen.queryByRole("button", { name: "Relanzar" })).toBeNull();
+    // No es un error: no se pinta el título de la clase ni el respaldo genérico.
+    expect(screen.queryByText("El proveedor no pudo liquidar esta placa")).toBeNull();
+  });
+
+  it("numeroIntento > 1 muestra «Intento N»; con 1 no se muestra", async () => {
+    montar(detalle({ numeroIntento: 3, intentos: INTENTOS }));
+    expect(await screen.findByText("Intento 3")).toBeInTheDocument();
+  });
+
+  it("numeroIntento 1 y sin intentos: ni «Intento» ni «Historial de intentos»", async () => {
+    montar(detalle({ numeroIntento: 1, intentos: [] }));
+    await screen.findByText("Propietario Demo");
+    expect(screen.queryByText(/^Intento \d+$/)).toBeNull();
+    expect(screen.queryByRole("region", { name: "Historial de intentos" })).toBeNull();
+  });
+
+  it("historial de intentos: una fila por intento con número, chip, mensaje, total, fecha y quién relanzó", async () => {
+    montar(detalle({ numeroIntento: 3, intentos: INTENTOS }));
+    const region = await screen.findByRole("region", { name: "Historial de intentos" });
+    const tabla = within(region).getByRole("table", { name: "Historial de intentos" });
+    const filas = within(tabla).getAllByRole("row").slice(1);
+    expect(filas).toHaveLength(2);
+    expect(within(filas[0]).getByText("2")).toBeInTheDocument();
+    expect(within(filas[0]).getByText("Con error")).toBeInTheDocument();
+    expect(within(filas[0]).getByText("El portal del departamento tardó demasiado en responder. Puedes relanzar la placa.")).toBeInTheDocument();
+    expect(within(filas[0]).getByText("Sin dato")).toBeInTheDocument();
+    expect(within(filas[0]).getByText("25/11/2026 10:30")).toBeInTheDocument();
+    expect(within(filas[0]).getByText("Usuaria Demo")).toBeInTheDocument();
+    expect(within(filas[1]).getByText("Incierto — requiere decisión")).toBeInTheDocument();
+    expect(within(filas[1]).getByText("$ 0")).toBeInTheDocument();
+    // Sin error ni actor: «—» en la celda, nunca el respaldo de error.
+    expect(within(filas[1]).queryByText("El proveedor no pudo liquidar esta placa.")).toBeNull();
+    expect(within(filas[1]).getAllByText("—").length).toBe(2);
+  });
+
+  it("con el lote CERRADO_MANUALMENTE no se ofrece «Relanzar» aunque la placa sea relanzable", async () => {
+    montar(detalle({ estado: "ERROR", errorClase: "REINTENTABLE", errorCodigo: "timeout", resultadoStatus: "error", totalAPagar: null }), {}, [
+      [LOTE, () => Response.json({ id: "L", tipo: "MASIVA", estado: "CERRADO_MANUALMENTE" })],
+    ]);
+    await screen.findByText("Reintentable como nueva consulta");
+    await waitFor(() => expect(screen.getByText("Lote L")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Relanzar" })).toBeNull();
+  });
+
+  it("relanzar con 200: no navega a otra liquidación, cierra el diálogo y vuelve a leer la misma placa", async () => {
+    let relanzado = false;
+    const fetchMock = montar(detalle({ estado: "ERROR", errorClase: "REINTENTABLE", errorCodigo: "timeout", resultadoStatus: "error", totalAPagar: null }), {}, [
+      [
+        /^POST \/api\/v1\/impuestos\/liquidaciones\/L\/items\/[^/]+\/relanzar$/,
+        () => {
+          relanzado = true;
+          return Response.json({ id: "L", tipo: "INDIVIDUAL", estado: "EN_PROCESO", items: [] });
+        },
+      ],
+    ]);
+    await screen.findByRole("button", { name: "Relanzar" });
+    const lecturasAntes = fetchMock.mock.calls.filter(([u]) => /\/items\/I(\?|$)/.test(String(u))).length;
+    fireEvent.click(screen.getByRole("button", { name: "Relanzar" }));
+    const dialogo = await screen.findByRole("dialog", { name: "Relanzar la placa ABC123" });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Relanzar" }));
+
+    await waitFor(() => expect(relanzado).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([u]) => /\/items\/I(\?|$)/.test(String(u))).length).toBeGreaterThan(lecturasAntes));
+    expect(push).not.toHaveBeenCalled();
+  });
+});

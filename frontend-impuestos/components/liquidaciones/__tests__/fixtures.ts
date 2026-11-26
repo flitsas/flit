@@ -15,6 +15,8 @@ export const CONTADORES_CERO = {
   incierto: 0,
   sinResultado: 0,
   pendientes: 0,
+  // 1.3.0: placas de servicio público (NO_APLICA).
+  noAplica: 0,
 };
 
 export function resumen(parcial: Record<string, unknown> = {}) {

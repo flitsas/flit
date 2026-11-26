@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { chipFila, chipItem, esPlacaNoInscrita, esRelanzable, mensajeError, mensajePlacaNoInscrita } from "@/lib/liquidaciones/estados";
+import {
+  CONTADORES,
+  ERRORES_LIQUIDACIONES,
+  ESTADOS_ITEM,
+  PANTALLA,
+  chipFila,
+  chipItem,
+  esPlacaNoInscrita,
+  esRelanzable,
+  mensajeError,
+  mensajePlacaNoInscrita,
+} from "@/lib/liquidaciones/estados";
 
 // Uso de ejemplo: mensajeError({ estado: "ERROR", errorCodigo: "source_inactive", errorMensaje: null, departamento: { nombre: "Boyacá" } })
 // → «El proveedor tiene deshabilitado temporalmente el departamento de Boyacá. Puedes relanzar la placa más tarde.»
@@ -117,7 +128,7 @@ describe("chipItem — placa no inscrita en advertencia", () => {
 });
 
 describe("chipFila — placa no inscrita en la tabla principal (ResumenLiquidacion.placaNoInscrita)", () => {
-  const contadores = { exitosas: 0, conDeuda: 0, pazYSalvo: 0, error: 1, datosIncompletos: 0, departamentoNoHabilitado: 0, incierto: 0, sinResultado: 0, pendientes: 0 };
+  const contadores = { exitosas: 0, conDeuda: 0, pazYSalvo: 0, error: 1, datosIncompletos: 0, departamentoNoHabilitado: 0, incierto: 0, sinResultado: 0, pendientes: 0, noAplica: 0 };
   const individual = { tipo: "INDIVIDUAL", estado: "COMPLETADO_CON_NOVEDADES", estadoItem: "ERROR", contadores } as const;
 
   it("individual en ERROR con placaNoInscrita true: «Con novedad» en warning", () => {
@@ -140,5 +151,54 @@ describe("chipFila — placa no inscrita en la tabla principal (ResumenLiquidaci
     const masiva = { tipo: "MASIVA", estado: "COMPLETADO_CON_NOVEDADES", estadoItem: null, contadores } as const;
     expect(chipFila({ ...masiva, placaNoInscrita: true })).toEqual(chipFila(masiva));
     expect(chipFila({ ...masiva, placaNoInscrita: null })).toEqual(chipFila(masiva));
+  });
+});
+
+describe("contrato 1.3.0 — NO_APLICA (servicio público) y relanzar como nuevo intento", () => {
+  const SERVICIO_PUBLICO = "El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular.";
+  const AYUDA = "Vehículo de servicio público: no paga impuesto vehicular";
+  const noAplica = ficha({ estado: "NO_APLICA", errorCodigo: "servicio_publico", resultadoStatus: null });
+  const ceros = { exitosas: 0, conDeuda: 0, pazYSalvo: 0, error: 0, datosIncompletos: 0, departamentoNoHabilitado: 0, incierto: 0, sinResultado: 0, pendientes: 0, noAplica: 0 };
+
+  it("chipItem NO_APLICA: «No aplica» en neutral con la ayuda del servicio público (ni error ni advertencia)", () => {
+    expect(chipItem(noAplica)).toEqual({ texto: "No aplica", tono: "neutral", ayuda: AYUDA });
+  });
+
+  it("chipFila: la individual con estadoItem NO_APLICA dice «No aplica»; sin estadoItem lo deduce de contadores.noAplica", () => {
+    expect(chipFila({ tipo: "INDIVIDUAL", estado: "COMPLETADO_CON_NOVEDADES", estadoItem: "NO_APLICA", contadores: { ...ceros, noAplica: 1 } })).toEqual({
+      texto: "No aplica",
+      tono: "neutral",
+      ayuda: AYUDA,
+    });
+    expect(chipFila({ tipo: "INDIVIDUAL", estado: "COMPLETADO_CON_NOVEDADES", estadoItem: null, contadores: { ...ceros, noAplica: 1 } })).toEqual({
+      texto: "No aplica",
+      tono: "neutral",
+      ayuda: AYUDA,
+    });
+  });
+
+  it("etiquetas del contrato: ESTADOS_ITEM.NO_APLICA y CONTADORES.noAplica", () => {
+    expect(ESTADOS_ITEM.NO_APLICA).toBe("No aplica (servicio público)");
+    expect(CONTADORES.noAplica).toBe("No aplica");
+  });
+
+  it("mensajeError servicio_publico sin errorMensaje: el texto del contrato", () => {
+    expect(mensajeError(noAplica)).toBe(SERVICIO_PUBLICO);
+  });
+
+  it("esRelanzable: NO_APLICA nunca; con el lote CERRADO_MANUALMENTE tampoco; con otro estado del lote, como antes", () => {
+    expect(esRelanzable(noAplica)).toBe(false);
+    const reintentable = ficha({ errorClase: "REINTENTABLE", errorCodigo: "timeout" });
+    expect(esRelanzable(reintentable, "CERRADO_MANUALMENTE")).toBe(false);
+    expect(esRelanzable(ficha({ estado: "INCIERTO_REQUIERE_DECISION" }), "CERRADO_MANUALMENTE")).toBe(false);
+    expect(esRelanzable(reintentable, "COMPLETADO_CON_NOVEDADES")).toBe(true);
+    expect(esRelanzable(reintentable, null)).toBe(true);
+  });
+
+  it("literales 1.3.0: NO_RELANZABLE nuevo y confirmación del nuevo intento", () => {
+    expect(ERRORES_LIQUIDACIONES.NO_RELANZABLE).toBe(
+      "Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.",
+    );
+    expect(PANTALLA.confirmarRelanzar).toBe("La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial.");
   });
 });

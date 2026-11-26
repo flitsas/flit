@@ -1,5 +1,5 @@
 // Mapa único estado → chip de liquidaciones (spec-visual §1) con los literales cerrados del contrato
-// contracts/openapi/impuestos.v1.yaml 1.1.0 (`x-flit-etiquetas` de cada enum y `x-flit-literales`), que mandan ante un
+// contracts/openapi/impuestos.v1.yaml 1.3.0 (`x-flit-etiquetas` de cada enum y `x-flit-literales`), que mandan ante un
 // choque con la spec. Un código desconocido se pinta en `neutral` como «Sin clasificar», nunca con el código crudo.
 import type { StatusBadgeTone } from "@flit/ui/StatusBadge";
 import { ERRORES_EMPRESA } from "@/lib/errores";
@@ -7,11 +7,12 @@ import { rotular } from "@/lib/rotulos";
 import { bannersDeSesion, type SesionImpuestos } from "@/lib/sesion";
 import type { ClaseError, Contadores, EstadoItem, EstadoLiquidacion, Item, MotivoRecibo, Recibo, ResumenLiquidacion } from "./tipos";
 
-/** Chip: texto y tono; `enProceso` se pinta con EtiquetaEnProceso (punto pulsante). */
+/** Chip: texto y tono; `enProceso` se pinta con EtiquetaEnProceso (punto pulsante); `ayuda` va como tooltip nativo. */
 export interface Chip {
   texto: string;
   tono: StatusBadgeTone;
   enProceso?: boolean;
+  ayuda?: string;
 }
 
 /** x-flit-literales.errores del contrato (solo los de liquidaciones y recibos). `{tope}` lo sustituye mensajeErrorFijo. */
@@ -30,7 +31,9 @@ export const ERRORES_LIQUIDACIONES: Readonly<Record<string, string>> = {
   RECIBO_NO_ENCONTRADO: "El recibo no existe.",
   RECIBO_NO_DISPONIBLE: "El recibo no está disponible.",
   YA_TERMINADA: "La liquidación ya terminó: no se puede cerrar.",
-  NO_RELANZABLE: "Solo se relanzan placas en «Incierto — requiere decisión» o con error reintentable.",
+  NO_RELANZABLE:
+    "Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.",
+  /** Retirado en la 1.3.0 (relanzar ya no pide confirmación); el literal se conserva para un backend anterior. */
   CONFIRMACION_REQUERIDA: "Confirma que aceptas un posible duplicado en el proveedor.",
   RANGO_INVALIDO: "El rango de fechas no es válido.",
   FILTRO_INVALIDO: "Un filtro no es válido.",
@@ -51,8 +54,8 @@ export const PANTALLA = {
   accionDescargarPlantilla: "Descargar plantilla",
   confirmarCerrarLote:
     "Cerrar el lote deja las placas pendientes en «Sin resultado (lote cerrado)». Si después llega un resultado, se aplica a la placa sin reabrir el lote.",
-  confirmarRelanzar:
-    "Relanzar crea una liquidación nueva para la placa. El proveedor puede haber recibido la solicitud anterior: podría quedar duplicada.",
+  // 1.3.0 (decisión del usuario 2026-11-26): relanzar es un nuevo intento del mismo registro.
+  confirmarRelanzar: "La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial.",
   detalleIncierto: "Estamos verificando con el proveedor si recibió la solicitud.",
   sinResultados: "No hay resultados para los filtros elegidos.",
 } as const;
@@ -82,6 +85,7 @@ export const ESTADOS_ITEM: Readonly<Record<EstadoItem, string>> = {
   EXITOSO: "Exitosa",
   ERROR: "Con error",
   SIN_RESULTADO_LOTE_CERRADO: "Sin resultado (lote cerrado)",
+  NO_APLICA: "No aplica (servicio público)",
 };
 
 export const RESULTADOS: Readonly<Record<string, string>> = { con_deuda: "Con deuda", paz_y_salvo: "Paz y salvo", error: "Con error" };
@@ -156,6 +160,7 @@ export const CONTADORES: Readonly<Record<keyof Contadores, string>> = {
   incierto: "Inciertas",
   sinResultado: "Sin resultado",
   pendientes: "Pendientes",
+  noAplica: "No aplica",
 };
 
 // ── Chips ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -181,6 +186,7 @@ const TONO_ITEM: Readonly<Record<EstadoItem, StatusBadgeTone>> = {
   EXITOSO: "success",
   ERROR: "danger",
   SIN_RESULTADO_LOTE_CERRADO: "neutral",
+  NO_APLICA: "neutral",
 };
 
 const tiene = <K extends string>(mapa: Readonly<Record<K, unknown>>, clave: string | null | undefined): clave is K =>
@@ -201,6 +207,12 @@ export function chipLote(estado: string | null | undefined): Chip {
 export const CHIP_PLACA_NO_INSCRITA = "Con novedad";
 
 /**
+ * Chip de NO_APLICA (1.3.0, servicio público): «No aplica» en neutral, ni error ni advertencia, con la razón como ayuda.
+ * El texto corto va en el chip; la etiqueta larga del contrato («No aplica (servicio público)») queda en ESTADOS_ITEM.
+ */
+export const CHIP_NO_APLICA: Chip = { texto: "No aplica", tono: "neutral", ayuda: "Vehículo de servicio público: no paga impuesto vehicular" };
+
+/**
  * Chip del ítem (§1.2). Un EXITOSO muestra el resultado: «Con deuda» (warning) o «Paz y salvo» (success). La placa no
  * inscrita (`esPlacaNoInscrita`) dice «Con novedad» en `warning`.
  */
@@ -210,6 +222,7 @@ export function chipItem(item: Pick<Item, "estado" | "resultadoStatus"> & Partia
   if (estado === "EXITOSO" && resultadoStatus === "con_deuda") return { texto: RESULTADOS.con_deuda, tono: "warning" };
   if (estado === "EXITOSO" && resultadoStatus === "paz_y_salvo") return { texto: RESULTADOS.paz_y_salvo, tono: "success" };
   if (esPlacaNoInscrita(item)) return { texto: CHIP_PLACA_NO_INSCRITA, tono: "warning" };
+  if (estado === "NO_APLICA") return { ...CHIP_NO_APLICA };
   return { texto: ESTADOS_ITEM[estado], tono: TONO_ITEM[estado] };
 }
 
@@ -234,6 +247,7 @@ export function chipFila(r: Pick<ResumenLiquidacion, "tipo" | "estado" | "contad
   if (c.conDeuda > 0) return { texto: RESULTADOS.con_deuda, tono: "warning" };
   if (c.pazYSalvo > 0) return { texto: RESULTADOS.paz_y_salvo, tono: "success" };
   if (c.exitosas > 0) return { texto: ESTADOS_ITEM.EXITOSO, tono: "success" };
+  if ((c.noAplica ?? 0) > 0) return { ...CHIP_NO_APLICA };
   if (c.error > 0) return { texto: ESTADOS_ITEM.ERROR, tono: "danger" };
   if (c.datosIncompletos > 0) return { texto: ESTADOS_ITEM.DATOS_INCOMPLETOS, tono: "warning" };
   if (c.departamentoNoHabilitado > 0) return { texto: ESTADOS_ITEM.DEPARTAMENTO_NO_HABILITADO, tono: "neutral" };
@@ -328,6 +342,8 @@ export const MENSAJES_ERROR: Readonly<Record<string, (departamento: string | nul
   parse_error: () => "No se pudo leer la respuesta del portal del departamento. Puedes relanzar la placa.",
   unexpected: () => "Ocurrió una falla inesperada al liquidar esta placa. Puedes relanzarla.",
   worker_lost: () => "La consulta se interrumpió antes de terminar. Puedes relanzar la placa.",
+  // 1.3.0: NO_APLICA (vehículo de servicio público), literal del contrato (EstadoItem).
+  servicio_publico: () => "El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular.",
 };
 
 /**
@@ -343,10 +359,15 @@ export function mensajeError(item: ErrorDelItem & Partial<Pick<Item, "departamen
 }
 
 /**
- * Relanzable (plan §3.2): INCIERTO_REQUIERE_DECISION, DATOS_INCOMPLETOS, ERROR con clase REINTENTABLE y la placa no
- * inscrita (`esPlacaNoInscrita`).
+ * Relanzable (plan §3.2, contrato 1.3.0): INCIERTO_REQUIERE_DECISION, DATOS_INCOMPLETOS, ERROR con clase REINTENTABLE y
+ * la placa no inscrita (`esPlacaNoInscrita`). Nunca NO_APLICA ni con la liquidación CERRADO_MANUALMENTE (`estadoLote`,
+ * cuando se conoce; sin él se decide solo por el ítem y el backend responde 409 NO_RELANZABLE si el lote está cerrado).
  */
-export function esRelanzable(item: Pick<Item, "estado" | "errorClase"> & Partial<Pick<Item, "errorCodigo" | "errorMensaje">>): boolean {
+export function esRelanzable(
+  item: Pick<Item, "estado" | "errorClase"> & Partial<Pick<Item, "errorCodigo" | "errorMensaje">>,
+  estadoLote?: EstadoLiquidacion | string | null,
+): boolean {
+  if (estadoLote === "CERRADO_MANUALMENTE") return false;
   if (item.estado === "INCIERTO_REQUIERE_DECISION" || item.estado === "DATOS_INCOMPLETOS") return true;
   return item.estado === "ERROR" && (item.errorClase === "REINTENTABLE" || esPlacaNoInscrita(item));
 }

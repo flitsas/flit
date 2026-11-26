@@ -17,7 +17,7 @@ import { Monto } from "@/components/liquidaciones/TablaVigencias";
 import { hrefConEmpresa } from "@/lib/empresaSeleccionada";
 import { PANTALLA, chipItem, esRelanzable } from "@/lib/liquidaciones/estados";
 import { SIN_DATO, formatoDocumento } from "@/lib/liquidaciones/formato";
-import type { Item } from "@/lib/liquidaciones/tipos";
+import type { EstadoLiquidacion, Item } from "@/lib/liquidaciones/tipos";
 
 interface Props {
   liquidacionId: string;
@@ -25,6 +25,8 @@ interface Props {
   empresa: string | null;
   /** impuestos.liquidaciones.crear: «Relanzar» en las placas relanzables. */
   puedeRelanzar: boolean;
+  /** Estado del lote (1.3.0): con CERRADO_MANUALMENTE ninguna placa ofrece «Relanzar». */
+  estadoLote?: EstadoLiquidacion | null;
   onRelanzar: (item: Item) => void;
 }
 
@@ -34,9 +36,10 @@ const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 /**
  * Placas del lote (spec-visual §3.5). Tabla por defecto con el chip de cada placa (sin role="status"), propietario y
  * documento completos (DA-7=b), el total («Sin dato» si es null) y el menú de acciones de la fila: «Ver detalle» y
- * «Relanzar» solo en «Incierto — requiere decisión» o error reintentable y con permiso. La placa también es enlace.
+ * «Relanzar» solo en las placas relanzables (`esRelanzable`: nunca NO_APLICA ni con el lote cerrado a mano) y con permiso.
+ * La placa también es enlace.
  */
-export function GridItems({ liquidacionId, items, empresa, puedeRelanzar, onRelanzar }: Props) {
+export function GridItems({ liquidacionId, items, empresa, puedeRelanzar, estadoLote = null, onRelanzar }: Props) {
   const router = useRouter();
   return (
     <div className={CONTENEDOR_TABLA_CLS}>
@@ -54,7 +57,7 @@ export function GridItems({ liquidacionId, items, empresa, puedeRelanzar, onRela
           {items.map((it) => {
             const destino = hrefConEmpresa(`/liquidaciones/${encodeURIComponent(liquidacionId)}/items/${encodeURIComponent(it.id)}`, empresa);
             const acciones: ActionsMenuItem[] = [{ key: "ver", label: "Ver detalle", onSelect: () => router.push(destino) }];
-            if (puedeRelanzar && esRelanzable(it)) acciones.push({ key: "relanzar", label: PANTALLA.accionRelanzar, onSelect: () => onRelanzar(it) });
+            if (puedeRelanzar && esRelanzable(it, estadoLote)) acciones.push({ key: "relanzar", label: PANTALLA.accionRelanzar, onSelect: () => onRelanzar(it) });
             return (
               <tr key={it.id} className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 <td data-label="Placa" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>

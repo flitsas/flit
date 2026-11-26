@@ -1,16 +1,14 @@
 "use client";
 
-import { useId, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Button } from "@flit/ui/Button";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
-import { AYUDA_CLS, MARCA_CLS } from "@/components/comun/estilos";
 import { ApiError } from "@/lib/api";
-import { hrefConEmpresa } from "@/lib/empresaSeleccionada";
 import { mensajeErrorFijo } from "@/lib/errores";
 import { relanzarItem } from "@/lib/liquidaciones/api";
 import { ERRORES_LIQUIDACIONES, PANTALLA } from "@/lib/liquidaciones/estados";
+import type { LiquidacionConItems } from "@/lib/liquidaciones/tipos";
 
 interface Props {
   open: boolean;
@@ -18,40 +16,37 @@ interface Props {
   item: { id: string; placa: string };
   empresa: string | null;
   onClose: () => void;
+  /** 200 del relanzamiento: la misma liquidación. Quien abrió el diálogo vuelve a leer su pantalla (ítem o lote). */
+  onRelanzado: (liquidacion: LiquidacionConItems) => void;
 }
 
 /** Códigos que se explican con su literal del contrato dentro del diálogo. */
 const CON_LITERAL = new Set(["NO_RELANZABLE", "APROVISIONAMIENTO_NO_LISTO", "PRODUCTO_SUSPENDIDO", "CONFIRMACION_REQUERIDA"]);
 
 /**
- * Relanzar una placa (spec-visual §3.5, plan §3.2): crea una liquidación por placa nueva con aviso de posible duplicado.
- * La casilla «Entiendo que puede quedar duplicada» es obligatoria: hasta marcarla, «Relanzar» está deshabilitado con el
- * literal CONFIRMACION_REQUERIDA visible y asociado. Con el 201 navega al ítem nuevo. Los errores quedan dentro del
- * diálogo, que no se cierra (409 NO_RELANZABLE con el literal del contrato).
+ * Relanzar una placa (spec-visual §3.5, contrato 1.3.0): abre un nuevo intento del MISMO registro; no crea otra
+ * liquidación ni pide confirmar un posible duplicado. Con el 200 entrega la liquidación a `onRelanzado` (la pantalla
+ * vuelve a leer el ítem o el lote y el sondeo sigue al nuevo intento); no navega. Los errores quedan dentro del diálogo,
+ * que no se cierra (409 NO_RELANZABLE con el literal del contrato).
  */
-export function DialogoRelanzar({ open, liquidacionId, item, empresa, onClose }: Props) {
-  const router = useRouter();
-  const base = useId();
-  const idMotivo = `${base}-motivo`;
-  const [acepta, setAcepta] = useState(false);
+export function DialogoRelanzar({ open, liquidacionId, item, empresa, onClose, onRelanzado }: Props) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function cerrar() {
     if (enviando) return;
-    setAcepta(false);
     setError(null);
     onClose();
   }
 
   async function relanzar() {
-    if (!acepta || enviando) return;
+    if (enviando) return;
     setEnviando(true);
     setError(null);
     try {
-      const nueva = await relanzarItem(liquidacionId, item.id, { empresa });
-      const itemNuevo = nueva.items?.[0]?.id;
-      router.push(hrefConEmpresa(itemNuevo ? `/liquidaciones/${nueva.id}/items/${itemNuevo}` : `/liquidaciones/${nueva.id}`, empresa));
+      const misma = await relanzarItem(liquidacionId, item.id, { empresa });
+      setEnviando(false);
+      onRelanzado(misma);
     } catch (e) {
       setEnviando(false);
       setError(
@@ -76,7 +71,7 @@ export function DialogoRelanzar({ open, liquidacionId, item, empresa, onClose }:
           <Button variant="secondary" onClick={cerrar} disabled={enviando} data-autofocus>
             Cancelar
           </Button>
-          <Button cargando={enviando} disabled={!acepta} aria-describedby={acepta ? undefined : idMotivo} onClick={() => void relanzar()}>
+          <Button cargando={enviando} onClick={() => void relanzar()}>
             {PANTALLA.accionRelanzar}
           </Button>
         </div>
@@ -84,15 +79,6 @@ export function DialogoRelanzar({ open, liquidacionId, item, empresa, onClose }:
     >
       <div className="flex flex-col gap-3">
         <p className="text-sm text-flit-primary">{PANTALLA.confirmarRelanzar}</p>
-        <label className="flex items-center gap-2 text-sm font-semibold text-flit-primary">
-          <input type="checkbox" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} className={MARCA_CLS} />
-          Entiendo que puede quedar duplicada
-        </label>
-        {!acepta ? (
-          <p id={idMotivo} className={AYUDA_CLS}>
-            {ERRORES_LIQUIDACIONES.CONFIRMACION_REQUERIDA}
-          </p>
-        ) : null}
         {error ? (
           <InlineAlert tone="error" title="No se relanzó la placa">
             {error}

@@ -101,8 +101,12 @@ export function cerrarLiquidacion(l: string, motivo: string | null, o: Opciones 
   return apiFetch(RUTAS_LIQUIDACIONES.cerrar(l), { ...o, method: "POST", body: { motivo } });
 }
 
+/**
+ * Relanza una placa como un nuevo intento del MISMO ítem (contrato 1.3.0): 200 con la misma LiquidacionConItems. Sin
+ * cuerpo (es opcional y `confirmarPosibleDuplicado` quedó retirado). 409 NO_RELANZABLE si la placa no se puede relanzar.
+ */
 export function relanzarItem(l: string, i: string, o: Opciones = {}): Promise<LiquidacionConItems> {
-  return apiFetch(RUTAS_LIQUIDACIONES.relanzar(l, i), { ...o, method: "POST", body: { confirmarPosibleDuplicado: true } });
+  return apiFetch(RUTAS_LIQUIDACIONES.relanzar(l, i), { ...o, method: "POST" });
 }
 
 // ── Descargas por el BFF (blob) ──────────────────────────────────────────────────────────────────────────────────────

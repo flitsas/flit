@@ -1,5 +1,5 @@
-// Tipos de liquidaciones tal como los define contracts/openapi/impuestos.v1.yaml 1.1.0 (componentes ResumenLiquidacion,
-// Liquidacion, LiquidacionConItems, Item, ItemDetalle, Periodo, Recibo y AnalisisCarga). Un monto `null` es «sin dato»
+// Tipos de liquidaciones tal como los define contracts/openapi/impuestos.v1.yaml 1.3.0 (componentes ResumenLiquidacion,
+// Liquidacion, LiquidacionConItems, Item, ItemDetalle, IntentoItem, Periodo, Recibo y AnalisisCarga). Un monto `null` es «sin dato»
 // y nunca suma como 0. Ninguna respuesta trae dirección, correo ni teléfono del propietario.
 
 export type TipoLiquidacion = "INDIVIDUAL" | "MASIVA";
@@ -18,7 +18,9 @@ export type EstadoItem =
   | "DEPARTAMENTO_NO_HABILITADO"
   | "EXITOSO"
   | "ERROR"
-  | "SIN_RESULTADO_LOTE_CERRADO";
+  | "SIN_RESULTADO_LOTE_CERRADO"
+  /** 1.3.0: el RUNT reporta el vehículo como de servicio público; final, no se relanza, ni error ni exitosa. */
+  | "NO_APLICA";
 
 export type ResultadoStatus = "con_deuda" | "paz_y_salvo" | "error" | null;
 export type ClaseError = "CORREGIR_DATOS" | "DEPENDE" | "REINTENTABLE" | null;
@@ -42,6 +44,8 @@ export interface Contadores {
   incierto: number;
   sinResultado: number;
   pendientes: number;
+  /** 1.3.0: ítems NO_APLICA (servicio público). */
+  noAplica: number;
 }
 
 export interface ResumenLiquidacion {
@@ -106,6 +110,7 @@ export interface Item {
   totalAPagar: number | null;
   resultadoStatus: ResultadoStatus;
   parcial: boolean;
+  /** Solo en ítems relanzados antes de la 1.3.0; desde entonces siempre false (relanzar es un intento del mismo ítem). */
   posibleDuplicado: boolean;
   resultadoTardio?: boolean;
   relanzadoDesde?: string | null;
@@ -152,6 +157,20 @@ export interface Recibo {
   razon?: string | null;
 }
 
+/** Un intento cerrado al relanzar (1.3.0): la foto del ítem en ese momento, sin datos del propietario. */
+export interface IntentoItem {
+  numero: number;
+  estado: EstadoItem;
+  errorCodigo: string | null;
+  errorMensaje: string | null;
+  /** null = «Sin dato» (nunca 0). */
+  totalAPagar: number | null;
+  /** Cuándo se cerró el intento (el relanzamiento). */
+  registradoEn: string;
+  /** Nombre de quien relanzó, tal como venía en su token. */
+  relanzadoPor: string | null;
+}
+
 export interface ItemDetalle extends Item {
   empresa: Referencia;
   creadaPor: Referencia;
@@ -161,6 +180,10 @@ export interface ItemDetalle extends Item {
   resultado: Record<string, unknown> | null;
   periodos: Periodo[];
   recibos: Recibo[];
+  /** Intento en curso (1.3.0): 1 al crear, +1 por relanzamiento. Opcional: un backend anterior no lo manda. */
+  numeroIntento?: number;
+  /** Intentos cerrados al relanzar (1.3.0), el más reciente primero; [] si nunca se relanzó. Opcional: backend anterior. */
+  intentos?: IntentoItem[];
 }
 
 export interface AnalisisCarga {

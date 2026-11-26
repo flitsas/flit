@@ -299,6 +299,15 @@ describe("GridLiquidaciones — contrato 1.1.0 (delta 4: itemId y estadoItem de 
     expect(within(filaError).getByText("Con error")).toBeInTheDocument();
   });
 
+  it("1.3.0: una individual NO_APLICA (servicio público) muestra «No aplica» con su ayuda, no «Con error»", async () => {
+    const SERVICIO = { ...INDIVIDUAL_110, estadoItem: "NO_APLICA", contadores: { ...CONTADORES_CERO, noAplica: 1 } };
+    vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json(pagina([SERVICIO]))]]));
+    render_();
+    const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
+    expect(within(tabla).getByText("No aplica")).toHaveAttribute("title", "Vehículo de servicio público: no paga impuesto vehicular");
+    expect(within(tabla).queryByText("Con error")).toBeNull();
+  });
+
   it("una individual sin itemId (respuesta vieja) sigue enlazando al lote, que redirige", async () => {
     vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json(pagina([INDIVIDUAL]))]]));
     render_();

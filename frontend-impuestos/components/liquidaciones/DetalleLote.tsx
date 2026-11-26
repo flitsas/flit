@@ -50,6 +50,8 @@ const FILTROS: Array<{ clave: keyof Contadores; estado: EstadoItem }> = [
   { clave: "datosIncompletos", estado: "DATOS_INCOMPLETOS" },
   { clave: "departamentoNoHabilitado", estado: "DEPARTAMENTO_NO_HABILITADO" },
   { clave: "sinResultado", estado: "SIN_RESULTADO_LOTE_CERRADO" },
+  // 1.3.0: servicio público.
+  { clave: "noAplica", estado: "NO_APLICA" },
 ];
 const SOLO_CIFRA: Array<keyof Contadores> = ["conDeuda", "pazYSalvo", "incierto", "pendientes"];
 
@@ -150,7 +152,14 @@ function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: 
   } else {
     tabla = (
       <div className="flex flex-col gap-3">
-        <GridItems liquidacionId={liquidacionId} items={items.items} empresa={empresa} puedeRelanzar={puedeRelanzar} onRelanzar={setRelanzar} />
+        <GridItems
+          liquidacionId={liquidacionId}
+          items={items.items}
+          empresa={empresa}
+          puedeRelanzar={puedeRelanzar}
+          estadoLote={lote.estado}
+          onRelanzar={setRelanzar}
+        />
         <Pagination
           page={items.page}
           pageSize={items.pageSize}
@@ -218,7 +227,7 @@ function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: 
         <div role="group" aria-label="Filtros del lote" className={EMBUDO_CLS}>
           <ChipFiltro cifra={lote.totalItems} etiqueta="Todas" activo={estado === null} onClick={() => filtrar(null)} />
           {FILTROS.map((f) => (
-            <ChipFiltro key={f.clave} cifra={lote.contadores[f.clave]} etiqueta={CONTADORES[f.clave]} activo={estado === f.estado} onClick={() => filtrar(f.estado)} />
+            <ChipFiltro key={f.clave} cifra={lote.contadores[f.clave] ?? 0} etiqueta={CONTADORES[f.clave]} activo={estado === f.estado} onClick={() => filtrar(f.estado)} />
           ))}
         </div>
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-flit-primary">
@@ -277,7 +286,21 @@ function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: 
           );
         }}
       />
-      {relanzar ? <DialogoRelanzar open liquidacionId={liquidacionId} item={relanzar} empresa={empresa} onClose={() => setRelanzar(null)} /> : null}
+      {relanzar ? (
+        <DialogoRelanzar
+          open
+          liquidacionId={liquidacionId}
+          item={relanzar}
+          empresa={empresa}
+          onClose={() => setRelanzar(null)}
+          onRelanzado={() => {
+            // 1.3.0: es la misma liquidación con la placa en su nuevo intento; se relee el lote y sus placas y el sondeo
+            // sigue mientras vuelve a estar en proceso.
+            setRelanzar(null);
+            reintentar();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

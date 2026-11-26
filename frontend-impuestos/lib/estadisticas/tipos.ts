@@ -18,6 +18,8 @@ export interface ContadoresLiquidacion {
   incierto: number;
   sinResultado: number;
   pendientes: number;
+  /** 1.3.0: placas NO_APLICA (servicio público). Opcional: un backend anterior no lo manda. */
+  noAplica?: number;
 }
 
 export interface Referencia {
@@ -51,6 +53,8 @@ export interface DashboardImpuestos {
     departamentoNoHabilitado: number;
     inciertas: number;
     sinResultado: number;
+    /** 1.3.0: placas NO_APLICA (servicio público), etiqueta «No aplica». Opcional: un backend anterior no lo manda. */
+    noAplica?: number;
   } | null;
   deuda: { placasConDeuda: number; placasAlDia: number } | null;
   /** Suma de totalAPagar sin los null; null (delta 13) = «Sin dato», nunca 0. */

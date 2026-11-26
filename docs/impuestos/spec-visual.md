@@ -5,6 +5,7 @@
 > Revisado: 2026-11-25 (HEAD 3396655bc) · alineada con `impuestos.v1.yaml` 1.1.0 (deltas 4 a 7) y con el front ya integrado: chip y enlace de la fila `INDIVIDUAL`, motivo del cierre, Super Admin sin compañía en Liquidaciones, filtros y fila protegida de Usuarios, columna «Usuarios» y compañía identificada en el backoffice. Lo que espera al contrato 1.2.0 va marcado «en 1.2.0».
 > Revisado: 2026-11-25 (HEAD cfffcab89) · alineada con `impuestos.v1.yaml` 1.2.1 y `platform.v1.yaml` 1.1.1: lo marcado «en 1.2.0» quedó **entregado** (Reintentar en `LISTO_SIN_WEBHOOK`, motivos nuevos, `CLAVE_ROTADA` en el historial, línea de `modoRespaldoFirma`, enlace «Ver la original»); H-14 y H-17 cerrados; literal nuevo de `pantalla.avisoRotacionCredenciales`.
 > Revisado: 2026-11-25 (HEAD 2404ba1bf) · auditoría final M21 (§7). §3.1 y §3.7 alineadas con `impuestos.v1.yaml` 1.2.1 (deltas 9 a 13): series «Individuales»/«Masivas», «Monto liquidado» por departamento, `montoTotal` nullable, marcas «Parcial», filtros desde `/catalogos/reportes`, columna «Compañía» solo en la vista global, exportación con los mismos filtros y literal `TOPE_EXPORTACION` con `{tope}`.
+> Revisado: 2026-11-26 · alineada con `impuestos.v1.yaml` 1.3.0 (decisión del usuario 2026-11-26): chip `NO_APLICA` (servicio público, §1.2 y §3.6), relanzar como **nuevo intento del mismo registro** con «Historial de intentos» (§3.6) y `DialogoRelanzar` sin casilla de posible duplicado (§3.5); contador `noAplica` en el embudo del lote (§3.5).
 > Insumo del `frontend-agent` para M16–M19 y del `ui-agent` para auditarlos. HU FE #14695.
 > Plan de referencia: `docs/impuestos/plan-implementacion.md` §3 (estados), §5.1 (contrato), §6 (rutas), §9 M15–M19. Decisiones: `.claude/state/producto-impuestos/decisiones-usuario.md` (D-DASH, D-REPORTES, D-CONFIG, D-GESTOR, D-ROL-ADMIN, DA-6b, DA-7, DA-9).
 
@@ -102,13 +103,15 @@ Literal = `EstadoItem.x-flit-etiquetas`; en `EXITOSO`, `ResultadoStatus.x-flit-e
 | `EXITOSO` sin resultado | Exitosa | `success` | |
 | `ERROR` | Con error | `danger` | Clase de error (§1.3) junto al estado. **Placa no inscrita** (§1.3): chip «Con novedad» en `warning`, en el detalle y en la grilla del lote |
 | `SIN_RESULTADO_LOTE_CERRADO` | Sin resultado (lote cerrado) | `neutral` | |
+| `NO_APLICA` (1.3.0) | Chip «No aplica» (etiqueta larga del contrato «No aplica (servicio público)» en filtros y reportes) | `neutral` | Vehículo de servicio público: no paga impuesto vehicular. Final, **no es error ni exitosa** y no se relanza. Tooltip nativo (`title`) «Vehículo de servicio público: no paga impuesto vehicular» en la cabecera del detalle, la grilla del lote y la fila `INDIVIDUAL` del grid; la razón también va en el aviso del detalle (§3.6), así que no depende del puntero. `errorCodigo` `servicio_publico` |
 
 Marcas adicionales: chips pequeños junto al estado, siempre con texto (`x-flit-literales.pantalla`).
 
 | Marca | Literal | Tono |
 |---|---|---|
 | `parcial` | Parcial (`marcaParcial`) | `purple` |
-| `posibleDuplicado` | Posible duplicado (`marcaPosibleDuplicado`) | `warning` |
+| `posibleDuplicado` | Posible duplicado (`marcaPosibleDuplicado`) | `warning` — solo datos anteriores a la 1.3.0; desde entonces siempre `false` |
+| `numeroIntento > 1` (1.3.0) | «Intento {N}» | `neutral` — en la cabecera del detalle de la placa (§3.6) |
 | `resultado_tardio` | Resultado tardío (`marcaResultadoTardio`) | `info` |
 | período `no_liquidable` | El portal no permite liquidar esta vigencia (`Periodo.x-flit-etiquetas.noLiquidable`) | `neutral` |
 
@@ -139,6 +142,7 @@ En el detalle de la placa (§3.6), el aviso de `ERROR` lleva la clase como títu
 | `parse_error` | No se pudo leer la respuesta del portal del departamento. Puedes relanzar la placa. |
 | `unexpected` | Ocurrió una falla inesperada al liquidar esta placa. Puedes relanzarla. |
 | `worker_lost` | La consulta se interrumpió antes de terminar. Puedes relanzar la placa. |
+| `servicio_publico` (1.3.0, `NO_APLICA`) | El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular. |
 | otro / vacío | El proveedor no pudo liquidar esta placa. |
 
 **Placa no inscrita** (`esPlacaNoInscrita` en `lib/liquidaciones/estados.ts`, única fuente del reconocimiento): `ERROR` con `errorCodigo` `portal_rejected` y un `errorMensaje` que contiene «no se encuentra inscrita» (sin distinguir mayúsculas). No se pinta como error:
@@ -357,7 +361,7 @@ Pagination
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌ Avance del lote (TARJETA) ───────────────────────────────────────────────────────────────────────────────────────┐
 │ BarraProgreso «{t} de {n} placas terminadas» · «Se actualiza solo mientras el lote está en proceso.»            │
-│ Embudo ChipFiltro: Todas · Exitosas · Con error · Datos incompletos · Departamento no habilitado · Sin resultado │
+│ Embudo ChipFiltro: Todas · Exitosas · Con error · Datos incompletos · Departamento no habilitado · Sin resultado · No aplica │
 │ Solo cifra (dl): Con deuda · Paz y salvo · Inciertas · Pendientes                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌ Placas del lote (TARJETA) [Buscar placa ___] ────────────────────────────────────────────────────────────────────┐
@@ -367,24 +371,25 @@ Pagination
 ```
 
 - Embudo: `ChipFiltro` de `@flit/ui/ChipsFiltro` dentro de `EMBUDO_CLS` (`role="group" aria-label="Filtros del lote"`), exclusivos y con `aria-pressed`. Cifra 0 en neutral. Filtra `?estado=`.
-  - **Solo son chips los contadores que corresponden a un único `EstadoItem`:** «Todas» (`totalItems`), `exitosas`→`EXITOSO`, `error`→`ERROR`, `datosIncompletos`→`DATOS_INCOMPLETOS`, `departamentoNoHabilitado`→`DEPARTAMENTO_NO_HABILITADO` y `sinResultado`→`SIN_RESULTADO_LOTE_CERRADO`. Un chip que no filtra exactamente lo que cuenta rompería la promesa del embudo.
+  - **Solo son chips los contadores que corresponden a un único `EstadoItem`:** «Todas» (`totalItems`), `exitosas`→`EXITOSO`, `error`→`ERROR`, `datosIncompletos`→`DATOS_INCOMPLETOS`, `departamentoNoHabilitado`→`DEPARTAMENTO_NO_HABILITADO`, `sinResultado`→`SIN_RESULTADO_LOTE_CERRADO` y (1.3.0) `noAplica`→`NO_APLICA` «No aplica» (un backend anterior sin el campo muestra 0). Un chip que no filtra exactamente lo que cuenta rompería la promesa del embudo.
   - `conDeuda` y `pazYSalvo` (resultado, no estado), `incierto` (dos estados) y `pendientes` (seis estados) van como cifras de solo lectura en una `dl` bajo el embudo.
   - Etiquetas = `Contadores.x-flit-etiquetas`.
 - Sondeo mientras está `EN_PROCESO`: cada 5 s, se duplica si nada cambia hasta 30 s y se detiene al pasar a terminal. Si falla, `InlineAlert tone="warning"` «Datos desactualizados desde hh:mm» + «Reintentar», sin borrar lo leído.
 - `CERRADO_MANUALMENTE`: `InlineAlert tone="info" vivo={false}` «Cerrado manualmente el {fecha} por {nombre}.». Sin `cerradaPor`, o con `cerradaPor.nombre` vacío (un actor sin nombre cuenta como sin actor), «Cerrado manualmente el {fecha}.» (nunca «por .»). Si `Liquidacion.motivoCierre` (1.1.0) trae texto, va una segunda línea «Motivo: {texto}» en texto plano (nunca HTML), recortado; vacío o `null`, sin línea (H-16 cerrado).
-- Acciones por fila: `ActionsMenu` de `@flit/ui` (`ariaLabel="Acciones de la placa"`, descrito por la celda Placa) con «Ver detalle» y «Relanzar» (`pantalla.accionRelanzar`, con `liquidaciones.crear`). **Regla de relanzables** (`esRelanzable`, la misma en la grilla y en el detalle): `INCIERTO_REQUIERE_DECISION`, `DATOS_INCOMPLETOS`, `ERROR` con clase `REINTENTABLE` y la placa no inscrita (§1.3, `ERROR` `portal_rejected` de clase `DEPENDE`). Cualquier otro `ERROR` (`CORREGIR_DATOS` o `DEPENDE`) no se relanza. La placa también es enlace al detalle.
+- Acciones por fila: `ActionsMenu` de `@flit/ui` (`ariaLabel="Acciones de la placa"`, descrito por la celda Placa) con «Ver detalle» y «Relanzar» (`pantalla.accionRelanzar`, con `liquidaciones.crear`). **Regla de relanzables** (`esRelanzable`, la misma en la grilla y en el detalle): `INCIERTO_REQUIERE_DECISION`, `DATOS_INCOMPLETOS`, `ERROR` con clase `REINTENTABLE` y la placa no inscrita (§1.3, `ERROR` `portal_rejected` de clase `DEPENDE`). Cualquier otro `ERROR` (`CORREGIR_DATOS` o `DEPENDE`) no se relanza. **1.3.0:** `NO_APLICA` nunca se relanza, y con el lote `CERRADO_MANUALMENTE` ninguna placa ofrece «Relanzar» (`esRelanzable(item, estadoLote)`; el backend responde 409 `NO_RELANZABLE` si aun así llega). La placa también es enlace al detalle.
 - **`DialogoCerrarLote`** (`Modal` de `@flit/ui/Modal`, `size="md"`, `icono="alerta"`, `closeOnBackdrop={false}`, `busy` mientras envía):
   - Título «Cerrar lote».
   - Cuerpo: `pantalla.confirmarCerrarLote`.
   - Campo `textarea` «Motivo (opcional)», con `maxLength` **300** (el del contrato en `POST /liquidaciones/{id}/cerrar`) y ayuda «Hasta 300 caracteres.» asociada por `aria-describedby`.
   - Pie: `Button variant="secondary"` «Cancelar» (foco inicial) + `Button variant="alerta"` «Cerrar lote».
   - Errores dentro del diálogo, que no se cierra: 409 `YA_TERMINADA` con su literal del contrato; otro, «No se pudo cerrar el lote. Intenta de nuevo.».
-- **`DialogoRelanzar`** (`Modal size="md"`, `icono="reintento"`, `closeOnBackdrop={false}`):
+- **`DialogoRelanzar`** (`Modal size="md"`, `icono="reintento"`, `closeOnBackdrop={false}`, `busy` mientras envía). **1.3.0:** relanzar abre un **nuevo intento del mismo registro**; no crea otra liquidación.
   - Título «Relanzar la placa {PLACA}».
-  - Cuerpo: `pantalla.confirmarRelanzar`.
-  - Casilla obligatoria «Entiendo que puede quedar duplicada» (`MARCA_CLS`).
-  - Pie: «Cancelar» + `Button` primario «Relanzar», deshabilitado hasta marcar la casilla y con el motivo visible.
-  - Con 201 navega al ítem nuevo. 409 `NO_RELANZABLE` y 422 `CONFIRMACION_REQUERIDA`: literal del contrato, dentro del diálogo.
+  - Cuerpo: «La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial.» (`PANTALLA.confirmarRelanzar`).
+  - Sin casilla de posible duplicado (retirada en la 1.3.0, con `CONFIRMACION_REQUERIDA`).
+  - Pie: «Cancelar» (foco inicial) + `Button` primario «Relanzar», siempre habilitado.
+  - `POST …/relanzar` sin cuerpo. Con el 200 (la misma `LiquidacionConItems`) el diálogo se cierra y **no navega**: la pantalla que lo abrió vuelve a leer con su recarga (`reintentar` de `useCargaConSondeo`): el detalle del lote relee la cabecera y las placas; el detalle de la placa relee el ítem. La placa vuelve a `PENDIENTE` y el sondeo la sigue.
+  - 409 `NO_RELANZABLE` (literal 1.3.0: «Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.»), `APROVISIONAMIENTO_NO_LISTO` y `PRODUCTO_SUSPENDIDO`: literal del contrato, dentro del diálogo, que no se cierra. Otro error: «No se pudo relanzar la placa. Intenta de nuevo.».
 
 | Estado | Contenido |
 |---|---|
@@ -400,7 +405,7 @@ Pagination
 ```
 ┌ CabeceraModulo: miga «Liquidaciones › Lote {idCorto} › ABC123» (individual: «Liquidaciones › ABC123») ┐
 │ titulo «ABC123» (tituloClassName "uppercase tracking-[0.12em]") · descripción «Liquidación por placa|masiva · dd/mm/aaaa» │
-│ acciones: [StatusBadge estado] [chips de marca] [Relanzar]*                                           │
+│ acciones: [StatusBadge estado] [Intento N]*** [chips de marca] [Relanzar]*                              │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 [Aviso de resultado — InlineAlert según estado]
 ┌ Vehículo y propietario ──────────┐┌ Totales ───────────────────────────────┐     lg:grid-cols-2
@@ -410,8 +415,10 @@ Pagination
 │ Vigencia · Avalúo · Impuesto · Sanción · Intereses · Descuentos · Pagos previos · Total a pagar · Vencimiento · Referencia de pago │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
 ┌ Recibos (lista) ────────────────────────────────────────────┐
+┌ Historial de intentos (tabla)*** ── Intento · Estado · Mensaje · Total a pagar · Fecha · Relanzó ┐
 ┌ TarjetaPlegable «Observaciones del proveedor» (warnings · validations · file_errors) ┐
 ```
+*** 1.3.0: «Intento N» solo con `numeroIntento > 1`; el historial solo con `intentos.length > 0`.
 
 - Aviso de resultado (`InlineAlert vivo={false}`), según el estado:
   - En proceso (`PENDIENTE`…`ENVIADO`): `EtiquetaEnProceso` + «Esperando el resultado del proveedor. Esta página se actualiza sola.» Sondeo como en §3.5.
@@ -423,8 +430,9 @@ Pagination
   - `INCIERTO`: `pending`, `pantalla.detalleIncierto`.
   - `INCIERTO_REQUIERE_DECISION`: `warning`, «No se pudo confirmar si el proveedor recibió la solicitud. Puedes relanzarla; si sí la recibió, puede quedar duplicada.»
   - `SIN_RESULTADO_LOTE_CERRADO`: `info`, «El lote se cerró antes de recibir el resultado de esta placa.»
+  - `NO_APLICA` (1.3.0): `info` (informativo, no `error` ni `warning`), título «No aplica», cuerpo «El RUNT reporta el vehículo como de servicio público. Los vehículos de servicio público no pagan impuesto vehicular, por eso no se consultó al proveedor.». Sin «Relanzar».
   - `resultado_tardio`: `info`, «Este resultado llegó después de cerrar el lote.»
-  - `posibleDuplicado`: `warning`, «Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor.». **Entregado en 1.2.0:** enlace «Ver la original» a `/liquidaciones/{relanzadoDesdeLiquidacionId}/items/{relanzadoDesdeItemId}` (con `?empresa` si el Super Admin la trae); si falta alguno de los dos ids, no hay enlace. H-17 cerrado.
+  - `posibleDuplicado` (solo datos anteriores a la 1.3.0; desde entonces llega siempre `false`): `warning`, «Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor.». **Entregado en 1.2.0:** enlace «Ver la original» a `/liquidaciones/{relanzadoDesdeLiquidacionId}/items/{relanzadoDesdeItemId}` (con `?empresa` si el Super Admin la trae); si falta alguno de los dos ids, no hay enlace. H-17 cerrado.
 - Vehículo y propietario (`ListaDefinicion`, `columnas={2}`, `vacio="Sin dato"`): Placa (`Placa`), Departamento, Secretaría, Propietario y Documento. Secretaría = `Item.secretaria` (1.1.0, delta 5) como «{nombre}, {ciudad}»; con uno solo de los dos, ese; sin ninguno, «Sin dato» (`formatoSecretaria`). Nada de dirección, correo ni teléfono.
 - Totales: `ListaDefinicion` con «Total a pagar» (monto §0.1, `text-base font-bold`), «Vigencias pendientes» (n) y «Vencimiento más próximo». **`null` muestra «Sin dato»; `0` muestra `$ 0`.**
 - Vigencias (`TablaVigencias.tsx`): tabla por defecto (§0.2) dentro de un contenedor con scroll horizontal (`RegionDesplazable`, con la forma de Diagnóstico: `tabIndex=0`, `role="region"`, `aria-label="Vigencias"`). Montos alineados a la derecha. Cada celda `null` dice «Sin dato». Una fila `no_liquidable` lleva el chip de §1.2. Cabeceras = `Periodo.x-flit-etiquetas`. `otros_cargos` va como sub-fila desplegable «Otros cargos ({n})». Por debajo de 1024 px se apila con `TABLA_MOVIL_*`.
@@ -434,6 +442,7 @@ Pagination
   - Con `GUARDADO` y `recibos.descargar`: enlace con forma de botón `BOTON_SECUNDARIO_CLS` + `Icono "nube-bajar"` «Descargar recibo» (`pantalla.accionDescargarRecibo`), con nombre accesible «Descargar recibo {nombre}». Estado propio por botón: «Descargando…» con `aria-busy`. Error bajo el botón con `role="alert"` y `aria-describedby`: 409 `RECIBO_NO_DISPONIBLE` y 404 `RECIBO_NO_ENCONTRADO` con su literal del contrato; otro, «No se descargó el recibo. Intenta de nuevo.».
   - Sin permiso, solo el estado.
   - Sin recibos: «Esta liquidación no tiene recibos.»
+- **Historial de intentos** (1.3.0, `ItemDetalle.intentos`, el más reciente primero; solo si hay al menos uno): `section` con `h2` «Historial de intentos» en `TARJETA_CLS` y una tabla por defecto (§0.2, `aria-label="Historial de intentos"`, `TABLA_MOVIL_*` por debajo de 1024 px). Una fila por intento: «Intento» (`th scope="row"`, el número), «Estado» (chip de §1.2 con `chipItem`, sin role), «Mensaje» (`mensajeError` con el `errorCodigo`/`errorMensaje` del intento; «—» si el intento no tuvo error), «Total a pagar» (`Monto`: `null` «Sin dato», `0` «$ 0»), «Fecha» (`registradoEn` con `formatoFecha`, en `<time>`) y «Relanzó» (`relanzadoPor`; «—» si viene `null`). Sin datos del propietario. Un backend anterior sin `intentos` no pinta la sección.
 - Observaciones del proveedor: `TarjetaPlegable` de `@flit/ui/TarjetaPlegable` (`nivelTitulo={2}`, cerrada por defecto), con tres listas tituladas «Advertencias», «Validaciones» y «Archivos con error». De `validations` solo se muestran el campo y el mensaje; **nunca `sent`**, que puede traer PII. Sin ninguna, la tarjeta no se pinta.
 
 | Estado | Contenido |

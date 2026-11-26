@@ -5,9 +5,9 @@ import { GridItems } from "@/components/liquidaciones/GridItems";
 import type { Item } from "@/lib/liquidaciones/tipos";
 import { errorRegla, fetchPorRuta, item, lote } from "./fixtures";
 
-// Uso de ejemplo: <DialogoRelanzar open liquidacionId="L" item={{ id: "I", placa: "ABC123" }} empresa={null} onClose={…} />
-// relanza una placa en «Incierto — requiere decisión» o con error reintentable como una liquidación por placa nueva
-// (plan §3.2), con aviso de posible duplicado y la casilla obligatoria; con el 201 navega al ítem nuevo.
+// Uso de ejemplo: <DialogoRelanzar open liquidacionId="L" item={{ id: "I", placa: "ABC123" }} empresa={null} onClose={…} onRelanzado={…} />
+// relanza una placa como un nuevo intento del MISMO registro (contrato 1.3.0): sin casilla de posible duplicado; con el
+// 200 entrega la liquidación a `onRelanzado` para que la pantalla vuelva a leer el ítem o el lote, sin navegar.
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -16,60 +16,55 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const CONFIRMAR =
-  "Relanzar crea una liquidación nueva para la placa. El proveedor puede haber recibido la solicitud anterior: podría quedar duplicada.";
+const CONFIRMAR = "La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial.";
+const NO_RELANZABLE =
+  "Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.";
 
 beforeEach(() => push.mockReset());
 afterEach(() => vi.unstubAllGlobals());
 
-const montar = (empresa: string | null = null) =>
-  render(<DialogoRelanzar open liquidacionId="L" item={{ id: "I", placa: "ABC123" }} empresa={empresa} onClose={vi.fn()} />);
+const montar = (empresa: string | null = null, onRelanzado = vi.fn(), onClose = vi.fn()) => {
+  render(<DialogoRelanzar open liquidacionId="L" item={{ id: "I", placa: "ABC123" }} empresa={empresa} onClose={onClose} onRelanzado={onRelanzado} />);
+  return { onRelanzado, onClose };
+};
 
 describe("DialogoRelanzar", () => {
-  it("título con la placa, texto del contrato y «Relanzar» deshabilitado hasta marcar la casilla, con el motivo asociado", () => {
+  it("título con la placa, texto del nuevo intento y «Relanzar» habilitado, sin la casilla de posible duplicado", () => {
     vi.stubGlobal("fetch", vi.fn());
     montar();
     const dialogo = screen.getByRole("dialog", { name: "Relanzar la placa ABC123" });
     expect(within(dialogo).getByText(CONFIRMAR)).toBeInTheDocument();
-    const relanzar = within(dialogo).getByRole("button", { name: "Relanzar" });
-    expect(relanzar).toBeDisabled();
-    const motivo = within(dialogo).getByText("Confirma que aceptas un posible duplicado en el proveedor.");
-    expect(relanzar.getAttribute("aria-describedby")).toContain(motivo.id);
-
-    fireEvent.click(within(dialogo).getByRole("checkbox", { name: "Entiendo que puede quedar duplicada" }));
-    expect(relanzar).toBeEnabled();
+    expect(within(dialogo).getByRole("button", { name: "Relanzar" })).toBeEnabled();
+    expect(within(dialogo).queryByRole("checkbox")).toBeNull();
+    expect(within(dialogo).queryByText(/duplicad/i)).toBeNull();
   });
 
-  it("con la casilla envía confirmarPosibleDuplicado=true y navega al ítem nuevo", async () => {
-    const nuevo = { ...lote({ id: "L-2", tipo: "INDIVIDUAL", totalItems: 1 }), items: [item({ id: "I-2", liquidacionId: "L-2", posibleDuplicado: true })] };
-    const fetchMock = fetchPorRuta([[/^POST \/api\/v1\/impuestos\/liquidaciones\/L\/items\/I\/relanzar\?empresa=e-9$/, () => Response.json(nuevo, { status: 201 })]]);
+  it("con el 200 entrega la misma liquidación a onRelanzado, no navega y no envía confirmarPosibleDuplicado", async () => {
+    const misma = { ...lote({ id: "L", estado: "EN_PROCESO" }), items: [item({ id: "I", liquidacionId: "L", estado: "PENDIENTE" })] };
+    const fetchMock = fetchPorRuta([[/^POST \/api\/v1\/impuestos\/liquidaciones\/L\/items\/I\/relanzar\?empresa=e-9$/, () => Response.json(misma, { status: 200 })]]);
     vi.stubGlobal("fetch", fetchMock);
-    montar("e-9");
+    const { onRelanzado } = montar("e-9");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Entiendo que puede quedar duplicada" }));
     fireEvent.click(screen.getByRole("button", { name: "Relanzar" }));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/liquidaciones/L-2/items/I-2?empresa=e-9"));
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ confirmarPosibleDuplicado: true });
+    await waitFor(() => expect(onRelanzado).toHaveBeenCalledWith(expect.objectContaining({ id: "L" })));
+    expect(push).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined();
   });
 
-  it("409 NO_RELANZABLE: el literal del contrato dentro del diálogo", async () => {
-    vi.stubGlobal(
-      "fetch",
-      fetchPorRuta([[/relanzar/, () => errorRegla(409, "NO_RELANZABLE", "Solo se relanzan placas en «Incierto — requiere decisión» o con error reintentable.")]]),
-    );
-    montar();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Entiendo que puede quedar duplicada" }));
+  it("409 NO_RELANZABLE: el literal 1.3.0 dentro del diálogo, sin onRelanzado", async () => {
+    vi.stubGlobal("fetch", fetchPorRuta([[/relanzar/, () => errorRegla(409, "NO_RELANZABLE", NO_RELANZABLE)]]));
+    const { onRelanzado } = montar();
     fireEvent.click(screen.getByRole("button", { name: "Relanzar" }));
-    expect(await within(screen.getByRole("dialog")).findByText("Solo se relanzan placas en «Incierto — requiere decisión» o con error reintentable.")).toBeInTheDocument();
+    expect(await within(screen.getByRole("dialog")).findByText(NO_RELANZABLE)).toBeInTheDocument();
+    expect(onRelanzado).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
   it("Cancelar cierra sin llamar a la API", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const onClose = vi.fn();
-    render(<DialogoRelanzar open liquidacionId="L" item={{ id: "I", placa: "ABC123" }} empresa={null} onClose={onClose} />);
+    const { onClose } = montar();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(onClose).toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -108,5 +103,22 @@ describe("GridItems — «Relanzar» solo en placas relanzables y con permiso", 
     expect(within(filas[0]).getByText("Sin dato")).toBeInTheDocument();
     expect(within(filas[2]).getByText("$ 0")).toBeInTheDocument();
     expect(within(filas[0]).getByRole("link", { name: "ABC123" })).toHaveAttribute("href", "/liquidaciones/L/items/I-1");
+  });
+
+  it("1.3.0: NO_APLICA muestra «No aplica» con su ayuda y sin «Relanzar»", () => {
+    const servicio = [item({ id: "I-4", placa: "SPU123", estado: "NO_APLICA", errorCodigo: "servicio_publico", resultadoStatus: null, totalAPagar: null })] as Item[];
+    render(<GridItems liquidacionId="L" items={servicio} empresa={null} puedeRelanzar onRelanzar={vi.fn()} />);
+    const fila = within(screen.getByRole("table", { name: "Placas del lote" })).getAllByRole("row")[1];
+    expect(within(fila).getByText("No aplica")).toHaveAttribute("title", "Vehículo de servicio público: no paga impuesto vehicular");
+    fireEvent.click(within(fila).getByRole("button", { name: /Acciones de la placa/ }));
+    expect(screen.queryByRole("menuitem", { name: "Relanzar" })).toBeNull();
+  });
+
+  it("1.3.0: con el lote CERRADO_MANUALMENTE ninguna fila ofrece «Relanzar»", () => {
+    render(<GridItems liquidacionId="L" items={ITEMS} empresa={null} puedeRelanzar estadoLote="CERRADO_MANUALMENTE" onRelanzar={vi.fn()} />);
+    const filas = within(screen.getByRole("table", { name: "Placas del lote" })).getAllByRole("row").slice(1);
+    fireEvent.click(within(filas[0]).getByRole("button", { name: /Acciones de la placa/ }));
+    expect(screen.getByRole("menuitem", { name: "Ver detalle" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Relanzar" })).toBeNull();
   });
 });
