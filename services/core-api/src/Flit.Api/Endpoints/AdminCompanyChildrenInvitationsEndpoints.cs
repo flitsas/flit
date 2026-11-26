@@ -217,24 +217,35 @@ public static class AdminCompanyChildrenInvitationsEndpoints
             join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
             where a.TenantId == childTenantId && a.DeletedAt == null && u.DeletedAt == null
             orderby u.DisplayName
-            select new
-            {
-                userId = u.Id,
-                u.DisplayName,
-                u.Email,
-                roleCode = r.Code,
-                roleId = r.Id,
-                status = u.Status,
-            }).ToListAsync(cancellationToken).ConfigureAwait(false);
+            select new ChildUserRow(u.Id, u.DisplayName, u.Email, r.Code, r.Id, u.Status))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         // HU #12964 (decisión D1) y #12967: un AdminCompany tiene además el admin de cada producto. Una fila por usuario,
         // con el rol que no es espejo.
         var items = users
-            .GroupBy(x => x.userId)
-            .Select(g => g.OrderBy(x => ProductRoleCodes.IsProductAdmin(x.roleCode) ? 1 : 0).First())
+            .GroupBy(x => x.UserId)
+            .Select(g => g.OrderBy(x => ProductRoleCodes.IsProductAdmin(x.RoleCode) ? 1 : 0).First())
             .ToList();
 
-        return Results.Ok(new { items });
+        // Bug #14714: quien aún no activó la cuenta es una invitación, no un usuario con rol, y no
+        // salía en esta lista (la ficha del hijo mostraba «No hay usuarios»). Se agregan las pendientes
+        // y canceladas con el mismo criterio que el listado general (InvitationListingStatuses).
+        // `userId` lleva el id de la invitación y `status` su estado real; las filas de invitación no
+        // tienen acciones en la ficha del hijo.
+        var invitations = await (
+            from i in db.UserInvitations.AsNoTracking()
+            where i.TenantId == childTenantId && InvitationListingStatuses.Visible.Contains(i.Status)
+            orderby i.CreatedAt descending
+            select new ChildUserRow(
+                i.Id,
+                i.FullName == "" ? i.Email : i.FullName,
+                i.Email,
+                db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Code).FirstOrDefault() ?? string.Empty,
+                i.RoleId ?? Guid.Empty,
+                i.Status))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { items = items.Concat(invitations).ToList() });
     }
 
     private static async Task<IResult> DeactivateUserAsync(
@@ -277,4 +288,8 @@ public static class AdminCompanyChildrenInvitationsEndpoints
     }
 
     private sealed record ChildInvitationRequest(string? Email, string? FullName, Guid[]? RoleIds);
+
+    /// <summary>Fila del listado de usuarios del hijo: usuario con rol o invitación (pending/cancelled).</summary>
+    private sealed record ChildUserRow(
+        Guid UserId, string DisplayName, string Email, string RoleCode, Guid RoleId, string Status);
 }

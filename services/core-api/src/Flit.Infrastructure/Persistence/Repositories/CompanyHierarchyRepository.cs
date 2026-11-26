@@ -146,25 +146,33 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
             return await ProjectAsync(entity, cancellationToken).ConfigureAwait(false);
         }
 
-        await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-        if (changedBy is { } actor && actor != Guid.Empty)
-        {
-            await TenantHierarchySession.SetCurrentUserAsync(_context, actor, cancellationToken).ConfigureAwait(false);
-        }
-
-        entity.ParentTenantId = parentTenantId;
-        entity.UpdatedAt = DateTimeOffset.UtcNow;
-        entity.UpdatedBy = changedBy;
-
+        // Bug #14714: el DbContext usa EnableRetryOnFailure, que no admite una transacción abierta a
+        // mano fuera de su estrategia de ejecución (InvalidOperationException → 500 al vincular).
+        // Toda la unidad (sesión de usuario + guardado + commit) va dentro de la estrategia.
+        var strategy = _context.Database.CreateExecutionStrategy();
         try
         {
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var tx = await _context.Database
+                    .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+                if (changedBy is { } actor && actor != Guid.Empty)
+                {
+                    await TenantHierarchySession.SetCurrentUserAsync(_context, actor, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                entity.ParentTenantId = parentTenantId;
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                entity.UpdatedBy = changedBy;
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (IsHierarchyRejection(ex, out var detail))
         {
-            await tx.RollbackAsync(cancellationToken).ConfigureAwait(false);
             _context.ChangeTracker.Clear();
             throw new CompanyLinkRejectedException(childTenantId, detail);
         }

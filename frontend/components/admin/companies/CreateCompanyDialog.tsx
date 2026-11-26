@@ -10,7 +10,7 @@ import { domainErrorCode, domainErrorMessage, isValidHostFormat, registerAdminDo
 import {
   ApiValidationError,
   isHeadTenantType,
-  selectableTenantTypes,
+  creatableTenantTypes,
   TENANT_TYPE_LABELS,
   type TenantType,
 } from "@/lib/api/types";
@@ -64,7 +64,7 @@ export function CreateCompanyDialog({
   const [pendingCreated, setPendingCreated] = useState<CompanyListItem | null>(null);
   const [setupWarnings, setSetupWarnings] = useState<string[]>([]);
 
-  const tenantTypes = selectableTenantTypes(isSuperAdmin);
+  const tenantTypes = creatableTenantTypes(isSuperAdmin);
   const isConcesion = tenantType === "CONCESION";
   const isMarcaBlanca = tenantType === "MARCA_BLANCA";
   // La Marca Blanca también elige sus OT en el alta; sin elegir ninguno queda con todos los de FLIT.

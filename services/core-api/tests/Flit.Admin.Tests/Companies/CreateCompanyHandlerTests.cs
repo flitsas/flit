@@ -77,11 +77,35 @@ public sealed class CreateCompanyHandlerTests
 
         var result = await handler.HandleAsync(new CreateCompanyCommand
         {
-            Request = new CreateCompanyRequest("Concesionario X", "901000000-1", "concesionario", true),
+            Request = new CreateCompanyRequest("Renting X", "901000000-1", "renting", true),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeTrue();
-        (await ctx.Tenants.SingleAsync(t => t.TaxId == "901000000-1", cancellationToken: TestContext.Current.CancellationToken)).TenantType.Should().Be("CONCESIONARIO");
+        (await ctx.Tenants.SingleAsync(t => t.TaxId == "901000000-1", cancellationToken: TestContext.Current.CancellationToken)).TenantType.Should().Be("RENTING");
+    }
+
+    /// <summary>
+    /// Bug #14714 — un Concesionario solo existe como hijo de una cabeza Concesión. Creado por el alta
+    /// general quedaba huérfano (sin padre) y luego no había cómo asociarlo. Se rechaza con 422 y no
+    /// persiste nada; el alta correcta es POST /companies/{cabeza}/children.
+    /// </summary>
+    [Theory]
+    [InlineData("CONCESIONARIO")]
+    [InlineData("concesionario")]
+    public async Task Concesionario_sin_cabeza_Return422_AndPersistNothing(string tenantType)
+    {
+        await using var ctx = NewContext(NewDbName());
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+
+        var result = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            Request = new CreateCompanyRequest("Concesionario Huerfano", "901000001-1", tenantType, true),
+        }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "tenantType")
+            .Which.Message.Should().Be(CreateCompanyHandler.ConcesionarioRequiresHeadMessage);
+        (await ctx.Tenants.AnyAsync(t => t.TaxId == "901000001-1", TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
