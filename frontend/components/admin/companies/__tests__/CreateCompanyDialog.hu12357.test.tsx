@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { CreateCompanyDialog } from "../CreateCompanyDialog";
 
 describe("CreateCompanyDialog (HU #12357)", () => {
-  it("SuperAdmin ve los cinco tipos incluyendo Concesión y Marca Blanca", () => {
+  it("SuperAdmin ve las cabezas Concesión y Marca Blanca, pero no Cliente concesión (Bug #14714)", () => {
     render(
       <CreateCompanyDialog
         open
@@ -17,7 +17,8 @@ describe("CreateCompanyDialog (HU #12357)", () => {
     const select = screen.getByLabelText(/tipo de compañía/i);
     expect(select).toHaveTextContent("Concesión");
     expect(select).toHaveTextContent("Marca Blanca");
-    expect(select).toHaveTextContent("Cliente concesión");
+    // Bug #14714: el Cliente concesión solo existe como hijo de una cabeza; no se crea desde el alta general.
+    expect(select).not.toHaveTextContent("Cliente concesión");
   });
 
   it("usuario no SuperAdmin no ve Concesión ni Marca Blanca", () => {
@@ -34,7 +35,7 @@ describe("CreateCompanyDialog (HU #12357)", () => {
     const select = screen.getByLabelText(/tipo de compañía/i);
     expect(select).not.toHaveTextContent("Concesión");
     expect(select).not.toHaveTextContent("Marca Blanca");
-    expect(select).toHaveTextContent("Cliente concesión");
+    expect(select).toHaveTextContent("Radicadora");
   });
 
   it("al elegir Marca Blanca muestra el campo opcional de dominio (HU #12427 AC3)", () => {
