@@ -21,8 +21,9 @@ internal sealed class TenantRuntPersonOverrideRepository(FlitDbContext db)
         string documentNumber,
         CancellationToken ct)
     {
-        // Comparación normalizada: upper/trim para tipo, lower/trim para número.
-        var normalizedType = documentType.ToUpperInvariant().Trim();
+        // Tipo canónico FLIT (PAS/CE/…) aunque el lookup traiga código de proveedor (PA/E/…).
+        // Bug #14721: MapDocumentType convierte PAS→PA antes del decorador de override.
+        var normalizedType = TenantRuntPersonOverrideDocTypes.Normalize(documentType);
         var normalizedNumber = documentNumber.ToLowerInvariant().Trim();
         var now = DateTimeOffset.UtcNow;
 
@@ -53,7 +54,7 @@ internal sealed class TenantRuntPersonOverrideRepository(FlitDbContext db)
 
         if (!string.IsNullOrWhiteSpace(documentTypeFilter))
         {
-            var normalizedFilter = documentTypeFilter.ToUpperInvariant().Trim();
+            var normalizedFilter = TenantRuntPersonOverrideDocTypes.Normalize(documentTypeFilter);
             query = query.Where(x => x.DocumentType.ToUpper().Trim() == normalizedFilter);
         }
 
@@ -79,8 +80,8 @@ internal sealed class TenantRuntPersonOverrideRepository(FlitDbContext db)
         CreateTenantRuntPersonOverrideRequest request,
         CancellationToken ct)
     {
-        // Verificar unicidad de override activo.
-        var normalizedType = request.DocumentType.ToUpperInvariant().Trim();
+        // Verificar unicidad de override activo (mismo canónico que FindActiveAsync — bug #14721).
+        var normalizedType = TenantRuntPersonOverrideDocTypes.Normalize(request.DocumentType);
         var normalizedNumber = request.DocumentNumber.ToLowerInvariant().Trim();
         var now = DateTimeOffset.UtcNow;
 
@@ -101,7 +102,7 @@ internal sealed class TenantRuntPersonOverrideRepository(FlitDbContext db)
         {
             Id = Guid.NewGuid(),
             TenantId = request.TenantId,
-            DocumentType = request.DocumentType.ToUpperInvariant().Trim(),
+            DocumentType = normalizedType,
             DocumentNumber = request.DocumentNumber.Trim(),
             FirstName = request.FirstName.Trim().ToUpperInvariant(),
             SecondName = string.IsNullOrWhiteSpace(request.SecondName)
