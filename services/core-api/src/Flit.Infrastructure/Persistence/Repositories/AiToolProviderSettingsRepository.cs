@@ -151,9 +151,35 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
         // en un solo SaveChanges podía insertar la alerta primero y chocar con fk_ai_failover_alerts_transition:
         // ningún failover automático llegaba a quedar guardado. Se guardan en dos pasos dentro de una
         // transacción; con EnableRetryOnFailure la transacción tiene que ir dentro de la estrategia.
+        await EnTransaccionAsync(
+                ct => GuardarTransicionAsync(normalizedTool, from, to, "failover_auto", trimmedDetail, conAlerta: true, soloSiActivo: null, ct),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task RecordAutoReturnAsync(
+        string toolCode,
+        string fromProvider,
+        string toProvider,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedTool = AiToolCodes.Normalize(toolCode);
+        var from = AiProviderCodes.Normalize(fromProvider);
+        var to = AiProviderCodes.Normalize(toProvider);
+
+        // Solo si el activo sigue siendo el de respaldo: si entretanto alguien lo cambió a mano (u otra
+        // réplica ya regresó), no se pisa esa decisión ni se duplica la transición.
+        await EnTransaccionAsync(
+                ct => GuardarTransicionAsync(normalizedTool, from, to, "auto_return", "el proveedor principal volvió a responder", conAlerta: false, soloSiActivo: from, ct),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task EnTransaccionAsync(Func<CancellationToken, Task> trabajo, CancellationToken cancellationToken)
+    {
         if (db.Database.CurrentTransaction is not null)
         {
-            await GuardarFailoverAsync(normalizedTool, from, to, trimmedDetail, cancellationToken).ConfigureAwait(false);
+            await trabajo(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -162,7 +188,7 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
                 async ct =>
                 {
                     await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-                    await GuardarFailoverAsync(normalizedTool, from, to, trimmedDetail, ct).ConfigureAwait(false);
+                    await trabajo(ct).ConfigureAwait(false);
                     await tx.CommitAsync(ct).ConfigureAwait(false);
                 },
                 cancellationToken)
@@ -170,14 +196,18 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
     }
 
     /// <summary>
-    /// Cambia el activo y deja transición + alerta, la transición primero. Relee la fila cada vez: si la
-    /// estrategia reintenta, lo guardado en el intento anterior se deshizo con el rollback.
+    /// Cambia el activo y deja la transición (y la alerta, si aplica), la transición primero. Relee la fila
+    /// cada vez: si la estrategia reintenta, lo guardado en el intento anterior se deshizo con el rollback.
+    /// Con <paramref name="soloSiActivo"/>, no hace nada si el activo ya no es ese proveedor.
     /// </summary>
-    private async Task GuardarFailoverAsync(
+    private async Task GuardarTransicionAsync(
         string normalizedTool,
         string from,
         string to,
+        string reason,
         string? trimmedDetail,
+        bool conAlerta,
+        string? soloSiActivo,
         CancellationToken cancellationToken)
     {
         // Restos de un intento anterior de la estrategia: ya no existen en la base y no deben reinsertarse.
@@ -198,6 +228,11 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
         }
 
         await db.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        if (soloSiActivo is not null && !string.Equals(row.ActiveProvider, soloSiActivo, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         if (!string.Equals(row.ActiveProvider, to, StringComparison.Ordinal))
         {
             row.ActiveProvider = to;
@@ -211,7 +246,7 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
             ToolCode = normalizedTool,
             FromProvider = from,
             ToProvider = to,
-            Reason = "failover_auto",
+            Reason = reason,
             Detail = trimmedDetail,
             ActorUserId = null,
             OccurredAt = occurredAt,
@@ -219,6 +254,11 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
 
         db.AiProviderTransitions.Add(transition);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!conAlerta)
+        {
+            return;
+        }
 
         db.AiFailoverAlerts.Add(new AiFailoverAlertRow
         {

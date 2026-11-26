@@ -753,6 +753,11 @@ public static class InfrastructureExtensions
         services.AddScoped<DeepSeekAiProviderAdapter>();
         services.AddScoped<IAiChatProvider>(sp => sp.GetRequiredService<DeepSeekAiProviderAdapter>());
 
+        // auto_return_to_primary: cada cuánto se vuelve a probar el principal tras un failover (por réplica).
+        var intervaloRegreso = int.TryParse(Cfg("Ai:AutoReturnIntervalSeconds", "AI_AUTO_RETURN_INTERVAL_SECONDS"), out var ir) && ir > 0
+            ? TimeSpan.FromSeconds(ir)
+            : AiAutoReturnGate.IntervaloPorDefecto;
+        services.AddSingleton(new AiAutoReturnGate(intervaloRegreso));
         services.AddScoped<IAiProviderRouter, AiProviderRouter>();
 
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
