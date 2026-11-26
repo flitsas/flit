@@ -53,7 +53,16 @@ public sealed class OtQueryFirmaTests
                     a.FullName ?? string.Empty,
                     rechazados?.Contains(a.DocumentNumber) == true))
                 .ToList();
-            return new TramiteFirmaResultado(pendientes.Count == 0, pendientes);
+            var personas = tramite.Actors
+                .OrderBy(a => a.ActorType == "vendedor" ? 0 : 1).ThenBy(a => a.Ordinal)
+                .Select(a => new PersonaFirma(
+                    a.ActorType == "vendedor" ? "Vendedor" : "Comprador", a.Ordinal, a.FullName ?? string.Empty,
+                    a.DocumentType, a.DocumentNumber, firmados.Contains(a.DocumentNumber),
+                    firmados.Contains(a.DocumentNumber) ? "Firmó"
+                        : rechazados?.Contains(a.DocumentNumber) == true ? "Rechazada" : "Pendiente",
+                    firmados.Contains(a.DocumentNumber) ? new DateTimeOffset(2026, 11, 20, 15, 30, 0, TimeSpan.Zero) : null))
+                .ToList();
+            return new TramiteFirmaResultado(pendientes.Count == 0, pendientes, personas);
         }
     }
 
@@ -62,7 +71,11 @@ public sealed class OtQueryFirmaTests
     [Fact] // El organismo ve los campos con las mismas ayudas que el gestor, en el grupo Personas.
     public void ElCatalogoDelOrganismo_PublicaLosCamposConLasMismasAyudasQueElGestor()
     {
-        foreach (var id in new[] { CompanyQueryFieldCatalog.FirmadoPorTodas, CompanyQueryFieldCatalog.FaltaFirmar })
+        foreach (var id in new[]
+                 {
+                     CompanyQueryFieldCatalog.FirmadoPorTodas, CompanyQueryFieldCatalog.FaltaFirmar,
+                     CompanyQueryFieldCatalog.FirmaVendedor, CompanyQueryFieldCatalog.FirmaComprador,
+                 })
         {
             var gestor = CompanyQueryFieldCatalog.Fields.Single(f => f.Id == id);
             var organismo = OtQueryFieldCatalog.Fields.Single(f => f.Id == id);
@@ -77,6 +90,11 @@ public sealed class OtQueryFirmaTests
 
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmadoPorTodas)!.Operators.Should().Equal(QueryOperator.EsAlguno);
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FaltaFirmar)!.Operators.Should().BeEmpty("es solo columna");
+        OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmadoPorTodas)!.Label.Should().Be("Firmas");
+        OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmadoPorTodas)!.Options.Select(o => o.Label)
+            .Should().Equal("Completas", "Faltan firmas");
+        OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmaVendedor)!.Label.Should().Be("Firma vendedor");
+        OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmaComprador)!.Operators.Should().BeEmpty("es solo columna");
     }
 
     [Fact] // La bandeja de OT (recorte) también los publica, con la misma definición.
@@ -203,12 +221,12 @@ public sealed class OtQueryFirmaTests
             Guid.NewGuid(), "REF-1", null, null, ClientTenant, "Empresa", "Matrícula", "entregado", "en_revision",
             false, false, null, null, false, null, false, [], DateTimeOffset.UtcNow, null, null, null, null, null,
             null, null, null, 0, [],
-            FirmadoPorTodas: false, FaltaFirmar: "Comprador: Nora Nadie");
+            FirmadoPorTodas: false, FaltaFirmar: "Comprador: Nora Nadie", FirmasResumen: "0 de 1 · Faltan firmas");
 
         var hoja = OtQueryReportColumns.BuildSheet(
             "Consulta", [OtQueryFieldCatalog.FirmadoPorTodas, OtQueryFieldCatalog.FaltaFirmar], [fila]);
 
-        hoja.Columns.Select(c => c.Header).Should().Equal("Firmado por todas las partes", "Falta firmar");
+        hoja.Columns.Select(c => c.Header).Should().Equal("Firmas", "Falta firmar");
         hoja.Rows.Should().HaveCount(1);
     }
 
@@ -222,16 +240,17 @@ public sealed class OtQueryFirmaTests
 
         var (tabla, hoja) = await TablaYExcelAsync(db, def, ["100", "300", "301"], ["201"]);
 
-        hoja.Headers.Should().Equal("Placa", "Firmado por todas las partes", "Falta firmar");
+        hoja.Headers.Should().Equal("Placa", "Firmas", "Falta firmar");
         hoja.Rows.Should().HaveCount(tabla.Filas.Count).And.HaveCount(3);
         foreach (var fila in tabla.Filas)
         {
             var celdas = hoja.Rows.Single(r => r[0] == fila.Placa);
-            celdas[1].Should().Be(fila.FirmadoPorTodas == true ? "Sí" : "No");
+            celdas[1].Should().Be(fila.FirmasResumen);
             celdas[2].Should().Be(fila.FaltaFirmar ?? string.Empty);
         }
 
-        hoja.Rows.Single(r => r[0] == "AAA111").Should().Equal("AAA111", "Sí", "");
+        hoja.Rows.Single(r => r[0] == "AAA111").Should().Equal("AAA111", "1 de 1 · Firmas completas", "");
+        hoja.Rows.Single(r => r[0] == "BBB222")[1].Should().Be("0 de 2 · Faltan firmas");
         hoja.Rows.Single(r => r[0] == "BBB222")[2]
             .Should().Be("Vendedor: Vera Vendedora (rechazada) · Comprador: Carlos Comprador");
     }
@@ -246,8 +265,9 @@ public sealed class OtQueryFirmaTests
         soloFaltaFirmar.Rows.Select(r => r[0]).Should().Contain("Comprador: Nora Nadie");
 
         var (_, soloFirmado) = await TablaYExcelAsync(db, DefinirConColumnas([], "firmado_por_todas"), ["100"], null);
-        soloFirmado.Headers.Should().Equal("Firmado por todas las partes");
-        soloFirmado.Rows.Select(r => r[0]).Should().BeEquivalentTo("Sí", "No", "No");
+        soloFirmado.Headers.Should().Equal("Firmas");
+        soloFirmado.Rows.Select(r => r[0]).Should().BeEquivalentTo(
+            "1 de 1 · Firmas completas", "0 de 2 · Faltan firmas", "0 de 1 · Faltan firmas");
     }
 
     [Fact] // Filtro «es No»: el archivo trae exactamente las filas del listado (y respeta el alcance del organismo).
@@ -262,12 +282,67 @@ public sealed class OtQueryFirmaTests
         tabla.Total.Should().Be(2);
         hoja.Rows.Select(r => r[0]).Should().BeEquivalentTo(tabla.Filas.Select(f => f.Placa));
         hoja.Rows.Select(r => r[0]).Should().NotContain("DDD444"); // otro organismo
-        hoja.Rows.Should().OnlyContain(r => r[1] == "No");
+        hoja.Rows.Should().OnlyContain(r => r[1].Contains("Faltan firmas"));
 
         var (tablaUna, hojaUna) = await TablaYExcelAsync(db,
             DefinirConColumnas([Cond(OtQueryFieldCatalog.FirmadoPorTodas, "false")], "placa"),
             ["100", "300", "301"], ["201"]);
         hojaUna.Rows.Select(r => r[0]).Should().BeEquivalentTo(tablaUna.Filas.Select(f => f.Placa));
+    }
+
+    [Fact] // Una columna «Firma <rol> N» por persona (texto del estado) y hoja «Firmas por persona».
+    public async Task Excel_TraeFirmaPorPersona_YLaHojaFirmasPorPersona()
+    {
+        var db = await SembrarAsync();
+        var def = DefinirConColumnas(
+            [Cond(OtQueryFieldCatalog.FirmadoPorTodas, "false")], "placa", "firma_vendedor", "firma_comprador");
+
+        var (tabla, hoja, personas) = await TablaYExcelConHojaAsync(db, def, ["100", "300", "301"], ["201"]);
+
+        hoja.Headers.Should().Equal("Placa", "Firma vendedor", "Firma comprador");
+        hoja.Rows.Single(r => r[0] == "BBB222").Should().Equal("BBB222", "Rechazada", "Pendiente");
+        hoja.Rows.Single(r => r[0] == "CCC333").Should().Equal("CCC333", string.Empty, "Pendiente");
+
+        // Mismas filas que la principal: REF-PARCIAL (2 personas) + REF-NADIE (1).
+        tabla.Total.Should().Be(2);
+        personas!.Headers.Should().Equal(
+            "Radicado", "Compañía", "Tipo de trámite", "Rol", "Nombre", "Documento", "Estado de firma",
+            "Fecha de la firma");
+        personas.Rows.Should().HaveCount(3);
+        personas.Rows.Select(r => r[0]).Distinct().Should().BeEquivalentTo("REF-PARCIAL", "REF-NADIE");
+        personas.Rows.Single(r => r[4] == "Vera Vendedora")[6].Should().Be("Rechazada");
+        personas.Rows.Single(r => r[4] == "Vera Vendedora")[7].Should().BeEmpty();
+    }
+
+    [Fact] // Resumen «2 de 3» del organismo y fecha de firma en la hoja.
+    public async Task Excel_ResumenDosDeTres_YFechaDeFirma()
+    {
+        var db = Guid.NewGuid().ToString();
+        await using (var seed = NewContext(db))
+        {
+            await SembrarBaseAsync(seed);
+            var t = Tramite(seed, "REF-2DE3", "EEE555", ClientTenant, 9);
+            Actor(seed, t, "vendedor", "Vera Vendedora", "201");
+            Actor(seed, t, "comprador", "Carlos Comprador", "202");
+            Actor(seed, t, "comprador", "Camila Compradora", "203", 2);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var def = DefinirConColumnas([], "placa", "firmado_por_todas", "firma_comprador");
+        var (tabla, hoja, personas) = await TablaYExcelConHojaAsync(db, def, ["201", "202"], null);
+
+        tabla.Filas.Single().FirmasResumen.Should().Be("2 de 3 · Faltan firmas");
+        hoja.Rows.Single().Should().Equal("EEE555", "2 de 3 · Faltan firmas", "Firmó", "Pendiente");
+        personas!.Rows.Should().HaveCount(3);
+        personas.Rows.Single(r => r[4] == "Vera Vendedora")[6].Should().Be("Firmó");
+        personas.Rows.Single(r => r[4] == "Vera Vendedora")[7].Should().NotBeEmpty();
+    }
+
+    private static async Task<(OtQueryResultDto Tabla, Hoja Hoja, Hoja? Personas)> TablaYExcelConHojaAsync(
+        string db, QueryDefinition def, string[] firmados, string[]? rechazados)
+    {
+        var (tabla, hoja) = await TablaYExcelAsync(db, def, firmados, rechazados);
+        return (tabla, hoja, ultimosBytes is null ? null : LeerXlsx(ultimosBytes, "Firmas por persona"));
     }
 
     [Fact] // Volumen: 10.000 filas, el exportador del organismo no llama a nadie y las columnas nuevas no lo frenan >20 %.
@@ -352,17 +427,26 @@ public sealed class OtQueryFirmaTests
             .BuildAsync(OtTenant, saved.Id, TestContext.Current.CancellationToken);
         var tabla = await real.ExecuteAsync(
             OtTenant, new QueryRequest(def, 1, 50), cancellationToken: TestContext.Current.CancellationToken);
-        return (tabla!, LeerXlsx(resultado!.Bytes));
+        ultimosBytes = resultado!.Bytes;
+        return (tabla!, LeerXlsx(resultado.Bytes));
     }
+
+    [ThreadStatic] private static byte[]? ultimosBytes;
 
     private sealed record Hoja(IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
 
     /// <summary>Lee la primera hoja (cadenas en línea, como las escribe TabularWorkbookWriter).</summary>
-    private static Hoja LeerXlsx(byte[] bytes)
+    private static Hoja LeerXlsx(byte[] bytes, string? nombreHoja = null)
     {
         using var ms = new MemoryStream(bytes);
         using var doc = DocumentFormat.OpenXml.Packaging.SpreadsheetDocument.Open(ms, false);
-        var sheetData = doc.WorkbookPart!.WorksheetParts.First().Worksheet
+        var parte = nombreHoja is null
+            ? doc.WorkbookPart!.WorksheetParts.First()
+            : (DocumentFormat.OpenXml.Packaging.WorksheetPart)doc.WorkbookPart!.GetPartById(
+                doc.WorkbookPart.Workbook.Descendants<DocumentFormat.OpenXml.Spreadsheet.Sheet>()
+                    .FirstOrDefault(sh => sh.Name == nombreHoja)?.Id?.Value
+                ?? throw new InvalidOperationException($"No existe la hoja {nombreHoja}."));
+        var sheetData = parte.Worksheet
             .Descendants<DocumentFormat.OpenXml.Spreadsheet.SheetData>().First();
         var shared = doc.WorkbookPart.SharedStringTablePart?.SharedStringTable
             .Elements<DocumentFormat.OpenXml.Spreadsheet.SharedStringItem>().Select(x => x.InnerText).ToList();
@@ -429,7 +513,28 @@ public sealed class OtQueryFirmaTests
     {
         var db = Guid.NewGuid().ToString();
         await using var ctx = NewContext(db);
+        await SembrarBaseAsync(ctx, guardar: false);
 
+        var firmado = Tramite(ctx, "REF-FIRMADO", "AAA111", ClientTenant, 1);
+        Actor(ctx, firmado, "comprador", "Carla Compradora", "100");
+
+        var parcial = Tramite(ctx, "REF-PARCIAL", "BBB222", ClientTenant, 2);
+        Actor(ctx, parcial, "vendedor", "Vera Vendedora", "201");
+        Actor(ctx, parcial, "comprador", "Carlos Comprador", "202");
+
+        var nadie = Tramite(ctx, "REF-NADIE", "CCC333", ClientTenant, 3);
+        Actor(ctx, nadie, "comprador", "Nora Nadie", "203");
+
+        // De OTRO organismo: jamás debe aparecer en ninguna superficie (permisos sin cambios).
+        var ajeno = Tramite(ctx, "REF-AJENO", "DDD444", ClientTenant, 4, Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"));
+        Actor(ctx, ajeno, "comprador", "Ana Ajena", "999");
+
+        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return db;
+    }
+
+    private static Task SembrarBaseAsync(FlitDbContext ctx, bool guardar = true)
+    {
         ctx.TransitOfficeProfiles.Add(new TransitOfficeProfile
         {
             Id = Guid.NewGuid(),
@@ -457,22 +562,7 @@ public sealed class OtQueryFirmaTests
             IsActive = true,
         });
 
-        var firmado = Tramite(ctx, "REF-FIRMADO", "AAA111", ClientTenant, 1);
-        Actor(ctx, firmado, "comprador", "Carla Compradora", "100");
-
-        var parcial = Tramite(ctx, "REF-PARCIAL", "BBB222", ClientTenant, 2);
-        Actor(ctx, parcial, "vendedor", "Vera Vendedora", "201");
-        Actor(ctx, parcial, "comprador", "Carlos Comprador", "202");
-
-        var nadie = Tramite(ctx, "REF-NADIE", "CCC333", ClientTenant, 3);
-        Actor(ctx, nadie, "comprador", "Nora Nadie", "203");
-
-        // De OTRO organismo: jamás debe aparecer en ninguna superficie (permisos sin cambios).
-        var ajeno = Tramite(ctx, "REF-AJENO", "DDD444", ClientTenant, 4, Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"));
-        Actor(ctx, ajeno, "comprador", "Ana Ajena", "999");
-
-        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return db;
+        return guardar ? ctx.SaveChangesAsync(TestContext.Current.CancellationToken) : Task.CompletedTask;
     }
 
     private static Guid Tramite(FlitDbContext ctx, string reference, string placa, Guid tenant, int consecutivo, Guid? oficina = null)
@@ -504,7 +594,7 @@ public sealed class OtQueryFirmaTests
         return id;
     }
 
-    private static void Actor(FlitDbContext ctx, Guid instanceId, string rol, string nombre, string doc) =>
+    private static void Actor(FlitDbContext ctx, Guid instanceId, string rol, string nombre, string doc, int ordinal = 1) =>
         ctx.ProcedureInstanceActors.Add(new ProcedureInstanceActor
         {
             Id = Guid.NewGuid(),
@@ -516,7 +606,7 @@ public sealed class OtQueryFirmaTests
             DocumentNumber = doc,
             FullName = nombre,
             PersonType = "natural",
-            Ordinal = 1,
+            Ordinal = ordinal,
             CreatedAt = DateTimeOffset.UtcNow,
         });
 

@@ -51,7 +51,15 @@ internal sealed class OtQueryReportDocumentBuilder(IOtQueryRepository repo)
             rows = rows.Take(RowCap).ToList();
 
         var sheet = OtQueryReportColumns.BuildSheet("Consulta OT", saved.Definition.Columnas, rows);
-        var bytes = TabularWorkbookWriter.Write([sheet]);
+        var sheets = new List<TabularWorkbookWriter.Sheet> { sheet };
+        // Misma lista de filas que la hoja principal; el organismo es el propio, no hay columna.
+        var firmas = FirmasPorPersonaSheet.Build(
+            rows.Select(r => new FirmasPorPersonaSheet.Fila(
+                r.ReferenceNumber, null, r.ClientTenantName, r.TipoTramite, r.FirmasPersonas)).ToList(),
+            incluirOrganismo: false, incluirCompania: true);
+        if (firmas is not null)
+            sheets.Add(firmas);
+        var bytes = TabularWorkbookWriter.Write(sheets);
         return new Result(bytes, saved.Nombre, total, truncated);
     }
 }

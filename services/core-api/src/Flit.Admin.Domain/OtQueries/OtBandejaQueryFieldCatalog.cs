@@ -53,6 +53,8 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
     public const string FirmadoPorTodas = OtQueryFieldCatalog.FirmadoPorTodas;
 
     public const string FaltaFirmar = OtQueryFieldCatalog.FaltaFirmar;
+    public const string FirmaVendedor = OtQueryFieldCatalog.FirmaVendedor;
+    public const string FirmaComprador = OtQueryFieldCatalog.FirmaComprador;
 
     /// <summary>Quién radicó el trámite en la empresa cliente. La bandeja ya lo muestra en su tabla.</summary>
     public const string Gestor = "gestor";

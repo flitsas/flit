@@ -58,9 +58,47 @@ public sealed record ParteFirmaPendiente(string Rol, string Nombre, bool Rechaza
     public string Texto => $"{Rol}: {Nombre}{(Rechazada ? " (rechazada)" : string.Empty)}";
 }
 
-/// <summary>Resultado por trámite: sin partes que deban firmar ⇒ <c>FirmadoPorTodas = true</c> y lista vacía.</summary>
-public sealed record TramiteFirmaResultado(bool FirmadoPorTodas, IReadOnlyList<ParteFirmaPendiente> Pendientes)
+/// <summary>Textos legibles del estado de firma (los usan el filtro y los Excel).</summary>
+public static class FirmaTextos
 {
+    public const string Completas = "Firmas completas";
+    public const string Faltan = "Faltan firmas";
+    public const string Firmo = "Firmó";
+    public const string Pendiente = "Pendiente";
+    public const string Rechazada = "Rechazada";
+    public const string Expirada = "Expirada";
+    public const string SinValidar = "Sin validar";
+}
+
+/// <summary>
+/// Una persona que debe firmar. <paramref name="Rol"/> es «Vendedor» o «Comprador»; <paramref name="Estado"/> es el
+/// texto legible («Firmó», «Pendiente», «Rechazada», «Expirada», «Sin validar»). <paramref name="FechaFirma"/> solo si
+/// existe una validación aprobada propia.
+/// </summary>
+public sealed record PersonaFirma(
+    string Rol, int Ordinal, string Nombre, string? TipoDocumento, string? Documento,
+    bool Firmo, string Estado, DateTimeOffset? FechaFirma);
+
+/// <summary>Resultado por trámite: sin partes que deban firmar ⇒ <c>FirmadoPorTodas = true</c> y lista vacía.</summary>
+public sealed record TramiteFirmaResultado(
+    bool FirmadoPorTodas,
+    IReadOnlyList<ParteFirmaPendiente> Pendientes,
+    IReadOnlyList<PersonaFirma>? Personas = null)
+{
+    /// <summary>Todas las personas que aplican (firmen o no), vendedores primero. Vacío si ninguna parte firma.</summary>
+    public IReadOnlyList<PersonaFirma> Partes => Personas ?? [];
+
+    /// <summary>Partes que deben firmar (M de «N de M»).</summary>
+    public int TotalPartes => Partes.Count;
+
+    /// <summary>Partes que ya firmaron (N de «N de M»).</summary>
+    public int Firmaron => Partes.Count(p => p.Firmo);
+
+    /// <summary>«2 de 3 · Faltan firmas» / «3 de 3 · Firmas completas»; sin partes que firmen: «Firmas completas».</summary>
+    public string TextoResumen => TotalPartes == 0
+        ? FirmaTextos.Completas
+        : $"{Firmaron} de {TotalPartes} · {(FirmadoPorTodas ? FirmaTextos.Completas : FirmaTextos.Faltan)}";
+
     /// <summary><c>Vendedor: A · Comprador: B</c>; vacío si no falta nadie.</summary>
     public string TextoPendientes => string.Join(" · ", Pendientes.Select(p => p.Texto));
 }
@@ -121,6 +159,7 @@ public sealed partial class TramiteFirmaEvaluator(
         }
 
         var pendientes = new List<ParteFirmaPendiente>();
+        var personas = new List<PersonaFirma>();
         foreach (var parte in partes)
         {
             var delLado = tramite.Actors
@@ -144,38 +183,78 @@ public sealed partial class TramiteFirmaEvaluator(
                     firmado = false;
                 }
 
+                var ultima = UltimaPropia(tramite, parte, actor);
+                var rechazada = ultima is not null && ultima.Status == BiometricEstados.Rechazado;
                 if (!firmado)
                     pendientes.Add(new ParteFirmaPendiente(
-                        Etiqueta(parte), actor.FullName?.Trim() ?? string.Empty, EsRechazada(tramite, parte, actor)));
+                        Etiqueta(parte), actor.FullName?.Trim() ?? string.Empty, rechazada));
+
+                personas.Add(new PersonaFirma(
+                    Etiqueta(parte), actor.Ordinal, actor.FullName?.Trim() ?? string.Empty,
+                    actor.DocumentType, actor.DocumentNumber, firmado,
+                    EstadoTexto(firmado, ultima), firmado ? FechaDeFirma(tramite, parte, actor) : null));
             }
         }
 
-        return new TramiteFirmaResultado(pendientes.Count == 0, pendientes);
+        return new TramiteFirmaResultado(pendientes.Count == 0, pendientes, personas);
     }
 
     private static string Etiqueta(string parte) =>
         string.Equals(parte, BiometricRules.ParteVendedor, StringComparison.OrdinalIgnoreCase) ? "Vendedor" : "Comprador";
 
     /// <summary>
-    /// Rechazada = la validación PROPIA más reciente de la persona para esa parte quedó «rechazado». Las claves
-    /// en lote solo traen aprobadas, así que el rechazo solo se lee de las filas del trámite (ADR-0092).
+    /// Validación PROPIA más reciente de la persona para esa parte. Las claves en lote solo traen aprobadas, así que
+    /// el rechazo y el estado solo se leen de las filas del trámite (ADR-0092). Sin PII; no lanza.
     /// </summary>
-    private static bool EsRechazada(ProcedureInstance tramite, string parte, ProcedureInstanceActor actor)
+    private static ProcedureInstanceBiometricValidation? UltimaPropia(
+        ProcedureInstance tramite, string parte, ProcedureInstanceActor actor)
     {
         try
         {
             var subject = IdentitySubjectResolver.For(actor);
-            var ultima = tramite.BiometricValidations
+            return tramite.BiometricValidations
                 .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
                             && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento))
                 .OrderByDescending(v => v.CreatedAt)
                 .FirstOrDefault();
-            return ultima is not null && ultima.Status == BiometricEstados.Rechazado;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return false;
+            return null;
         }
+    }
+
+    private static DateTimeOffset? FechaDeFirma(ProcedureInstance tramite, string parte, ProcedureInstanceActor actor)
+    {
+        try
+        {
+            var subject = IdentitySubjectResolver.For(actor);
+            var aprobada = tramite.BiometricValidations
+                .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                            && v.Status == BiometricEstados.Aprobado
+                            && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento))
+                .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
+                .FirstOrDefault();
+            return aprobada is null ? null : aprobada.UpdatedAt ?? aprobada.CreatedAt;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    private static string EstadoTexto(bool firmado, ProcedureInstanceBiometricValidation? ultima)
+    {
+        if (firmado)
+            return FirmaTextos.Firmo;
+        if (ultima is null)
+            return FirmaTextos.SinValidar;
+        return ultima.Status switch
+        {
+            BiometricEstados.Rechazado => FirmaTextos.Rechazada,
+            BiometricEstados.Expirado => FirmaTextos.Expirada,
+            _ => FirmaTextos.Pendiente,
+        };
     }
 
     private static partial class FirmaLog
