@@ -40,6 +40,9 @@ const MENSAJES_OBTENER: Record<string, string> = {
   PROVEEDOR_TOKEN_INVALIDO: "El proveedor rechazó la autorización de este ambiente; revisa la configuración de la integración",
   PROVEEDOR_INTEGRACION_DESHABILITADA: "El proveedor tiene deshabilitada la integración; ingresa la llave manualmente",
   PROVEEDOR_SOLICITUD_INVALIDA: "El proveedor rechazó los datos de la empresa; revisa el NIT o ingresa la llave manualmente",
+  SIN_ADMIN: "La empresa no tiene un Administrador de Compañía activo; asígnalo antes de obtener la llave",
+  TENANT_NOT_FOUND: "La empresa no existe o fue eliminada; recarga la página",
+  ALTA_EN_CURSO: "Ya se está obteniendo la llave de esta empresa; espera un momento y recarga",
 };
 const MSG_LIMITE = "Se hicieron demasiadas solicitudes al proveedor; espera un momento e intenta de nuevo";
 const MSG_OBTENER_DEFECTO = "No se pudo obtener la llave del proveedor; intenta de nuevo";
