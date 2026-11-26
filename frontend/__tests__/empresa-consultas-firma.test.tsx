@@ -483,4 +483,11 @@ describe("Catálogo que no llega", () => {
 
     expect(screen.getByTestId("empresa-query-agregar-filtro")).toBeDisabled();
   });
+
+  it("si el catálogo no carga, dice por qué en vez de quedarse en silencio", async () => {
+    mocks.fetchCompanyQueryFields.mockRejectedValue(new Error("503"));
+    render(<ConsultasTab />);
+
+    expect(await screen.findByText(/No se pudieron cargar los campos de filtro: 503/)).toBeInTheDocument();
+  });
 });
