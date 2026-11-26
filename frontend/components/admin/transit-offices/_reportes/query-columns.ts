@@ -16,6 +16,7 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
+import { columnasDeFirma, maxActoresDeFirma } from "@/components/consultas/firmas";
 import { estadoMeta, formatDateTime, formatHours, formatInt } from "./report-columns";
 
 const TRANSFORMACION_LABEL: Record<string, string> = {
@@ -141,6 +142,7 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     width: 28,
   },
 
+  ...columnasDeFirma<OtQueryRow>("Personas"),
   {
     id: "prenda",
     label: "Tiene prenda",
@@ -303,7 +305,7 @@ export function buildQueryCsv(
   visibleColumnIds: string[],
   notas: string[] = [],
 ): string {
-  const csv = buildCsv(QUERY_COLUMNS, rows, visibleColumnIds);
+  const csv = buildCsv(QUERY_COLUMNS, rows, visibleColumnIds, maxActoresDeFirma(rows));
   return notas.length > 0 ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}` : csv;
 }
 
@@ -312,7 +314,7 @@ export function buildQueryXlsx(
   visibleColumnIds: string[],
   notas: string[] = [],
 ): Uint8Array<ArrayBuffer> {
-  return buildWorkbook("Consulta OT", QUERY_COLUMNS, rows, visibleColumnIds, notas);
+  return buildWorkbook("Consulta OT", QUERY_COLUMNS, rows, visibleColumnIds, notas, maxActoresDeFirma(rows));
 }
 
 /**

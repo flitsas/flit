@@ -65,6 +65,24 @@ export interface ActorValidacionDto {
   motivoRechazo: string | null;
   /** Total de todos los ciclos. */
   intentos: number;
+  /** Texto de la firma («Firmó», «Pendiente», «Rechazada»…); ausente/`null` si no firma o no se calculó. */
+  estadoFirma?: string | null;
+  fechaFirma?: string | null;
+}
+
+/**
+ * Firma de UNA persona que debe firmar el trámite (`FirmaPersonaDto`). `rol` es «Vendedor» o
+ * «Comprador»; `estado` ya viene legible («Firmó», «Pendiente», «Rechazada», «Expirada», «Sin validar»).
+ */
+export interface FirmaPersona {
+  rol: "Vendedor" | "Comprador" | string;
+  ordinal: number;
+  nombre: string;
+  tipoDocumento?: string | null;
+  documento?: string | null;
+  firmo: boolean;
+  estado: string;
+  fechaFirma?: string | null;
 }
 
 /** Máximo de actores por rol sobre TODO el filtro (no sobre la página). */
@@ -113,6 +131,10 @@ export interface CompanyQueryRow {
   firmadoPorTodas?: boolean | null;
   /** HU #14699: «Vendedor: A · Comprador: B»; `""` si ya firmaron todos; ausente/`null` si no se calculó. */
   faltaFirmar?: string | null;
+  /** «2 de 3 · Faltan firmas» / «3 de 3 · Firmas completas»; ausente/`null` si no se calculó. */
+  firmasResumen?: string | null;
+  /** Una entrada por persona que debe firmar; ausente/`null` si no se calculó. */
+  firmasPersonas?: FirmaPersona[] | null;
 }
 
 export type CompanyQueryResult = QueryResult<CompanyQueryRow> & {

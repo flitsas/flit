@@ -57,6 +57,7 @@ import { decodeDefinition, encodeDefinition } from "./link-state";
 import { QueryFilterBar } from "./QueryFilterBar";
 import { SavedQueryList } from "./SavedQueryList";
 import { formatInt, plural } from "./format";
+import { maxActoresDeFirma, type FilaConFirma } from "./firmas";
 import {
   CSV_EXPORT_VISIBLE,
   Empty,
@@ -423,6 +424,10 @@ export function QueryConsole<TRow>({
           traerPagina: async (page, pageSize) =>
             (await source.run(definition, { page, pageSize })).filas,
           volcar: (lote, parte) => {
+            // Las consultas del organismo no traen el máximo del servidor: las columnas por persona
+            // de firma toman el ancho del propio lote (mínimo 1), como el Excel del backend.
+            const maxLote: MaxActoresPorRol | undefined =
+              parte.maxActoresPorRol ?? maxActoresDeFirma(lote as unknown as FilaConFirma[]);
             const fileName = queryFileName(
               source.exportPrefix,
               nombre,
@@ -440,13 +445,13 @@ export function QueryConsole<TRow>({
                   lote,
                   visibleColumns,
                   notas,
-                  parte.maxActoresPorRol,
+                  maxLote,
                 ),
                 fileName,
                 XLSX_MIME,
               );
             } else {
-              const csv = buildCsv(allColumns, lote, visibleColumns, parte.maxActoresPorRol);
+              const csv = buildCsv(allColumns, lote, visibleColumns, maxLote);
               const conNotas =
                 notas.length > 0
                   ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`

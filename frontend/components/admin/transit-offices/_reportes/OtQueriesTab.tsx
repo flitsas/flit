@@ -7,6 +7,7 @@
 // las consultas de la empresa gestora. Aquí solo queda lo que es del organismo: qué columnas tiene
 // su tabla, sobre qué fechas filtra y a qué endpoints llama.
 
+import { FirmasCell } from "@/components/consultas/firmas";
 import { useMemo } from "react";
 import { QueryConsole } from "@/components/consultas/QueryConsole";
 import type { QuerySource, SavedQuery } from "@/lib/api/queries";
@@ -69,6 +70,8 @@ export function OtQueriesTab({ transitOfficeId, onScheduleQuery }: OtQueriesTabP
             <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {estadoMeta(fila.estadoOt).label}
           </span>
+        ) : columnId === "firmado_por_todas" ? (
+          <FirmasCell fila={fila} />
         ) : null
       }
     />
