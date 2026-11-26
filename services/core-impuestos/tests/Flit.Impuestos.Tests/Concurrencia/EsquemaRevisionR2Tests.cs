@@ -112,7 +112,7 @@ public sealed class EsquemaRevisionR2Tests
         r.StatusCode.Should().Be(HttpStatusCode.OK, await r.Content.ReadAsStringAsync(ct));
         await using var db = api.Contexto(null);
         var fuente = await db.Set<FuenteApi>().AsNoTracking().SingleAsync(ct);
-        JsonDocument.Parse(fuente.ParamsSchema).RootElement.ValueKind.Should().Be(JsonValueKind.Object, "el CHECK de R2 exige un objeto");
+        JsonElement.Parse(fuente.ParamsSchema).ValueKind.Should().Be(JsonValueKind.Object, "el CHECK de R2 exige un objeto");
     }
 
     [Fact]

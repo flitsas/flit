@@ -195,7 +195,7 @@ public sealed class ConsumidorLiquidacionTests
 
         await EntornoEjecucion.ProcesarColaAsync(api, ct);
 
-        JsonDocument.Parse(proveedor.Pedidos.Single(p => p.Metodo == "POST").Cuerpo).RootElement.TryGetProperty("callbackUrl", out _).Should().BeFalse();
+        JsonElement.Parse(proveedor.Pedidos.Single(p => p.Metodo == "POST").Cuerpo).TryGetProperty("callbackUrl", out _).Should().BeFalse();
         var item = await EntornoEjecucion.ItemAsync(api, empresa, items[0], ct);
         item.Estado.Should().Be(EstadoItem.Enviado);
         item.ConCallback.Should().BeFalse();
@@ -216,7 +216,7 @@ public sealed class ConsumidorLiquidacionTests
 
         await EntornoEjecucion.ProcesarColaAsync(api, ct);
 
-        JsonDocument.Parse(proveedor.Pedidos.Single(p => p.Metodo == "POST").Cuerpo).RootElement.TryGetProperty("callbackUrl", out _).Should().BeFalse();
+        JsonElement.Parse(proveedor.Pedidos.Single(p => p.Metodo == "POST").Cuerpo).TryGetProperty("callbackUrl", out _).Should().BeFalse();
     }
 
     [Fact]

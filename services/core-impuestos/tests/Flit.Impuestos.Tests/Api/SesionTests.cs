@@ -111,7 +111,7 @@ public sealed class SesionTests
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
-        var sesion = JsonDocument.Parse(cuerpo).RootElement;
+        var sesion = JsonElement.Parse(cuerpo);
         sesion.GetProperty("empresa").GetProperty("id").GetGuid().Should().Be(empresaA);
         sesion.GetProperty("aprovisionamiento").GetProperty("estado").ValueKind.Should().Be(JsonValueKind.Null, "el aprovisionamiento de B no se filtra a A");
         cuerpo.Should().NotContain(empresaB.ToString());

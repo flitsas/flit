@@ -257,7 +257,11 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
     private static string DownSql() =>
         string.Join(Environment.NewLine, new ImpuestosProductoYAprovisionamiento().DownOperations.OfType<SqlOperation>().Select(o => o.Sql));
 
-    /// <summary>Corre el Down y deja el esquema como estaba (Up otra vez) para las demás pruebas de la colección.</summary>
+    /// <summary>
+    /// Corre el Down y deja el esquema como estaba para las demás pruebas de la colección: Up del 205 y, encima, el DDL 206
+    /// (HU #14711), porque el Down borra <c>platform.tenant_product_provisioning</c> y el 205 la recrea sin
+    /// <c>attempts</c>/<c>next_attempt_at</c>. Sin el 206, una prueba posterior que lea la tabla con EF falla con 42703.
+    /// </summary>
     private static async Task ConDownAsync(NpgsqlConnection cn, Func<Task> verificar)
     {
         try
@@ -268,6 +272,7 @@ public sealed class Ddl205ImpuestosTests(PostgresDatabaseFixture fixture) : Post
         finally
         {
             await RunDdlAsync(cn);
+            await ExecAsync(cn, EmbeddedDdl.LoadUp("206-alta-credencial-impuesto-diagnostico.sql"));
         }
     }
 

@@ -43,7 +43,7 @@ public sealed class FugaEntreEmpresasTests
         var creada = await api.Cliente(api.Token(empresa: duena, permisos: [Permisos.LiquidacionesVer, Permisos.LiquidacionesCrear]))
             .PostAsJsonAsync(Lista + "/individual", new { placa = "ABC123" }, ct);
         creada.StatusCode.Should().Be(HttpStatusCode.Created);
-        var lote = JsonDocument.Parse(await creada.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("id").GetGuid();
+        var lote = JsonElement.Parse(await creada.Content.ReadAsStringAsync(ct)).GetProperty("id").GetGuid();
         var ajena = api.Cliente(api.Token(empresa: otra, permisos: [Permisos.LiquidacionesVer]));
 
         using (var pagina = JsonDocument.Parse(await ajena.GetStringAsync(Lista, ct)))

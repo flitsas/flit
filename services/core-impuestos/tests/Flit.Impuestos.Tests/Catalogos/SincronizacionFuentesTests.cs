@@ -55,7 +55,7 @@ public sealed class SincronizacionFuentesTests
         await using var db = api.Contexto(null);
         var cache = await db.Set<FuenteApi>().AsNoTracking().OrderBy(f => f.DepartamentoCodigo).ToListAsync(ct);
         cache.Select(f => f.DepartamentoCodigo).Should().Equal("05", "41");
-        JsonDocument.Parse(cache[0].ParamsSchema).RootElement.GetProperty("type").GetString().Should().Be("object", "params_schema se guarda para el constructor (M09)");
+        JsonElement.Parse(cache[0].ParamsSchema).GetProperty("type").GetString().Should().Be("object", "params_schema se guarda para el constructor (M09)");
     }
 
     [Fact]
