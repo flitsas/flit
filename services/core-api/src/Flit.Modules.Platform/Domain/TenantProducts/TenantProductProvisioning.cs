@@ -38,10 +38,11 @@ public interface ITenantProductProvisioningStore
 
     /// <summary>
     /// HU #14711 — prepara (sin guardar) el paso a <c>PENDIENTE</c> del alta automática de la credencial del impuesto de
-    /// <c>diagnostico</c>: lee la fila con seguimiento y devuelve la acción que la crea o la reinicia (intentos en 0, sin espera)
-    /// en el contexto compartido. La acción se invoca justo antes del guardado del cambio del producto.
+    /// <c>diagnostico</c>: lee la fila con seguimiento y devuelve si existe y la acción que la crea o la reinicia (intentos en
+    /// 0) en el contexto compartido. Una reserva de una ronda en curso se conserva (otra réplica no toma la fila a la vez). La
+    /// acción se invoca justo antes del guardado del cambio del producto.
     /// </summary>
-    Task<Action<DateTimeOffset>> PrepararPendienteAltaDiagnosticoAsync(Guid tenantId, CancellationToken cancellationToken = default);
+    Task<PreparacionPendienteAltaDiagnostico> PrepararPendienteAltaDiagnosticoAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// HU #14711 — reserva hasta <paramref name="lote"/> filas de <c>diagnostico</c> en <c>PENDIENTE</c> cuyo próximo intento
@@ -51,8 +52,18 @@ public interface ITenantProductProvisioningStore
     Task<IReadOnlyList<PendienteAltaDiagnostico>> ReservarPendientesAltaDiagnosticoAsync(
         DateTimeOffset ahora, TimeSpan reserva, int lote, CancellationToken cancellationToken = default);
 
-    /// <summary>HU #14711 — crea o reemplaza el estado de <c>diagnostico</c> de la empresa y sube <c>reported_version</c>.</summary>
-    Task RegistrarEstadoAltaDiagnosticoAsync(EstadoAltaDiagnostico estado, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// HU #14711 (M-1) — guarda el estado que dejó una ronda solo si la fila sigue en la versión que la ronda reservó
+    /// (<paramref name="versionReservada"/>) y la sube en 1. <c>false</c> = la fila cambió durante la ronda (se reinició o el
+    /// botón guardó otro estado): el resultado es obsoleto y no se escribe.
+    /// </summary>
+    Task<bool> RegistrarEstadoAltaDiagnosticoAsync(EstadoAltaDiagnostico estado, long versionReservada, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #14711 (N-3) — estado que deja el botón «Obtener del proveedor»: crea la fila o la reemplaza subiendo
+    /// <c>reported_version</c> en 1, pero solo si el estado cambia (estado, motivo, mensaje, acción, intentos o próximo intento).
+    /// </summary>
+    Task RegistrarEstadoAltaDiagnosticoManualAsync(EstadoAltaDiagnostico estado, CancellationToken cancellationToken = default);
 
     /// <summary>Los estados guardados de la empresa.</summary>
     Task<IReadOnlyList<TenantProductProvisioning>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
@@ -61,7 +72,13 @@ public interface ITenantProductProvisioningStore
 /// <summary>HU #14711 — una empresa con el alta automática de <c>diagnostico</c> por atender.</summary>
 /// <param name="TenantId">Empresa.</param>
 /// <param name="Intentos">Intentos automáticos fallidos hasta ahora.</param>
-public sealed record PendienteAltaDiagnostico(Guid TenantId, int Intentos);
+/// <param name="Version"><c>reported_version</c> de la fila al reservarla; condiciona el guardado del resultado (M-1).</param>
+public sealed record PendienteAltaDiagnostico(Guid TenantId, int Intentos, long Version = 0);
+
+/// <summary>HU #14711 — resultado de <see cref="ITenantProductProvisioningStore.PrepararPendienteAltaDiagnosticoAsync"/>.</summary>
+/// <param name="FilaExiste">Ya hay fila del alta de <c>diagnostico</c> para la empresa.</param>
+/// <param name="Marcar">Crea o reinicia la fila en <c>PENDIENTE</c> en el contexto compartido (sin guardar).</param>
+public sealed record PreparacionPendienteAltaDiagnostico(bool FilaExiste, Action<DateTimeOffset> Marcar);
 
 /// <summary>HU #14711 — estado del alta de la credencial de <c>diagnostico</c> que escribe la plataforma (no un servicio).</summary>
 /// <param name="TenantId">Empresa.</param>

@@ -13,14 +13,18 @@ using Microsoft.Extensions.Options;
 namespace Flit.Infrastructure.Platform;
 
 /// <summary>
-/// HU #14711 — opciones del alta en el proveedor del impuesto (<see cref="Seccion"/>). Sin <see cref="IntegrationToken"/> o sin
-/// <see cref="BaseUrl"/> el cliente responde <c>PROVEEDOR_NO_CONFIGURADO</c>; el host arranca igual.
+/// HU #14711 — opciones del alta en el proveedor del impuesto (<see cref="Seccion"/>). Sin <see cref="IntegrationToken"/>, sin
+/// <see cref="BaseUrl"/> o con una <see cref="BaseUrl"/> que no es https fuera de loopback, el cliente responde
+/// <c>PROVEEDOR_NO_CONFIGURADO</c> sin enviar el Bearer; el host arranca igual.
 /// </summary>
 public sealed class OpcionesProveedorImpuesto
 {
     public const string Seccion = "Platform:ImpuestoProveedor";
 
-    /// <summary>Base del API del proveedor, sin <c>/</c> final (en local, el stub: <c>http://127.0.0.1:8898</c>).</summary>
+    /// <summary>
+    /// Base del API del proveedor, sin <c>/</c> final. Debe ser https; http solo en loopback (en local, el stub:
+    /// <c>http://127.0.0.1:8898</c>).
+    /// </summary>
     public string? BaseUrl { get; set; }
 
     /// <summary>Token de integración (secreto crítico): solo por variable de entorno o secreto del ambiente, nunca en git.</summary>
@@ -72,6 +76,13 @@ internal sealed partial class ClienteAltaProveedorImpuesto(
             throw new AltaCredencialImpuestoException(CodigosAltaCredencialImpuesto.ProveedorNoConfigurado);
         }
 
+        // L-2: el token de integración no sale por un canal sin cifrar; http solo hacia loopback (el stub local).
+        if (!EsDestinoSeguro(destino))
+        {
+            SinHttps(_log);
+            throw new AltaCredencialImpuestoException(CodigosAltaCredencialImpuesto.ProveedorNoConfigurado);
+        }
+
         var cuerpo = new CuerpoAlta(peticion.LegalName, peticion.TaxId, peticion.ContactEmail);
         for (var intento = 1; ; intento++)
         {
@@ -87,6 +98,11 @@ internal sealed partial class ClienteAltaProveedorImpuesto(
             Reintento(_log, intento);
         }
     }
+
+    /// <summary>https, o http hacia loopback (127.0.0.0/8, ::1 o localhost).</summary>
+    internal static bool EsDestinoSeguro(Uri destino) =>
+        string.Equals(destino.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+        || (string.Equals(destino.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && destino.IsLoopback);
 
     private async Task<(RespuestaAltaProveedor? Respuesta, string Codigo, bool Reintentable)> EnviarAsync(
         Uri destino, CuerpoAlta cuerpo, CancellationToken ct)
@@ -146,7 +162,7 @@ internal sealed partial class ClienteAltaProveedorImpuesto(
         [property: JsonPropertyName("tax_id")] string TaxId,
         [property: JsonPropertyName("contact_email")] string ContactEmail)
     {
-        public override string ToString() => $"CuerpoAlta {{ TaxId = {TaxId} }}";
+        public override string ToString() => $"CuerpoAlta {{ TaxId = {PeticionAltaProveedor.EnmascararNit(TaxId)} }}";
     }
 
     /// <summary>Lo que se lee del 200/201 (guía §3). La empresa (<c>company</c>) no se usa.</summary>
@@ -161,6 +177,9 @@ internal sealed partial class ClienteAltaProveedorImpuesto(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "El alta del proveedor del impuesto no está configurada (Platform__ImpuestoProveedor__BaseUrl / __IntegrationToken).")]
     private static partial void SinConfigurar(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "El alta del proveedor del impuesto no se envía: Platform__ImpuestoProveedor__BaseUrl no es https y no apunta a loopback.")]
+    private static partial void SinHttps(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "El alta del proveedor del impuesto no salió en el intento {Intento}; se reintenta una vez.")]
     private static partial void Reintento(ILogger logger, int intento);

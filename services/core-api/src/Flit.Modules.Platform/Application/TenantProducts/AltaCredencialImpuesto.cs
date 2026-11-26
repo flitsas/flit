@@ -17,11 +17,18 @@ public interface IClienteAltaProveedorImpuesto
     Task<RespuestaAltaProveedor> DarDeAltaAsync(PeticionAltaProveedor peticion, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Cuerpo del alta: razón social, NIT base (sin DV; el proveedor lo calcula) y correo. <see cref="ToString"/> sin PII.</summary>
+/// <summary>
+/// Cuerpo del alta: razón social, NIT base (sin DV; el proveedor lo calcula) y correo. <see cref="ToString"/> sin PII: del NIT solo
+/// los 3 últimos dígitos.
+/// </summary>
 public sealed record PeticionAltaProveedor(string LegalName, string TaxId, string ContactEmail)
 {
     public override string ToString() =>
-        $"PeticionAltaProveedor {{ TaxId = {TaxId}, LegalName = [{LegalName.Length} car.], ContactEmail = [REDACTADO] }}";
+        $"PeticionAltaProveedor {{ TaxId = {EnmascararNit(TaxId)}, LegalName = [{LegalName.Length} car.], ContactEmail = [REDACTADO] }}";
+
+    /// <summary>El NIT con solo sus 3 últimos caracteres a la vista (<c>***456</c>); sin el largo.</summary>
+    public static string EnmascararNit(string? nit) =>
+        string.IsNullOrEmpty(nit) ? string.Empty : nit.Length <= 3 ? "***" : "***" + nit[^3..];
 }
 
 /// <summary>Respuesta 200/201 del alta. <see cref="ToString"/> nunca imprime la llave ni el secreto.</summary>
@@ -61,8 +68,9 @@ public sealed class AltaCredencialImpuestoException : Exception
 
 /// <summary>
 /// HU #14711 — códigos y literales del alta de la credencial (endpoint <c>POST …/credentials/impuesto/obtener</c> y estado de
-/// aprovisionamiento de <c>diagnostico</c>). El endpoint los traduce a HTTP: NIT_* y SIN_ADMIN 422, PRODUCTO_NO_HABILITADO
-/// 409, TENANT_NOT_FOUND 404, PROVEEDOR_NO_CONFIGURADO 503 y los demás PROVEEDOR_* 502.
+/// aprovisionamiento de <c>diagnostico</c>). El endpoint los traduce a HTTP: NIT_* y SIN_ADMIN 422, PRODUCTO_NO_HABILITADO y
+/// ALTA_EN_CURSO 409, TENANT_NOT_FOUND 404, PROVEEDOR_NO_CONFIGURADO 503 y los demás PROVEEDOR_* 502. ERROR_INTERNO solo lo
+/// deja el alta automática en el estado (una excepción inesperada de la ronda).
 /// </summary>
 public static class CodigosAltaCredencialImpuesto
 {
@@ -77,6 +85,15 @@ public static class CodigosAltaCredencialImpuesto
     public const string ProveedorIntegracionDeshabilitada = "PROVEEDOR_INTEGRACION_DESHABILITADA";
     public const string ProveedorSolicitudInvalida = "PROVEEDOR_SOLICITUD_INVALIDA";
     public const string ProveedorNoDisponible = "PROVEEDOR_NO_DISPONIBLE";
+
+    /// <summary>M-3: el botón y la ronda guardaron a la vez y la relectura sigue sin coincidir con el alta.</summary>
+    public const string AltaEnCurso = "ALTA_EN_CURSO";
+
+    /// <summary>M-2: una excepción inesperada en la ronda del alta automática.</summary>
+    public const string ErrorInterno = "ERROR_INTERNO";
+
+    /// <summary>L-3: valor de la fila resumen de la auditoría cuando el alta no cambió nada.</summary>
+    public const string AuditoriaSinCambios = "SIN_CAMBIOS";
 
     /// <summary>Motivo de <c>LISTO_SIN_WEBHOOK</c> (mismo código que Impuestos).</summary>
     public const string SinWebhookSecret = "SIN_WEBHOOK_SECRET";
@@ -102,6 +119,8 @@ public static class CodigosAltaCredencialImpuesto
         ProveedorSolicitudInvalida => "El proveedor del impuesto rechazó los datos de la compañía.",
         ProveedorNoDisponible => "El proveedor del impuesto no responde. Intenta más tarde.",
         SinWebhookSecret => "El proveedor no entregó el secreto del webhook.",
+        AltaEnCurso => "Ya hay un alta de la credencial del impuesto en curso para la compañía. Intenta de nuevo en unos segundos.",
+        ErrorInterno => "No se pudo completar el alta de la credencial del impuesto por un error interno.",
         _ => "No se pudo obtener la credencial del proveedor del impuesto.",
     };
 }

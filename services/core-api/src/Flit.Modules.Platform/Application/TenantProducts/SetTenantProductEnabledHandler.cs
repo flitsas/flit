@@ -18,7 +18,8 @@ namespace Flit.Modules.Platform.Application.TenantProducts;
 /// cambio deja el trabajo <c>&lt;producto&gt;.producto.cambiado</c> en la outbox del host, en el mismo guardado. El canal
 /// <c>platform.tenant_product.changed</c> sigue sin emitirse (deuda R-10 del plan).
 /// HU #14711 (AC-DC-03): encender <c>diagnostico</c> deja, en el mismo guardado, el alta de la credencial del impuesto en
-/// <c>PENDIENTE</c> (<see cref="ITenantProductProvisioningStore.PrepararPendienteAltaDiagnosticoAsync"/>).
+/// <c>PENDIENTE</c> (<see cref="ITenantProductProvisioningStore.PrepararPendienteAltaDiagnosticoAsync"/>), solo si estaba apagado o
+/// si la fila del alta no existe: editar las notas de un <c>diagnostico</c> encendido no reinicia el alta.
 /// </remarks>
 public sealed class SetTenantProductEnabledHandler
 {
@@ -104,14 +105,17 @@ public sealed class SetTenantProductEnabledHandler
 
         // HU #14711 (AC-DC-03): encender diagnostico deja el alta de la credencial del impuesto en PENDIENTE en el mismo
         // guardado; la atiende el trabajador de core-identity. No pasa por la precondición ni por la outbox de aprovisionamiento.
+        // N-3: solo al pasar de apagado (o sin fila) a encendido, o si aún no hay fila del alta; editar las notas no la reinicia.
         if (command.Enabled && string.Equals(code, TenantProductCredentialCodes.Diagnostico, StringComparison.Ordinal))
         {
-            var marcarPendiente = await _provisioning.PrepararPendienteAltaDiagnosticoAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+            var previo = await _repository.GetAsync(command.TenantId, code, cancellationToken).ConfigureAwait(false);
+            var estabaEncendido = previo is { Enabled: true };
+            var preparacion = await _provisioning.PrepararPendienteAltaDiagnosticoAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
             return await _repository
                 .SetAsync(command.TenantId, code, command.Enabled, notes, changedBy, change =>
                 {
-                    if (change.Current.Enabled)
-                        marcarPendiente(change.Current.UpdatedAt);
+                    if (change.Current.Enabled && (!estabaEncendido || !preparacion.FilaExiste))
+                        preparacion.Marcar(change.Current.UpdatedAt);
                 }, cancellationToken)
                 .ConfigureAwait(false);
         }

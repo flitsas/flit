@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Flit.Modules.Platform.Application.Companies;
 using Flit.Modules.Platform.Application.TenantProducts;
@@ -274,6 +275,114 @@ public sealed class ObtenerCredencialImpuestoDiagnosticoHandlerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         _jobs.DidNotReceiveWithAnyArgs().EncolarCredencialDiagnosticoActualizada(default, default, default);
+    }
+
+    // ── M-2: un paso previo que falla no llama al proveedor ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task DescifrarLoGuardadoFalla_NoLlamaAlProveedor()
+    {
+        Guardada(CodigoLlave, LlaveVieja);
+        _protector.Unprotect(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()).Throws(new CryptographicException("rota"));
+
+        var act = () => Handler().HandleAsync(TenantId, SuperAdmin, Ct);
+
+        await act.Should().ThrowAsync<CryptographicException>();
+        await _proveedor.DidNotReceiveWithAnyArgs().DarDeAltaAsync(default!, Ct);
+    }
+
+    // ── M-3: el botón y la ronda guardan a la vez ──────────────────────────────────────────────────────────
+
+    private void ChocaAlGuardar() =>
+        _credenciales.GuardarAltaProveedorAsync(default, default!, default!, default!, default, default, Arg.Any<CancellationToken>())
+            .ThrowsAsyncForAnyArgs(new TenantProductCredentialConflictException());
+
+    [Fact]
+    public async Task ChoqueAlGuardar_LaOtraEscrituraDejoLosMismosValores_SinCambios()
+    {
+        ChocaAlGuardar();
+        _credenciales.GetAsync(TenantId, Diagnostico, CodigoLlave, Arg.Any<CancellationToken>())
+            .Returns(null, new TenantProductCredential(TenantId, Diagnostico, CodigoLlave, Cifrar(CodigoLlave, Llave), 0, Ahora));
+        _credenciales.GetAsync(TenantId, Diagnostico, CodigoSecreto, Arg.Any<CancellationToken>())
+            .Returns(null, new TenantProductCredential(TenantId, Diagnostico, CodigoSecreto, Cifrar(CodigoSecreto, Secreto), 0, Ahora));
+
+        var r = await Handler().HandleAsync(TenantId, SuperAdmin, Ct);
+
+        r.Should().Be(new ResultadoObtencionCredencialImpuesto("AbCdEfGh", Created: true, Rotated: false, HasWebhookSecret: true, Changed: false, Ahora));
+        await _credenciales.ReceivedWithAnyArgs(1).GuardarAltaProveedorAsync(default, default!, default!, default!, default, default, Ct);
+    }
+
+    [Fact]
+    public async Task ChoqueAlGuardar_SigueDistinto_AltaEnCurso_ConSuLiteral()
+    {
+        ChocaAlGuardar();
+        _credenciales.GetAsync(TenantId, Diagnostico, CodigoLlave, Arg.Any<CancellationToken>())
+            .Returns(null, new TenantProductCredential(TenantId, Diagnostico, CodigoLlave, Cifrar(CodigoLlave, LlaveVieja), 0, Ahora));
+
+        var act = () => Handler().HandleAsync(TenantId, SuperAdmin, Ct);
+
+        var ex = (await act.Should().ThrowAsync<AltaCredencialImpuestoException>()).Which;
+        ex.Code.Should().Be("ALTA_EN_CURSO");
+        ex.Message.Should().Be("Ya hay un alta de la credencial del impuesto en curso para la compañía. Intenta de nuevo en unos segundos.");
+        await _credenciales.Received(1).RegistrarAuditoriaAltaProveedorAsync(TenantId, Diagnostico, "ALTA_EN_CURSO", false, SuperAdmin, Arg.Any<CancellationToken>());
+    }
+
+    // ── L-3: la fila resumen del alta también sin cambios y en los fallos ──────────────────────────────────
+
+    [Fact]
+    public async Task SinCambios_AuditaLaFilaResumenConSinCambios()
+    {
+        _proveedor.DarDeAltaAsync(Arg.Any<PeticionAltaProveedor>(), Arg.Any<CancellationToken>())
+            .Returns(new RespuestaAltaProveedor(Llave, Secreto, Created: false, ApiKeyRotated: false));
+        Guardada(CodigoLlave, Llave);
+        Guardada(CodigoSecreto, Secreto);
+
+        await Handler().HandleAsync(TenantId, SuperAdmin, Ct);
+
+        await _credenciales.Received(1).RegistrarAuditoriaAltaProveedorAsync(TenantId, Diagnostico, "SIN_CAMBIOS", true, SuperAdmin, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConCambios_NoDuplicaLaFilaResumen()
+    {
+        await Handler().HandleAsync(TenantId, SuperAdmin, Ct);
+
+        await _credenciales.DidNotReceiveWithAnyArgs().RegistrarAuditoriaAltaProveedorAsync(default, default!, default!, default, default, Ct);
+    }
+
+    [Theory]
+    [InlineData("PROVEEDOR_TOKEN_INVALIDO")]
+    [InlineData("PROVEEDOR_NO_DISPONIBLE")]
+    public async Task FallaDelProveedor_AuditaElCodigo(string codigo)
+    {
+        _proveedor.DarDeAltaAsync(Arg.Any<PeticionAltaProveedor>(), Arg.Any<CancellationToken>()).ThrowsAsync(new AltaCredencialImpuestoException(codigo));
+
+        await FluentActions.Awaiting(() => Handler().HandleAsync(TenantId, SuperAdmin, Ct)).Should().ThrowAsync<AltaCredencialImpuestoException>();
+
+        await _credenciales.Received(1).RegistrarAuditoriaAltaProveedorAsync(TenantId, Diagnostico, codigo, false, SuperAdmin, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FallaDeValidacion_AuditaElCodigo_YLaEmpresaInexistenteNo()
+    {
+        _datos.ObtenerAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new DatosEmpresaParaAlta("Flota Andina SAS", "9001234567", true, [], "ops@flota.example"));
+        await FluentActions.Awaiting(() => Handler().HandleAsync(TenantId, SuperAdmin, Ct)).Should().ThrowAsync<AltaCredencialImpuestoException>();
+        var otra = Guid.NewGuid();
+        await FluentActions.Awaiting(() => Handler().HandleAsync(otra, SuperAdmin, Ct)).Should().ThrowAsync<AltaCredencialImpuestoException>();
+
+        await _credenciales.Received(1).RegistrarAuditoriaAltaProveedorAsync(TenantId, Diagnostico, "NIT_AMBIGUO", false, SuperAdmin, Arg.Any<CancellationToken>());
+        await _credenciales.DidNotReceive().RegistrarAuditoriaAltaProveedorAsync(otra, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── NIT enmascarado en la petición ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void PeticionAltaProveedor_ToString_SoloLosTresUltimosDigitosDelNit()
+    {
+        var texto = new PeticionAltaProveedor("Flota Andina SAS", "900123456", "ops@flota.example").ToString();
+
+        texto.Should().Contain("***456").And.NotContain("900123456").And.NotContain("123").And.NotContain("ops@flota.example");
     }
 
     // ── AC-DC-12: nada sensible en logs ni en errores ──────────────────────────────────────────────────────

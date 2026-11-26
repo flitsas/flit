@@ -600,6 +600,10 @@ public sealed class CredencialesProductoGrpcTests
         public Task<DateTimeOffset> GuardarAltaProveedorAsync(
             Guid tenantId, string productCode, IReadOnlyList<EscrituraCredencialAlta> escrituras, string motivo, Guid? changedBy,
             Action<DateTimeOffset>? antesDeGuardar, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RegistrarAuditoriaAltaProveedorAsync(
+            Guid tenantId, string productCode, string resultado, bool exito, Guid? changedBy, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class Protector : ITenantProductSecretProtector

@@ -146,13 +146,16 @@ public sealed class AprovisionamientoProductoGrpcTests
             Task.FromResult<IReadOnlyList<TenantProductProvisioning>>(Filas.Where(f => f.TenantId == tenantId).ToList());
 
         // HU #14711: el alta automática de diagnostico no pasa por este rpc.
-        public Task<Action<DateTimeOffset>> PrepararPendienteAltaDiagnosticoAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        public Task<PreparacionPendienteAltaDiagnostico> PrepararPendienteAltaDiagnosticoAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<PendienteAltaDiagnostico>> ReservarPendientesAltaDiagnosticoAsync(
             DateTimeOffset ahora, TimeSpan reserva, int lote, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task RegistrarEstadoAltaDiagnosticoAsync(EstadoAltaDiagnostico estado, CancellationToken cancellationToken = default) =>
+        public Task<bool> RegistrarEstadoAltaDiagnosticoAsync(EstadoAltaDiagnostico estado, long versionReservada, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task RegistrarEstadoAltaDiagnosticoManualAsync(EstadoAltaDiagnostico estado, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 

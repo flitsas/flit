@@ -9,13 +9,17 @@ namespace Flit.Modules.Platform.Application.TenantProducts;
 /// core-identity la atiende con <see cref="ProcesarAsync"/>. Llama al alta aunque la empresa ya tenga llave y secreto (es
 /// idempotente: sin cambios no escribe nada) y deja el estado:
 /// <list type="bullet">
-///   <item>éxito ⇒ <c>LISTO</c> (o <c>LISTO_SIN_WEBHOOK</c> con <c>SIN_WEBHOOK_SECRET</c> si no hay secreto);</item>
-///   <item><c>PROVEEDOR_NO_DISPONIBLE</c> o <c>PROVEEDOR_NO_CONFIGURADO</c> ⇒ <c>PENDIENTE</c> con la espera escalonada de Impuestos
-///   (1, 5, 15 y 60 min; <see cref="MaximoIntentosAutomaticos"/> intentos) y después <c>ERROR</c>;</item>
+///   <item>éxito ⇒ <c>LISTO</c> (o <c>LISTO_SIN_WEBHOOK</c> con <c>SIN_WEBHOOK_SECRET</c> y la acción <c>REINTENTAR</c> si no hay
+///   secreto, como dice platform.v1);</item>
+///   <item><c>PROVEEDOR_NO_DISPONIBLE</c>, <c>PROVEEDOR_NO_CONFIGURADO</c>, <c>ALTA_EN_CURSO</c> (chocó con el botón) o una
+///   excepción inesperada (<c>ERROR_INTERNO</c>) ⇒ <c>PENDIENTE</c> con la espera escalonada de Impuestos (1, 5, 15 y 60 min;
+///   <see cref="MaximoIntentosAutomaticos"/> intentos) y después <c>ERROR</c>;</item>
 ///   <item>NIT_* ⇒ <c>REQUIERE_REVISION_NIT</c> con la acción <c>CORREGIR_NIT</c>, sin reintento;</item>
 ///   <item><c>PRODUCTO_NO_HABILITADO</c> ⇒ <c>SUSPENDIDO</c>; los demás errores ⇒ <c>ERROR</c>, sin reintento.</item>
 /// </list>
-/// Una excepción inesperada (la base, por ejemplo) no deja estado: la fila sigue reservada y se reintenta al vencer la reserva.
+/// De una excepción inesperada el log lleva solo el tipo. El estado se guarda con la versión reservada
+/// (<see cref="PendienteAltaDiagnostico.Version"/>): si la fila cambió durante la ronda el resultado es obsoleto, se descarta y
+/// queda en el log.
 /// </summary>
 /// <example>
 /// <code>
@@ -63,8 +67,19 @@ public sealed partial class AltaCredencialDiagnosticoAutomatica(
         {
             estado = EstadoTrasError(pendiente.TenantId, ex.Code, pendiente.Intentos, _clock.GetUtcNow());
         }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            // M-2: también cuenta en los intentos y tiene tope. Solo el tipo: el mensaje puede traer datos de la base.
+            ErrorInesperado(_log, pendiente.TenantId, ex.GetType().Name);
+            estado = EstadoTrasError(pendiente.TenantId, CodigosAltaCredencialImpuesto.ErrorInterno, pendiente.Intentos, _clock.GetUtcNow());
+        }
 
-        await _store.RegistrarEstadoAltaDiagnosticoAsync(estado, cancellationToken).ConfigureAwait(false);
+        if (!await _store.RegistrarEstadoAltaDiagnosticoAsync(estado, pendiente.Version, cancellationToken).ConfigureAwait(false))
+        {
+            Descartada(_log, pendiente.TenantId, estado.Estado, pendiente.Version);
+            return;
+        }
+
         Atendida(_log, pendiente.TenantId, estado.Estado, estado.MotivoCodigo, estado.Intentos);
     }
 
@@ -76,7 +91,7 @@ public sealed partial class AltaCredencialDiagnosticoAutomatica(
             ? new EstadoAltaDiagnostico(tenantId, EstadosAltaDiagnostico.Listo, null, null, null, 0, null, en)
             : new EstadoAltaDiagnostico(
                 tenantId, EstadosAltaDiagnostico.ListoSinWebhook, CodigosAltaCredencialImpuesto.SinWebhookSecret,
-                CodigosAltaCredencialImpuesto.Literal(CodigosAltaCredencialImpuesto.SinWebhookSecret), null, 0, null, en);
+                CodigosAltaCredencialImpuesto.Literal(CodigosAltaCredencialImpuesto.SinWebhookSecret), EstadosAltaDiagnostico.AccionReintentar, 0, null, en);
     }
 
     /// <summary>Estado tras un rechazo con <paramref name="code"/>, con <paramref name="intentosPrevios"/> intentos fallidos.</summary>
@@ -85,7 +100,8 @@ public sealed partial class AltaCredencialDiagnosticoAutomatica(
         var literal = CodigosAltaCredencialImpuesto.Literal(code);
         switch (code)
         {
-            case CodigosAltaCredencialImpuesto.ProveedorNoDisponible or CodigosAltaCredencialImpuesto.ProveedorNoConfigurado:
+            case CodigosAltaCredencialImpuesto.ProveedorNoDisponible or CodigosAltaCredencialImpuesto.ProveedorNoConfigurado
+                or CodigosAltaCredencialImpuesto.AltaEnCurso or CodigosAltaCredencialImpuesto.ErrorInterno:
                 if (intentosPrevios < MaximoIntentosAutomaticos)
                 {
                     var intento = intentosPrevios + 1;
@@ -106,6 +122,12 @@ public sealed partial class AltaCredencialDiagnosticoAutomatica(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Alta automática de la credencial del impuesto de la empresa {Empresa}: {Estado} ({Motivo}, intentos {Intentos}).")]
     private static partial void Atendida(ILogger logger, Guid empresa, string estado, string? motivo, int intentos);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Alta automática de la credencial del impuesto de la empresa {Empresa}: error inesperado ({Error}); cuenta como intento.")]
+    private static partial void ErrorInesperado(ILogger logger, Guid empresa, string error);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Alta automática de la credencial del impuesto de la empresa {Empresa}: se descarta el resultado {Estado}, la fila ya no está en la versión reservada {Version}.")]
+    private static partial void Descartada(ILogger logger, Guid empresa, string estado, long version);
 }
 
 /// <summary>HU #14711 — estados y acción del alta de <c>diagnostico</c> (mismo vocabulario que Impuestos, plan §3.1 de impuestos).</summary>
@@ -118,4 +140,5 @@ public static class EstadosAltaDiagnostico
     public const string RequiereRevisionNit = "REQUIERE_REVISION_NIT";
     public const string Suspendido = "SUSPENDIDO";
     public const string AccionCorregirNit = "CORREGIR_NIT";
+    public const string AccionReintentar = "REINTENTAR";
 }

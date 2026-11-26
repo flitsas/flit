@@ -103,6 +103,26 @@ public sealed class Ddl206AltaCredencialImpuestoTests(PostgresDatabaseFixture fi
     }
 
     [PostgresFact]
+    public async Task IndiceDeLaRonda_SigueElOrdenDeLaReserva_YNextAttemptAtEsPiiNone()
+    {
+        await using var cn = await Fixture.OpenConnectionAsync();
+
+        await using (var cmd = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE schemaname = 'platform' AND indexname = 'ix_tenant_product_provisioning_product_code_next_attempt_at'", cn))
+        {
+            var def = (string)(await cmd.ExecuteScalarAsync(Ct))!;
+            def.Should().Contain("(product_code, next_attempt_at NULLS FIRST)").And.Contain("'PENDIENTE'");
+        }
+
+        await using (var cmd = new NpgsqlCommand(
+            "SELECT col_description('platform.tenant_product_provisioning'::regclass, a.attnum) FROM pg_attribute a " +
+            "WHERE a.attrelid = 'platform.tenant_product_provisioning'::regclass AND a.attname = 'next_attempt_at'", cn))
+        {
+            ((string)(await cmd.ExecuteScalarAsync(Ct))!).Should().StartWith("@pii:none");
+        }
+    }
+
+    [PostgresFact]
     public async Task Down_BorraSoloLosSecretosDelWebhook_YRestauraElCheckYLasColumnas()
     {
         await using var cn = await Fixture.OpenConnectionAsync();

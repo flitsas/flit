@@ -60,12 +60,47 @@ public interface ITenantProductCredentialRepository
         Action<DateTimeOffset>? antesDeGuardar,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// HU #14711 (L-3) — la fila resumen del alta del proveedor (<c>obtain_from_provider</c>) cuando no se escribió ninguna
+    /// credencial: <paramref name="resultado"/> = <c>SIN_CAMBIOS</c> (<paramref name="exito"/> true) o el código del fallo
+    /// (false; también en <c>error_code</c>). En su propio guardado y sin valores sensibles.
+    /// </summary>
+    Task RegistrarAuditoriaAltaProveedorAsync(
+        Guid tenantId,
+        string productCode,
+        string resultado,
+        bool exito,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteAsync(
         Guid tenantId,
         string productCode,
         string credentialCode,
         Guid? changedBy,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// HU #14711 (M-3) — el guardado del alta chocó con otro guardado de las mismas credenciales (unique o <c>row_version</c>):
+/// el botón y la ronda escribieron a la vez. El repositorio ya soltó lo que no se guardó.
+/// </summary>
+public sealed class TenantProductCredentialConflictException : Exception
+{
+    public TenantProductCredentialConflictException()
+        : base("Otro guardado de las credenciales del alta llegó primero.")
+    {
+    }
+
+    public TenantProductCredentialConflictException(string message)
+        : base(message)
+    {
+    }
+
+    public TenantProductCredentialConflictException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 }
 
 /// <summary>HU #14711 — una credencial ya cifrada para <see cref="ITenantProductCredentialRepository.GuardarAltaProveedorAsync"/>.</summary>
