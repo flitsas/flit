@@ -1,33 +1,30 @@
-# Lista de contratos que publica atlas-publicar-contratos.yml.
-# En PR y develop el job «seleccion» solo corre los contratos cuyo archivo cambió;
-# staging/release y workflow_dispatch corren todos los de esta lista.
-# Esta promoción adapta la lista al inventario de contratos de la rama destino.
-include:
-          # OpenAPI. Compartibles (los usan clientes de integración): external-api y core-ict.
-          # core-api: breaking como advertencia temporalmente por el Bug #14627. `validationId` de
-          # /api/v1/admin/tramites/{id}/validaciones-identidad/{reenviables,reenviar} pasa a nullable
-          # (antes siempre traía valor); oasdiff lo ve como incompatible. El único consumidor es el
-          # panel admin, que se actualiza en el mismo PR. Quitarlo cuando este cambio esté en release.
-          # También cubre la 1.0.5 de staging: agrega diagnostico_dictamen al enum toolCode de las respuestas de
-          # /api/v1/admin/plataforma/ai/* (redactor IA de Diagnóstico, ADR-0091; promueve #939). Mismo consumidor único (panel admin).
+# Contratos que publica .github/workflows/atlas-publicar-contratos.yml en Flit Atlas (uno por job).
+# Lista adaptada al inventario de esta rama (staging/release). Formato: array YAML raíz (sin clave include).
+# OpenAPI. Compartibles (los usan clientes de integración): external-api y core-ict.
+# core-api: breaking como advertencia temporalmente por el Bug #14627. `validationId` de
+# /api/v1/admin/tramites/{id}/validaciones-identidad/{reenviables,reenviar} pasa a nullable
+# (antes siempre traía valor); oasdiff lo ve como incompatible. El único consumidor es el
+# panel admin, que se actualiza en el mismo PR. Quitarlo cuando este cambio esté en release.
+# También cubre la 1.0.5 de staging: agrega diagnostico_dictamen al enum toolCode de las respuestas de
+# /api/v1/admin/plataforma/ai/* (redactor IA de Diagnóstico, ADR-0091; promueve #939). Mismo consumidor único (panel admin).
 - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
-          # core-ict de staging aún no cumple lo compartible (45 errores de vacuum): lint: advertencia hasta que llegue la 1.1.0 de develop.
+# core-ict de staging aún no cumple lo compartible (45 errores de vacuum): lint: advertencia hasta que llegue la 1.1.0 de develop.
 - { contrato: core-ict, aplicativo: flit2-core-ict, tipo: openapi, ruta: contracts/openapi/core-ict.v1.yaml, ruleset: compartible, lint: advertencia }
-          # diagnostico: breaking como advertencia solo para la 1.1.0. Agrega PLACA_MOTOCARRO al enum tipo_identificador de
-          # las respuestas (placa 123ABC, ajustes de Diagnóstico 2026-11-11, P7), que oasdiff ve como incompatible. El único
-          # consumidor es frontend-diagnostico, que se actualiza en el mismo PR. Quitarlo cuando la 1.1.0 esté en release.
+# diagnostico: breaking como advertencia solo para la 1.1.0. Agrega PLACA_MOTOCARRO al enum tipo_identificador de
+# las respuestas (placa 123ABC, ajustes de Diagnóstico 2026-11-11, P7), que oasdiff ve como incompatible. El único
+# consumidor es frontend-diagnostico, que se actualiza en el mismo PR. Quitarlo cuando la 1.1.0 esté en release.
 - { contrato: diagnostico, aplicativo: flit2-core-diagnostico, tipo: openapi, ruta: contracts/openapi/diagnostico.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
 - { contrato: external-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/external-api.v1.json, ruleset: compartible, lint: advertencia }
 - { contrato: platform, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/platform.v1.yaml, ruleset: interno, lint: advertencia }
 - { contrato: python-ml, aplicativo: flit2-python-ml, tipo: openapi, ruta: contracts/openapi/python-ml.v1.yaml, ruleset: interno, lint: advertencia }
-          # AsyncAPI 2.6 (ruleset de Atlas por defecto; vacuum no revisa 2.x). comun/sobre.v1.yaml no es un contrato:
-          # el workflow reutilizable resuelve sus $ref y publica cada documento completo.
+# AsyncAPI 2.6 (ruleset de Atlas por defecto; vacuum no revisa 2.x). comun/sobre.v1.yaml no es un contrato:
+# el workflow reutilizable resuelve sus $ref y publica cada documento completo.
 - { contrato: consultas-events, aplicativo: flit2-core-consultas, tipo: asyncapi, ruta: contracts/asyncapi/consultas-events.v1.yaml }
 - { contrato: domain-events, aplicativo: flit2-core-api, tipo: asyncapi, ruta: contracts/asyncapi/domain-events.v1.yaml }
 - { contrato: notificaciones-events, aplicativo: flit2-core-notificaciones, tipo: asyncapi, ruta: contracts/asyncapi/notificaciones-events.v1.yaml }
 - { contrato: plataforma-events, aplicativo: flit2-core-identity, tipo: asyncapi, ruta: contracts/asyncapi/plataforma-events.v1.yaml }
 - { contrato: tramites-events, aplicativo: flit2-core-api, tipo: asyncapi, ruta: contracts/asyncapi/tramites-events.v1.yaml }
-          # proto (un archivo por contrato; los import entre archivos son advertencias en Atlas). Versión obligatoria.
+# proto (un archivo por contrato; los import entre archivos son advertencias en Atlas). Versión obligatoria.
 - { contrato: comparendos, aplicativo: flit2-core-comparendos, tipo: proto, ruta: contracts/proto/flit/comparendos/v1/comparendos.proto, version: 1.0.0 }
 - { contrato: consultas-administracion, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/administracion.proto, version: 1.0.0 }
 - { contrato: consultas-certificaciones, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/certificaciones.proto, version: 1.0.0 }
@@ -41,6 +38,6 @@ include:
 - { contrato: platform-errores, aplicativo: flit2-plataforma, tipo: proto, ruta: contracts/proto/flit/platform/v1/errores.proto, version: 1.0.0 }
 - { contrato: platform-tipos, aplicativo: flit2-plataforma, tipo: proto, ruta: contracts/proto/flit/platform/v1/tipos.proto, version: 1.0.0 }
 - { contrato: tramites-catalogos, aplicativo: flit2-core-api, tipo: proto, ruta: contracts/proto/flit/tramites/v1/catalogos.proto, version: 1.0.0 }
-          # flit.ict.v1 vive en core-ict, no en contracts/.
+# flit.ict.v1 vive en core-ict, no en contracts/.
 - { contrato: ict-orchestration, aplicativo: flit2-core-ict, tipo: proto, ruta: services/core-ict/src/Flit.Ict.Grpc.Contracts/Protos/ict_orchestration.proto, version: 1.0.0 }
 - { contrato: ict-state-callback, aplicativo: flit2-core-ict, tipo: proto, ruta: services/core-ict/src/Flit.Ict.Grpc.Contracts/Protos/ict_state_callback.proto, version: 1.0.0 }
