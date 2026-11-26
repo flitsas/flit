@@ -26,8 +26,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// con <c>ActivatorUtilities</c>, como lo haría el host gRPC, y se invoca con un
 /// <see cref="ServerCallContext"/> mínimo.</para>
 /// </summary>
-public sealed class IctOrchestrationActoresComercialIntegrationTests(PostgresDatabaseFixture fixture)
-    : PostgresTestBase(fixture)
+public sealed class IctOrchestrationActoresComercialIntegrationTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private static readonly Guid UserId = new("b13304a8-0000-4000-8000-0000000000aa");
     private static readonly Guid SeededInstanceId = new("b13304a8-0000-4000-8000-000000000001");
@@ -234,7 +234,7 @@ public sealed class IctOrchestrationActoresComercialIntegrationTests(PostgresDat
 
     private async Task<DraftReply> InvokeCreateAsync(CreateDraftFromIctRequest request)
     {
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var service = ActivatorUtilities.CreateInstance<IctOrchestrationService>(scope.ServiceProvider);
         return await service.CreateDraftFromIct(request, new TestCallContext(TestContext.Current.CancellationToken));
@@ -242,7 +242,7 @@ public sealed class IctOrchestrationActoresComercialIntegrationTests(PostgresDat
 
     private async Task<DraftReply> InvokeUpdateAsync(UpdateDraftCommercialRequest request)
     {
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var service = ActivatorUtilities.CreateInstance<IctOrchestrationService>(scope.ServiceProvider);
         return await service.UpdateDraftCommercial(request, new TestCallContext(TestContext.Current.CancellationToken));

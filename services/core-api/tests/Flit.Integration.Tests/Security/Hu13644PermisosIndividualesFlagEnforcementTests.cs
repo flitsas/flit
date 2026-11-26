@@ -17,7 +17,7 @@ namespace Flit.Integration.Tests.Security;
 /// respetan <c>Security:ModulePermissionEnforcement:Enabled</c>. Con el flag apagado <c>reportes.read</c> (exigido por
 /// <c>RequireAnyModulePermission</c> en la API) no se ofrece ni se acepta; encendido, sí.
 /// </summary>
-public sealed class Hu13644PermisosIndividualesFlagEnforcementTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed class Hu13644PermisosIndividualesFlagEnforcementTests(PostgresDatabaseFixture fixture, HostsPorClase hosts) : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private static readonly Guid Tenant = new("aaaaaaaa-1364-4401-8000-00000000000a");
     private static readonly Guid SuperAdmin = new("a4000000-1364-4401-8000-000000000004");
@@ -49,9 +49,9 @@ public sealed class Hu13644PermisosIndividualesFlagEnforcementTests(PostgresData
 
     private async Task<(IReadOnlyList<string> Grantable, string? SetReason)> RunAsync(bool moduleFlag, Guid reportesId)
     {
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
-        await using var host = factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) =>
-            c.AddInMemoryCollection(new Dictionary<string, string?> { ["Security:ModulePermissionEnforcement:Enabled"] = moduleFlag ? "true" : "false" })));
+        // Un host por clase y por valor del flag (HostsPorClase).
+        var host = hosts.Obtener(Fixture,
+            new Dictionary<string, string?> { ["Security:ModulePermissionEnforcement:Enabled"] = moduleFlag ? "true" : "false" });
         var state = host.Services.GetRequiredService<IPermissionEnforcementState>();
 
         await using var ctx = NewContext();
