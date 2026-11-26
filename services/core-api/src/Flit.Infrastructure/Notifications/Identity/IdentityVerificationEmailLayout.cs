@@ -112,7 +112,9 @@ public static class IdentityVerificationEmailLayout
             .Append(Enc(content.RequestedByLabel)).Append("<br/><strong style=\"font-size:14px;color:").Append(Ink).Append(";\">")
             .Append(product).Append("</strong></td></tr></table>");
 
-        // Pasos.
+        // Pasos (solo si hay pasos: la alerta de operación no los trae).
+        if (content.Steps.Count > 0)
+        {
         sb.Append("<p style=\"margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.06em;color:").Append(Muted)
             .Append(";\">").Append(Enc(content.StepsHeading)).Append("</p>");
         sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 24px;\">");
@@ -127,6 +129,7 @@ public static class IdentityVerificationEmailLayout
                 .Append(Enc(content.Steps[i])).Append("</td></tr>");
         }
         sb.Append("</table>");
+        }
 
         // Botón (ancho según contenido) y enlace de respaldo.
         sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 18px;\"><tr>")
@@ -182,7 +185,9 @@ public static class IdentityVerificationEmailLayout
             .Append(";\">").Append(Enc(content.RequestedByLabel)).Append("<br/><strong style=\"font-size:14px;color:")
             .Append(FlitEmailLayout.Ink).Append(";\">").Append(product).Append("</strong></p>");
 
-        // Pasos: tarjeta con burbujas numeradas (el número y el texto del paso no cambian).
+        // Pasos: tarjeta con burbujas numeradas (solo si hay pasos).
+        if (content.Steps.Count > 0)
+        {
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 20px;border:1px solid ")
             .Append(FlitEmailLayout.CardBorder).Append(";border-radius:12px;border-collapse:separate;box-shadow:0 4px 14px rgba(22,39,68,0.10);\"><tr><td style=\"padding:16px 20px 8px;\">");
         sb.Append("<p style=\"margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.06em;color:").Append(FlitEmailLayout.Muted)
@@ -199,6 +204,7 @@ public static class IdentityVerificationEmailLayout
                 .Append(Enc(content.Steps[i])).Append("</td></tr>");
         }
         sb.Append("</table></td></tr></table>");
+        }
 
         sb.Append(FlitEmailLayout.Boton(content.ButtonLabel, link));
         sb.Append("<p style=\"margin:0 0 6px;text-align:center;font-size:12px;line-height:1.5;color:").Append(FlitEmailLayout.Muted).Append(";\">")
@@ -223,7 +229,7 @@ public static class IdentityVerificationEmailLayout
 
     private static IEnumerable<char> Clean(string value) => value.Trim().Select(c => char.IsControl(c) ? ' ' : c);
 
-    private static string? LogoUrl(EmailTheme theme, string assetsBaseUrl)
+    internal static string? LogoUrl(EmailTheme theme, string assetsBaseUrl)
     {
         if (theme.IsBrand)
         {
@@ -237,7 +243,7 @@ public static class IdentityVerificationEmailLayout
         return FlitEmailLayout.LogoUrl(assetsBaseUrl);
     }
 
-    private static string LogoHtml(string? logoUrl, string productEncoded, int heightPx, string accent) =>
+    internal static string LogoHtml(string? logoUrl, string productEncoded, int heightPx, string accent) =>
         logoUrl is null
             ? $"<span style=\"font-size:20px;font-weight:700;color:{accent};\">{productEncoded}</span>"
             : $"<img src=\"{EncAttr(logoUrl)}\" alt=\"{productEncoded}\" height=\"{heightPx}\" style=\"display:block;border:0;height:{heightPx}px;width:auto;\"/>";

@@ -91,7 +91,7 @@ public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<WebApplic
             .TryUnprotect(v.ManualCaptureTokenEncrypted!).Should().Be(enviado.Token);
         (await db.ProcedureInstanceBiometricValidations.AsNoTracking().AnyAsync(x => x.TokenHash == hashViejo, Ct))
             .Should().BeFalse("el token anterior ya no se encuentra por hash: el público recibirá 404");
-        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(24), TimeSpan.FromMinutes(2));
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddDays(30), TimeSpan.FromMinutes(2));
         v.Status.Should().Be(BiometricEstados.ManualActivo);
         v.ResendCount.Should().Be(1);
 

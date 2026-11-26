@@ -63,6 +63,7 @@ const POR_CLAVE: Record<string, Ilustracion> = {
   "admin-configuracion-ia": "configuracion-ia",
   "admin-mensajes-muertos": "mensajes-muertos",
   "admin-descarga-masiva": "documentos",
+  "admin-rondas-identidad": "identidad",
   "admin-banners": "banners",
   "admin-persona-natural": "perfil",
   "admin-seguridad": "seguridad",

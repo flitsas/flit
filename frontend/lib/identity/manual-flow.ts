@@ -43,7 +43,7 @@ export function esFlujoManualActivo(v: Pick<BiometricValidation, 'provider' | 's
   return v.provider === 'manual' && v.status === 'manual_activo';
 }
 
-/** Validación manual RECHAZADA por el Super Admin: el cliente recibió un enlace nuevo de 24 h para repetir la captura. */
+/** Validación manual RECHAZADA por el Super Admin: el cliente recibió un enlace nuevo de 30 días para repetir la captura. */
 export function esRechazadoManual(v: Pick<BiometricValidation, 'provider' | 'status'>): boolean {
   return v.provider === 'manual' && v.status === 'rechazado';
 }

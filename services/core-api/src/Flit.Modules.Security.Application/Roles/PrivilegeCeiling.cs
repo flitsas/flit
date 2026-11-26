@@ -18,7 +18,8 @@ public static class PrivilegeCeiling
     /// ni un usuario por permiso individual. Épica #14644: la contingencia de proveedor RUNT.
     /// </summary>
     public static bool IsSuperAdminOnly(string? slug) =>
-        string.Equals(slug, "runt_contingency.manage", StringComparison.OrdinalIgnoreCase);
+        string.Equals(slug, "runt_contingency.manage", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(slug, "identity_rounds.manage", StringComparison.OrdinalIgnoreCase); // configurador global de rondas de identidad
 
     /// <summary>Permisos que solo gestiona FLIT: ninguna compañía puede ponerlos en un rol propio.</summary>
     public static bool IsPlatformOnly(string slug) =>

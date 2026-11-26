@@ -89,6 +89,128 @@ public sealed class ReenviarPrevalidacionHandlerTests
                 $"{{\"id\":\"{verificationId}\"}}", DateTimeOffset.UtcNow.AddHours(24)));
     }
 
+    // ── Reenvío Kyverum con reissue sobre la MISMA validación ───────────────────
+
+    private static void SeedKyverumExistente(ProcedureInstanceBiometricValidation validation)
+    {
+        validation.Provider = BiometricProviders.Kyverum;
+        validation.KyverumVerificationId = "kyv_old";
+        validation.WebhookSecretEncrypted = "enc_secret_old";
+        validation.CaptureUrl = "https://capture.example.com/old";
+    }
+
+    [Fact]
+    public async Task Reissue_SinEnvioConfirmado_NoConsumeRonda_PeroDejaElEnlaceVigente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>())
+            .Returns(KyverumReissueResult.Reemitido("https://capture.example.com/reissue", enviado: false));
+        var handler = BuildHandler(isKyverum: true);
+
+        var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        error.Should().BeNull();
+        validation.CaptureUrl.Should().Be("https://capture.example.com/reissue");
+        validation.Status.Should().Be(BiometricEstados.EnProceso);
+        validation.ResendCount.Should().Be(0, "Kyverum no confirmó el correo: la ronda no se consume");
+    }
+
+    [Fact]
+    public async Task Reissue_MismoCorreo_ReemiteEnlaceSinCrearOtraValidacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>())
+            .Returns(KyverumReissueResult.Reemitido("https://capture.example.com/reissue", enviado: true));
+        var handler = BuildHandler(isKyverum: true);
+
+        var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        error.Should().BeNull();
+        // Mismo registro en el proveedor: no se crea una validación nueva ni se cambia la verificación ni el secreto.
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        validation.KyverumVerificationId.Should().Be("kyv_old");
+        validation.WebhookSecretEncrypted.Should().Be("enc_secret_old");
+        validation.CaptureUrl.Should().Be("https://capture.example.com/reissue");
+        validation.Status.Should().Be(BiometricEstados.EnProceso);
+        validation.Attempts.Should().Be(0);
+        validation.ReconcilePollCount.Should().Be(0);
+        validation.ResendCount.Should().Be(1);
+        validation.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(BiometricRules.TokenTtlHoras), TimeSpan.FromMinutes(1));
+        await _events.Received(1).PublishAsync(
+            Arg.Is<IdentityValidationRequested>(e => e.ProviderVerificationId == "kyv_old"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Reissue_NoExisteEnProveedor_CaeALaCreacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>()).Returns(KyverumReissueResult.NoExiste());
+        StubKyverumOk("kyv_new", "https://capture.example.com/new");
+        var handler = BuildHandler(isKyverum: true);
+
+        var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        error.Should().BeNull();
+        await _kyverum.Received(1).StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        validation.KyverumVerificationId.Should().Be("kyv_new");
+    }
+
+    [Fact]
+    public async Task Reissue_ConsultasSinElRpc_CaeALaCreacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>()).Returns(KyverumReissueResult.NoSoportado());
+        StubKyverumOk("kyv_new", "https://capture.example.com/new");
+        var handler = BuildHandler(isKyverum: true);
+
+        await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        await _kyverum.Received(1).StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Reissue_YaAprobadaEnProveedor_NoReenviaYDevuelveIdentidadAprobada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.EnProceso, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>()).Returns(KyverumReissueResult.Aprobada());
+        var handler = BuildHandler(isKyverum: true);
+
+        var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        error.Should().Be("identidad_aprobada");
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        validation.ResendCount.Should().Be(0);
+        validation.KyverumVerificationId.Should().Be("kyv_old");
+    }
+
+    [Fact]
+    public async Task Reissue_FalloTransitorio_EncolaYNoCreaValidacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>())
+            .ThrowsAsync(new KyverumVerifyException("caído", transient: true));
+        var handler = BuildHandler(isKyverum: true);
+
+        var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        error.Should().BeNull();
+        validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
+        validation.ResendCount.Should().Be(0, "la ronda no se cuenta hasta crear el enlace");
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
     // ── AC2 — reenvío manual sin editar ──────────────────────────────────────────
 
     [Fact]
@@ -241,7 +363,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
     // ── AC11 — falla transitoria del proveedor al reenviar ───────────────────────
 
     [Fact]
-    public async Task AC11_KyverumTransientFailure_Returns202_LeavesPendienteEnvio_AndConsumesQuota()
+    public async Task AC11_KyverumTransientFailure_Returns202_LeavesPendienteEnvio_SinConsumirRonda()
     {
         var ct = TestContext.Current.CancellationToken;
         var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
@@ -254,7 +376,7 @@ public sealed class ReenviarPrevalidacionHandlerTests
         error.Should().BeNull();
         result!.Queued.Should().BeTrue();
         validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
-        validation.ResendCount.Should().Be(1, "el reenvío ya consumió cupo del tope aunque no se completó el envío");
+        validation.ResendCount.Should().Be(0, "un envío que no se completó no consume cupo");
     }
 
     [Fact]

@@ -9,7 +9,7 @@ namespace Flit.Tramites.Domain.Tests;
 /// <summary>
 /// HU #13287 (Feature #13280 A5, Épica #13202) — <see cref="ProcedureInstanceBiometricValidation.RegenerarEnlaceManual"/>
 /// concentra las invariantes de la regeneración: solo en <c>manual_activo</c>, hash SHA-256 distinto del anterior que
-/// reemplaza al viejo, TTL de 24 h desde ahora y conteo del reenvío; no toca el estado ni la activación.
+/// reemplaza al viejo, TTL de 30 días desde ahora y conteo del reenvío; no toca el estado ni la activación.
 /// <para>Uso: <c>v.RegenerarEnlaceManual(now, nuevoHash)</c> sobre una fila manual activa.</para>
 /// </summary>
 public sealed class IdentidadManualRegeneracionTests
@@ -42,7 +42,7 @@ public sealed class IdentidadManualRegeneracionTests
         v.RegenerarEnlaceManual(Now, HashNuevo);
 
         v.TokenHash.Should().Be(HashNuevo).And.NotBe(HashViejo);
-        v.ExpiresAt.Should().Be(Now.AddHours(BiometricRules.TokenTtlHoras)).And.Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(BiometricRules.TokenTtlManualDias)).And.Be(Now.AddDays(30));
         v.ResendCount.Should().Be(1);
         v.LastResentAt.Should().Be(Now);
         v.UpdatedAt.Should().Be(Now);
@@ -60,7 +60,7 @@ public sealed class IdentidadManualRegeneracionTests
 
         v.RegenerarEnlaceManual(Now, HashNuevo);
 
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
     }
 
     [Theory]

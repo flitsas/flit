@@ -137,7 +137,8 @@ public sealed record TenantBiometricPersonListQuery(
 /// </summary>
 public sealed class ListTenantBiometricPersonsHandler(
     IProcedureInstanceRepository repo,
-    IIdentityValidationOutboxRepository outboxRepo)
+    IIdentityValidationOutboxRepository outboxRepo,
+    Flit.Tramites.Application.Identity.Rounds.IIdentityRoundsStore? rounds = null)
 {
     /// <summary>Ventana CF-05 para alertas sobre validaciones terminales.</summary>
     public const int AlertWindowDays = 30;
@@ -203,12 +204,17 @@ public sealed class ListTenantBiometricPersonsHandler(
             : await repo.GetTenantNamesAsync(rows.Select(r => r.TenantId).Distinct().ToList(), ct)
                 ?? new Dictionary<Guid, string>();
 
+        // Las columnas muestran RONDAS (1 + reenvíos) sobre el máximo global; el reenvío no reinicia la ronda.
+        var rondasMaximas = rounds is null
+            ? Flit.Tramites.Domain.Identity.IdentityRoundsConfig.DefaultRondas
+            : (await rounds.GetConfigAsync(ct)).RondasMaximas;
+
         var persons = rows.Select(r =>
         {
             worstByPerson.TryGetValue(PersonKey(r.TenantId, $"{r.DocumentTypeNorm}|{r.DocumentNumberNorm}"), out var worst);
             // Las alertas se calculan sobre las validaciones del trámite y la prevalidación de ese documento: no son de la
             // fila del mandatario.
-            return ToDto(r, r.EsMandatario ? null : worst, now, tenantNames.GetValueOrDefault(r.TenantId));
+            return ToDto(r, r.EsMandatario ? null : worst, now, tenantNames.GetValueOrDefault(r.TenantId), rondasMaximas);
         }).ToList();
 
         return (new TenantBiometricPersonsResponse(persons, stats, page, pageSize, totalPersons), null);
@@ -300,7 +306,8 @@ public sealed class ListTenantBiometricPersonsHandler(
         BiometricPersonGroupProjection r,
         string? worstAlert,
         DateTimeOffset now,
-        string? tenantName)
+        string? tenantName,
+        int rondasMaximas)
     {
         // DaysRemaining solo aplica a aprobadas; reusa BiometricRules vía proyección mínima.
         int? daysRemaining = null;
@@ -328,8 +335,8 @@ public sealed class ListTenantBiometricPersonsHandler(
             r.Score,
             r.CaptureUrl,
             r.Status != BiometricEstados.Aprobado && now > r.ExpiresAt,
-            r.Attempts,
-            r.MaxAttempts,
+            1 + Math.Max(0, r.ResendCount),
+            rondasMaximas,
             r.CreatedAt,
             r.ValidatedAt,
             r.ValidUntil,

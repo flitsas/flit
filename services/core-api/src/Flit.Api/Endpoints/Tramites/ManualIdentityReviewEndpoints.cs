@@ -149,7 +149,7 @@ internal static class ManualIdentityReviewEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
-        // HU #13299 — rechaza con motivo homologado (la fila queda en 'rechazado'), emite un enlace nuevo de 24 h y envía el correo
+        // HU #13299 — rechaza con motivo homologado (la fila queda en 'rechazado'), emite un enlace nuevo de 30 días y envía el correo
         // con el motivo y el enlace para repetir la captura.
         group.MapPost("/biometric-validations/{id:guid}/manual-reject", async (
             Guid id,

@@ -88,6 +88,15 @@ public static class IdentityValidationAuditStages
     /// <summary>El enlace de captura venció (expires_at &lt;= now) y la validación se terminalizó como expirada.</summary>
     public const string Expired = "expired";
 
+    /// <summary>Historial de rondas: una ronda cerró en rechazo final (intentos de Kyverum agotados).</summary>
+    public const string RoundRejected = "ronda_rechazada";
+
+    /// <summary>Historial de rondas: se abrió una ronda nueva con enlace reemitido y correo confirmado por Kyverum.</summary>
+    public const string RoundReissued = "ronda_reemitida";
+
+    /// <summary>Historial de rondas: el rechazo fue final porque la persona ya no tiene rondas disponibles.</summary>
+    public const string RoundExhausted = "ronda_agotada";
+
     /// <summary>
     /// HU #10943 (CF-03) — se editaron los datos de contacto de una prevalidación standalone (nombre y/o
     /// correo del sujeto). El <c>Detail</c>/<c>Message</c> NUNCA lleva el correo en claro (enmascarado).

@@ -9,7 +9,7 @@ namespace Flit.Tramites.Domain.Tests;
 
 /// <summary>
 /// HU #13299 (Feature #13282 C4, Épica #13202) — <see cref="ProcedureInstanceBiometricValidation.RechazarRevisionManual"/>:
-/// registra motivo (lista cerrada) y revisor, deja la fila en <c>rechazado</c> con un enlace nuevo de 24 h (hash distinto) con el
+/// registra motivo (lista cerrada) y revisor, deja la fila en <c>rechazado</c> con un enlace nuevo de 30 días (hash distinto) con el
 /// que se puede repetir la captura, abre un ciclo nuevo (el consentimiento anterior ya no vale), conserva las rutas anteriores y no
 /// tiene tope de intentos; la captura siguiente limpia motivo y revisión. Más el catálogo cerrado
 /// <see cref="ManualRejectionReasons"/>.
@@ -55,13 +55,13 @@ public sealed class IdentidadManualRechazoTests
         v.ReviewedBy.Should().Be(revisor);
         v.ReviewedAt.Should().Be(Now);
         v.TokenHash.Should().Be(HashNuevo).And.NotBe(HashViejo);
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
         v.ManualActivatedBy.Should().Be(activadoPor);
         v.ManualActivatedAt.Should().Be(Now);
         v.EsperaCapturaManual.Should().BeTrue();
         v.PuedeRegenerarEnlaceManual.Should().BeTrue();
         v.EstadoSesionManual(Now).Should().Be(ManualCaptureSessionState.Vigente);
-        v.EstadoSesionManual(Now.AddHours(24).AddSeconds(1)).Should().Be(ManualCaptureSessionState.Vencida);
+        v.EstadoSesionManual(Now.AddDays(30).AddSeconds(1)).Should().Be(ManualCaptureSessionState.Vencida);
         v.UpdatedAt.Should().Be(Now);
         v.ApprovalOrigin.Should().BeNull();
     }
@@ -192,7 +192,7 @@ public sealed class IdentidadManualRechazoTests
     {
         var v = Pendiente();
         v.RechazarRevisionManual(Guid.NewGuid(), ManualRejectionReasons.ImagenBorrosa, Now, HashNuevo);
-        var tarde = Now.AddHours(25);
+        var tarde = Now.AddDays(31);
 
         v.EstadoSesionManual(tarde).Should().Be(ManualCaptureSessionState.Vencida);
         var capturar = () => v.RegistrarCapturaManual("r", "a", "v", "f", new string('c', 64), tarde);
@@ -201,7 +201,7 @@ public sealed class IdentidadManualRechazoTests
         v.PuedeRegenerarEnlaceManual.Should().BeTrue();
         v.RegenerarEnlaceManual(tarde, new string('d', 64));
         v.Status.Should().Be(BiometricEstados.Rechazado, "regenerar no cambia el estado");
-        v.ExpiresAt.Should().Be(tarde.AddHours(24));
+        v.ExpiresAt.Should().Be(tarde.AddDays(30));
         v.EstadoSesionManual(tarde).Should().Be(ManualCaptureSessionState.Vigente);
     }
 

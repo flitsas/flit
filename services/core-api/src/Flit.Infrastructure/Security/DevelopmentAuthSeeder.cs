@@ -163,6 +163,7 @@ public static class DevelopmentAuthSeeder
         await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
         await SeedRuntConfirmationPermissionsAsync(db, cancellationToken);
         await SeedRuntContingencyPermissionsAsync(db, cancellationToken); // Épica #14644 — HU14648
+        await SeedIdentityRoundsPermissionsAsync(db, cancellationToken); // configurador global de rondas de identidad
         await SeedBannersPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
@@ -2046,6 +2047,73 @@ public static class DevelopmentAuthSeeder
                 Name = "Administrar la contingencia de proveedor RUNT",
                 HttpMethod = "PUT",
                 RoutePattern = "/api/v1/admin/platform/runt-contingency/{kind}",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin" && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Configurador GLOBAL de rondas de validación de identidad — módulo <c>identidad-rondas</c> con el permiso
+    /// <c>identity_rounds.manage</c>, concedido SOLO a SuperAdmin (Super Admin FLIT): ningún rol de compañía lo trae
+    /// (<c>PrivilegeCeiling.IsSuperAdminOnly</c>). Mismo patrón idempotente que <see cref="SeedRuntContingencyPermissionsAsync"/>.
+    /// </summary>
+    private static async Task SeedIdentityRoundsPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "identidad-rondas" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "identidad-rondas",
+                Name = "Plataforma · Rondas de validación de identidad",
+                SortOrder = 14,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        const string slug = "identity_rounds.manage";
+        var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = slug,
+                Name = "Administrar las rondas de validación de identidad",
+                HttpMethod = "PUT",
+                RoutePattern = "/api/v1/admin/platform/identity-rounds",
                 IsActive = true,
                 CreatedAt = now,
             };

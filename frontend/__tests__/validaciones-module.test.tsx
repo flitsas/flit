@@ -490,14 +490,15 @@ describe('Validaciones — HU #11505 intentos consumidos en la grilla', () => {
     renderValidaciones();
 
     const row = await screen.findByLabelText(/^validación de luis vendedor/i);
-    // El texto (no solo el color) dice que el rechazo es legítimo: intentos agotados.
-    expect(within(row).getByText('Rechazado (intentos agotados)')).toBeInTheDocument();
+    // Rechazo final: la etiqueta es solo «Rechazado»; el conteo 3 / 3 intentos lo explica.
+    expect(within(row).getByText('Rechazado')).toBeInTheDocument();
+    expect(within(row).queryByText(/intentos agotados/i)).not.toBeInTheDocument();
     expect(within(row).getByText('3 / 3 intentos')).toBeInTheDocument();
-    expect(row.getAttribute('aria-label')).toMatch(/estado rechazado \(intentos agotados\)/i);
+    expect(row.getAttribute('aria-label')).toMatch(/estado rechazado/i);
     expect(row.getAttribute('aria-label')).not.toMatch(/rechazo con intentos disponibles/i);
   });
 
-  it('AC2: rechazo con intentos DISPONIBLES se rotula como prematuro (Bug #11503), distinto por texto', async () => {
+  it('AC2: rechazo con intentos DISPONIBLES se muestra como Rechazado, sin texto de intentos disponibles', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(
       personsResponse([{ ...ROW_RECHAZADA, intentos: 1, maxIntentos: 3 }]),
     );
@@ -505,10 +506,10 @@ describe('Validaciones — HU #11505 intentos consumidos en la grilla', () => {
     renderValidaciones();
 
     const row = await screen.findByLabelText(/^validación de luis vendedor/i);
-    expect(within(row).getByText('Rechazado (intentos disponibles)')).toBeInTheDocument();
-    expect(within(row).queryByText('Rechazado (intentos agotados)')).not.toBeInTheDocument();
+    expect(within(row).getByText('Rechazado')).toBeInTheDocument();
+    expect(within(row).queryByText(/intentos disponibles/i)).not.toBeInTheDocument();
     expect(within(row).getByText('1 / 3 intentos')).toBeInTheDocument();
-    expect(row.getAttribute('aria-label')).toMatch(/rechazo con intentos disponibles/i);
+    expect(row.getAttribute('aria-label')).not.toMatch(/intentos disponibles/i);
   });
 
   it('AC4: sin `intentos`/`maxIntentos` la celda omite el contador y conserva estado y motivo, sin NaN/undefined', async () => {
