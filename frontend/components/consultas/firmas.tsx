@@ -106,7 +106,7 @@ export function FirmasCell({ fila }: { fila: FilaConFirma }) {
               className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]"
               data-testid="firma-persona"
             >
-              <span className="min-w-0 truncate" title={p.nombre}>
+              <span className="min-w-0 break-words" title={p.nombre}>
                 {p.nombre || "—"} <span className="text-muted-foreground">({p.rol})</span>
               </span>
               <span
