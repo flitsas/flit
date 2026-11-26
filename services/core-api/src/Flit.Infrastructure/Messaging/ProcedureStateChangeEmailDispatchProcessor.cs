@@ -116,7 +116,18 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         }
 
         var row = await db.ProcedureStateChangeEmailDispatches.FirstAsync(d => d.Id == claimedId.Value, ct);
-        var batch = await LoadBatchAsync(db, row.OutboxId, ct);
+
+        // El envío es por cambio de estado (todas las filas del outbox), no por fila: con varias réplicas, la otra
+        // pudo reclamar una hermana y estar enviando este mismo grupo. Un solo dueño por outbox; el que no lo
+        // consigue suelta su fila sin esperar a nadie (así tampoco hay deadlock) y sigue con otra.
+        if (!await TryLockOutboxAsync(db, row.OutboxId, ct))
+        {
+            EmailDispatchLog.OutboxBusy(logger, row.OutboxId);
+            await tx.CommitAsync(ct);
+            return claimedId;
+        }
+
+        var batch = await LockBatchAsync(db, row.OutboxId, ct);
         await DispatchBatchAsync(batch, db, emailSender, channelResolver, themeResolver, assets, ct);
 
         await db.SaveChangesAsync(ct);
@@ -153,12 +164,44 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
         return seed.Id;
     }
 
-    private static async Task<List<ProcedureStateChangeEmailDispatch>> LoadBatchAsync(
+    /// <summary>
+    /// Candado de transacción por outbox (<c>pg_try_advisory_xact_lock</c>): lo tiene a lo sumo una réplica y se suelta
+    /// solo con el COMMIT/ROLLBACK, también detrás de PgBouncer. No bloquea: si otra réplica lo tiene, devuelve false.
+    /// Una colisión de hash solo hace esperar al siguiente sondeo, nunca envía dos veces.
+    /// </summary>
+    private static async Task<bool> TryLockOutboxAsync(FlitDbContext db, Guid outboxId, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+        cmd.CommandText = """
+            SELECT pg_try_advisory_xact_lock(hashtext('tramites.procedure_state_change_email_dispatches'), hashtext(@outbox_id::text))
+            """;
+        var p = cmd.CreateParameter();
+        p.ParameterName = "outbox_id";
+        p.Value = outboxId;
+        cmd.Parameters.Add(p);
+        return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is true;
+    }
+
+    /// <summary>
+    /// Las filas pendientes del outbox, bloqueadas (<c>FOR UPDATE</c>, siempre en el mismo orden). Con el candado del
+    /// outbox ya tomado nadie más las procesa; si una réplica las tenía bloqueadas solo como semilla, la espera dura
+    /// lo que tarda en soltarla. Y como <c>FOR UPDATE</c> relee la versión confirmada, lo que otra réplica ya envió
+    /// deja de estar <c>pendiente</c> y no vuelve a salir.
+    /// </summary>
+    private static async Task<List<ProcedureStateChangeEmailDispatch>> LockBatchAsync(
         FlitDbContext db, Guid outboxId, CancellationToken ct) =>
         await db.ProcedureStateChangeEmailDispatches
-            .Where(d => d.OutboxId == outboxId
-                        && d.Status == StatusPendiente
-                        && d.Attempts < MaxAttempts)
+            .FromSql($"""
+                SELECT *
+                FROM tramites.procedure_state_change_email_dispatches
+                WHERE outbox_id = {outboxId}
+                  AND status = 'pendiente'
+                  AND attempts < {MaxAttempts}
+                ORDER BY id
+                FOR UPDATE
+                """)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -561,4 +604,8 @@ internal static partial class EmailDispatchLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Cola correo estados: envíos pausados por kill-switch (tenant {TenantId}, instancia {ProcedureInstanceId}).")]
     public static partial void PausedByKillSwitch(ILogger logger, Guid tenantId, Guid procedureInstanceId);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Cola correo estados: el outbox {OutboxId} lo está enviando otra réplica; se deja para ella.")]
+    public static partial void OutboxBusy(ILogger logger, Guid outboxId);
 }
