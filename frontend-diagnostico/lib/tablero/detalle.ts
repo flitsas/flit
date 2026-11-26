@@ -404,7 +404,7 @@ export function textoTipoError(codigo: string | null): string {
 }
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
-  SERVICIO_PUBLICO: "El vehículo es de servicio público: esta consulta no aplica.",
+  SERVICIO_PUBLICO: "Vehículo de servicio público: no paga impuesto vehicular",
   DEPARTAMENTO_NO_SOPORTADO: "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.",
   SIN_DOCUMENTO_LOCATARIO: "El RUNT no reporta locatario: no hay a quién consultar.",
 };
