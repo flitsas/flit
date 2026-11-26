@@ -23,7 +23,7 @@ namespace Flit.Infrastructure.Tests.Platform;
 /// </remarks>
 public sealed class ClienteAltaProveedorImpuestoTests
 {
-    private const string Base = "http://proveedor.prueba.local";
+    private const string Base = "https://proveedor.prueba.local";
     private const string Token = "token-de-integracion-CENTINELA-0123456789abcdef";
     private const string Llave = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
     private const string Secreto = "whsec_CENTINELA_0123456789";
@@ -151,6 +151,35 @@ public sealed class ClienteAltaProveedorImpuestoTests
 
         (await act.Should().ThrowAsync<AltaCredencialImpuestoException>()).Which.Code.Should().Be(CodigosAltaCredencialImpuesto.ProveedorNoConfigurado);
         proveedor.Pedidos.Should().BeEmpty();
+    }
+
+    // ── L-2: https obligatorio salvo loopback ───────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("http://proveedor.prueba.local")]
+    [InlineData("http://10.0.0.5:8898")]
+    [InlineData("ftp://proveedor.prueba.local")]
+    public async Task BaseSinHttpsFueraDeLoopback_ProveedorNoConfigurado_SinEnviarElBearer(string baseUrl)
+    {
+        var (cliente, proveedor) = Crear(_ => Json(HttpStatusCode.Created, Alta(created: true)), Token, baseUrl);
+
+        var act = () => cliente.DarDeAltaAsync(Peticion, Ct);
+
+        (await act.Should().ThrowAsync<AltaCredencialImpuestoException>()).Which.Code.Should().Be(CodigosAltaCredencialImpuesto.ProveedorNoConfigurado);
+        proveedor.Pedidos.Should().BeEmpty("el Bearer no sale por un canal sin cifrar");
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:8898")]
+    [InlineData("http://localhost:8898")]
+    [InlineData("http://[::1]:8898")]
+    public async Task HttpEnLoopback_SePermite_ParaElStubLocal(string baseUrl)
+    {
+        var (cliente, proveedor) = Crear(_ => Json(HttpStatusCode.Created, Alta(created: true)), Token, baseUrl);
+
+        await cliente.DarDeAltaAsync(Peticion, Ct);
+
+        proveedor.Pedidos.Should().ContainSingle();
     }
 
     [Fact]

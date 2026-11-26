@@ -38,7 +38,7 @@ public sealed class SetTenantProductEnabledHandlerTests
         _catalog.FindAsync("diagnostico", Arg.Any<CancellationToken>())
             .Returns(new Product("diagnostico", "Diagnóstico", "gauge", ProductStatuses.Active));
         _provisioning.PrepararPendienteAltaDiagnosticoAsync(TenantId, Arg.Any<CancellationToken>())
-            .Returns(new Action<DateTimeOffset>(_pendientesMarcados.Add));
+            .Returns(new PreparacionPendienteAltaDiagnostico(FilaExiste: true, _pendientesMarcados.Add));
         // El repositorio de verdad invoca antesDeGuardar solo si hubo cambio (TenantProductChangeOutboxTests); aquí, siempre.
         _repository.SetAsync(default, default!, default, default, default, default, Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(ci =>
@@ -225,5 +225,43 @@ public sealed class SetTenantProductEnabledHandlerTests
 
         _pendientesMarcados.Should().BeEmpty();
         await _provisioning.DidNotReceiveWithAnyArgs().PrepararPendienteAltaDiagnosticoAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    // ── N-3: solo se reinicia el alta al pasar de apagado a encendido o si no hay fila ──────────────────────
+
+    private void DiagnosticoPrevio(bool enabled) =>
+        _repository.GetAsync(TenantId, "diagnostico", Arg.Any<CancellationToken>())
+            .Returns(new TenantProduct(TenantId, "diagnostico", enabled, null, DateTimeOffset.UtcNow.AddDays(-1), null));
+
+    [Fact]
+    public async Task EditarNotasDeDiagnosticoYaEncendido_NoReiniciaElAlta()
+    {
+        DiagnosticoPrevio(enabled: true);
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, "notas nuevas"), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DiagnosticoYaEncendidoSinFilaDelAlta_LaCrea()
+    {
+        DiagnosticoPrevio(enabled: true);
+        _provisioning.PrepararPendienteAltaDiagnosticoAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new PreparacionPendienteAltaDiagnostico(FilaExiste: false, _pendientesMarcados.Add));
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, "notas nuevas"), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task EncenderDiagnosticoQueEstabaApagado_ReiniciaElAlta()
+    {
+        DiagnosticoPrevio(enabled: false);
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().ContainSingle();
     }
 }

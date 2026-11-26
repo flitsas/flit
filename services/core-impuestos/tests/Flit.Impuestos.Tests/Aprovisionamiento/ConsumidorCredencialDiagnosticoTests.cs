@@ -136,6 +136,44 @@ public sealed class ConsumidorCredencialDiagnosticoTests
     }
 
     [Fact]
+    public async Task LaLlaveSePideAIdentidad_SinTenerBloqueadoElAprovisionamiento()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = ConLlaveDeDiagnostico();
+        await using var api = await EntornoAprovisionamiento.ConApiAsync(new ApiLiquidacionDePrueba(), identidad);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoAprovisionamiento.SembrarAsync(api, empresa, Domain.Aprovisionamiento.EstadoAprovisionamiento.Listo, ct);
+        await EntornoAprovisionamiento.GuardarCredencialAsync(api, empresa, LlaveVieja, null, OrigenCredencial.CopiaDiagnostico, ct);
+        bool? bloqueadaDuranteElRpc = null;
+        identidad.AlLeerLlave = async e =>
+        {
+            // Otra transacción intenta tomar la fila del aprovisionamiento sin esperar mientras dura el rpc.
+            await using var cn = new Npgsql.NpgsqlConnection(api.BaseDeDatos);
+            await cn.OpenAsync(ct);
+            await using var tx = await cn.BeginTransactionAsync(ct);
+            await using var cmd = new Npgsql.NpgsqlCommand("SELECT 1 FROM impuestos.aprovisionamientos WHERE tenant_id = @e FOR UPDATE NOWAIT", cn, tx);
+            cmd.Parameters.AddWithValue("e", e);
+            try
+            {
+                await cmd.ExecuteNonQueryAsync(ct);
+                bloqueadaDuranteElRpc = false;
+            }
+            catch (Npgsql.PostgresException ex) when (ex.SqlState == "55P03")
+            {
+                bloqueadaDuranteElRpc = true;
+            }
+
+            await tx.RollbackAsync(ct);
+        };
+
+        (await EntornoAprovisionamiento.EntregarAsync(api, Actualizada(empresa), ct)).Should().BeTrue();
+
+        bloqueadaDuranteElRpc.Should().BeFalse("el FOR UPDATE se toma después del rpc, en el tramo corto de comparar y escribir");
+        (await EntornoAprovisionamiento.LeerCredencialAsync(api, empresa, ct))!.ApiKey.Should().Be(EntornoAprovisionamiento.LlaveDiagnostico);
+    }
+
+    [Fact]
     public async Task IdentidadCaida_SeReintenta()
     {
         var ct = TestContext.Current.CancellationToken;

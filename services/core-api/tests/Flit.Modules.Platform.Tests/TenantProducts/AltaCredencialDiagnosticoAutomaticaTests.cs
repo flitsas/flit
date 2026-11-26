@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Flit.Modules.Platform.Application.Companies;
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Platform.Domain.TenantProducts;
@@ -46,18 +47,24 @@ public sealed class AltaCredencialDiagnosticoAutomaticaTests
         _protector.Unprotect(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()).Returns(ci => ci.ArgAt<string>(2).Split(':', 3)[2]);
         _credenciales.GuardarAltaProveedorAsync(default, default!, default!, default!, default, default, Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(Ahora);
-        _store.RegistrarEstadoAltaDiagnosticoAsync(Arg.Do<EstadoAltaDiagnostico>(_estados.Add), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+        _store.RegistrarEstadoAltaDiagnosticoAsync(Arg.Do<EstadoAltaDiagnostico>(_estados.Add), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(true);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private readonly LoggerDeCaptura<AltaCredencialDiagnosticoAutomatica> _log = new();
 
     private AltaCredencialDiagnosticoAutomatica Automatica() => new(
         new ObtenerCredencialImpuestoDiagnosticoHandler(
             _products, _datos, _proveedor, _credenciales, _protector, _jobs, NullLogger<ObtenerCredencialImpuestoDiagnosticoHandler>.Instance),
         _store,
         new RelojFijo(Ahora),
-        NullLogger<AltaCredencialDiagnosticoAutomatica>.Instance);
+        _log);
+
+    private void LlaveGuardada() =>
+        _credenciales.GetAsync(TenantId, "diagnostico", "impuesto_api_key", Arg.Any<CancellationToken>())
+            .Returns(new TenantProductCredential(TenantId, "diagnostico", "impuesto_api_key", $"cif:impuesto_api_key:{Llave}", 4, Ahora.AddDays(-1)));
 
     [Fact]
     public async Task Exito_QuedaListo_SinIntentosNiEspera()
@@ -76,7 +83,7 @@ public sealed class AltaCredencialDiagnosticoAutomaticaTests
         await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, 0), Ct);
 
         _estados.Should().Equal(new EstadoAltaDiagnostico(
-            TenantId, "LISTO_SIN_WEBHOOK", "SIN_WEBHOOK_SECRET", CodigosAltaCredencialImpuesto.Literal("SIN_WEBHOOK_SECRET"), null, 0, null, Ahora));
+            TenantId, "LISTO_SIN_WEBHOOK", "SIN_WEBHOOK_SECRET", CodigosAltaCredencialImpuesto.Literal("SIN_WEBHOOK_SECRET"), "REINTENTAR", 0, null, Ahora));
     }
 
     [Fact]
@@ -165,6 +172,78 @@ public sealed class AltaCredencialDiagnosticoAutomaticaTests
 
         _estados.Should().Equal(new EstadoAltaDiagnostico(
             TenantId, "SUSPENDIDO", "PRODUCTO_NO_HABILITADO", CodigosAltaCredencialImpuesto.Literal("PRODUCTO_NO_HABILITADO"), null, 0, null, Ahora));
+    }
+
+    // ── M-1: el estado se guarda con la versión reservada; un resultado obsoleto se descarta ─────────────────
+
+    [Fact]
+    public async Task Registra_ConLaVersionReservada()
+    {
+        await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, 0, 7), Ct);
+
+        await _store.Received(1).RegistrarEstadoAltaDiagnosticoAsync(Arg.Any<EstadoAltaDiagnostico>(), 7, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResultadoObsoleto_SeDescarta_YQuedaEnElLog()
+    {
+        _store.RegistrarEstadoAltaDiagnosticoAsync(Arg.Any<EstadoAltaDiagnostico>(), Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, 0, 7), Ct);
+
+        _log.Entradas.Should().Contain(e => e.Mensaje.Contains("descarta", StringComparison.Ordinal) && e.Mensaje.Contains(" 7", StringComparison.Ordinal));
+    }
+
+    // ── M-2: una excepción inesperada cuenta en los intentos y tiene tope ──────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 5)]
+    [InlineData(2, 15)]
+    [InlineData(3, 60)]
+    public async Task ExcepcionInesperada_CuentaEnLosIntentos_PendienteConErrorInterno(int intentosPrevios, int minutos)
+    {
+        LlaveGuardada();
+        _protector.Unprotect(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()).Throws(new CryptographicException("llave CENTINELA rota"));
+
+        await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, intentosPrevios), Ct);
+
+        _estados.Should().Equal(new EstadoAltaDiagnostico(
+            TenantId, "PENDIENTE", "ERROR_INTERNO", "No se pudo completar el alta de la credencial del impuesto por un error interno.", null,
+            intentosPrevios + 1, Ahora.AddMinutes(minutos), Ahora));
+        await _proveedor.DidNotReceiveWithAnyArgs().DarDeAltaAsync(default!, Ct);
+    }
+
+    [Fact]
+    public async Task ExcepcionInesperada_AlTope_QuedaEnErrorInterno_YElLogSoloLlevaElTipo()
+    {
+        _datos.ObtenerAsync(TenantId, Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("detalle CENTINELA de la base"));
+
+        await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, AltaCredencialDiagnosticoAutomatica.MaximoIntentosAutomaticos), Ct);
+
+        _estados.Should().Equal(new EstadoAltaDiagnostico(
+            TenantId, "ERROR", "ERROR_INTERNO", "No se pudo completar el alta de la credencial del impuesto por un error interno.", null,
+            AltaCredencialDiagnosticoAutomatica.MaximoIntentosAutomaticos, null, Ahora));
+        _log.Entradas.Should().Contain(e => e.Mensaje.Contains("InvalidOperationException", StringComparison.Ordinal));
+        _log.Entradas.Should().NotContain(e => e.Mensaje.Contains("CENTINELA", StringComparison.Ordinal) || e.Excepcion != null);
+    }
+
+    // ── M-3: la ronda que choca con el botón se reintenta ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ChoqueConElBoton_AltaEnCurso_SeReintentaConEspera()
+    {
+        _credenciales.GuardarAltaProveedorAsync(default, default!, default!, default!, default, default, Arg.Any<CancellationToken>())
+            .ThrowsAsyncForAnyArgs(new TenantProductCredentialConflictException());
+        _credenciales.GetAsync(TenantId, "diagnostico", "impuesto_api_key", Arg.Any<CancellationToken>())
+            .Returns(null, new TenantProductCredential(TenantId, "diagnostico", "impuesto_api_key", "cif:impuesto_api_key:OtraLlaveDelBotonDistinta0123456789", 0, Ahora));
+
+        await Automatica().ProcesarAsync(new PendienteAltaDiagnostico(TenantId, 1), Ct);
+
+        _estados.Should().Equal(new EstadoAltaDiagnostico(
+            TenantId, "PENDIENTE", "ALTA_EN_CURSO",
+            "Ya hay un alta de la credencial del impuesto en curso para la compañía. Intenta de nuevo en unos segundos.", null,
+            2, Ahora.AddMinutes(5), Ahora));
     }
 
     [Fact]

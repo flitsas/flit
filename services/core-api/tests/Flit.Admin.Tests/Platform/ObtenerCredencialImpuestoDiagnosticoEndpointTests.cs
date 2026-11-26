@@ -9,6 +9,7 @@ using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Platform.Application.TenantProducts;
+using Flit.Modules.Platform.Domain.TenantProducts;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -185,6 +186,51 @@ public sealed class ObtenerCredencialImpuestoDiagnosticoEndpointTests
         estados[5].Should().Be(HttpStatusCode.TooManyRequests);
     }
 
+    [Fact]
+    public async Task Obtener_UnaPeticionAnonima_NoConsumeElCupoDelSuperAdmin()
+    {
+        await EncenderDiagnosticoAsync();
+        _client.DefaultRequestHeaders.Authorization = null;
+        for (var i = 0; i < 6; i++)
+            (await _client.PostAsync(Ruta(), null, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        Use("SuperAdmin", _superAdminId);
+        var estados = new List<HttpStatusCode>();
+        for (var i = 0; i < 6; i++)
+            estados.Add((await _client.PostAsync(Ruta(), null, Ct)).StatusCode);
+
+        estados.Take(5).Should().AllBeEquivalentTo(HttpStatusCode.OK);
+        estados[5].Should().Be(HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
+    public async Task Obtener_ChocaConLaRondaQueGuardaOtraLlave_409AltaEnCurso_NuncaUn500()
+    {
+        await EncenderDiagnosticoAsync();
+        Use("SuperAdmin", _superAdminId);
+        // La ronda guarda otra llave entre la lectura y el guardado del botón (el gancho corre dentro del guardado, antes del
+        // SaveChanges): el insert del botón choca con el unique.
+        _factory.AntesDelGuardado = () =>
+        {
+            _factory.AntesDelGuardado = null;
+            using var scope = _factory.Services.CreateScope();
+            var protector = scope.ServiceProvider.GetRequiredService<ITenantProductSecretProtector>();
+            var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+            db.Set<TenantProductCredentialEntity>().Add(new TenantProductCredentialEntity
+            {
+                Id = Guid.CreateVersion7(), TenantId = _tenantId, ProductCode = "diagnostico", CredentialCode = "impuesto_api_key",
+                SecretProtected = protector.Protect(_tenantId, "impuesto_api_key", "OtraLlaveDeLaRonda-0123456789-abcdefgh"),
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            db.SaveChanges();
+        };
+
+        var r = await _client.PostAsync(Ruta(), null, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ProblemaAsync(r)).Should().Be(("ALTA_EN_CURSO", "Ya hay un alta de la credencial del impuesto en curso para la compañía. Intenta de nuevo en unos segundos."));
+    }
+
     [Theory]
     [InlineData("impuesto_webhook_secret")]
     [InlineData("impuesto_webhook_secret_anterior")]
@@ -293,6 +339,7 @@ public sealed class ObtenerCredencialImpuestoDiagnosticoEndpointTests
         db.Users.Where(u => u.Id == _superAdminId || u.Id == _adminId).ExecuteDelete();
         db.Tenants.Where(t => t.Id == _tenantId).ExecuteDelete();
         _factory.Proveedor.Ultima = null;
+        _factory.AntesDelGuardado = null;
         _client.Dispose();
     }
 
@@ -301,8 +348,39 @@ public sealed class ObtenerCredencialImpuestoDiagnosticoEndpointTests
     {
         public ProveedorDePrueba Proveedor { get; } = new();
 
+        /// <summary>Si se da, corre al encolar el aviso a Impuestos: dentro del guardado del alta, antes del SaveChanges.</summary>
+        public Action? AntesDelGuardado { get; set; }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder) =>
-            builder.ConfigureTestServices(s => s.AddSingleton<IClienteAltaProveedorImpuesto>(Proveedor));
+            builder.ConfigureTestServices(s =>
+            {
+                s.AddSingleton<IClienteAltaProveedorImpuesto>(Proveedor);
+                var original = s.Last(d => d.ServiceType == typeof(ITenantProductChangeJobs));
+                s.Remove(original);
+                s.Add(ServiceDescriptor.Describe(
+                    typeof(ITenantProductChangeJobs),
+                    sp => new JobsConGancho(
+                        (ITenantProductChangeJobs)(original.ImplementationFactory?.Invoke(sp)
+                            ?? original.ImplementationInstance
+                            ?? ActivatorUtilities.CreateInstance(sp, original.ImplementationType!)),
+                        this),
+                    original.Lifetime));
+            });
+    }
+
+    /// <summary>Los trabajos reales, con <see cref="Fabrica.AntesDelGuardado"/> al encolar el aviso de la llave.</summary>
+    private sealed class JobsConGancho(ITenantProductChangeJobs real, Fabrica fabrica) : ITenantProductChangeJobs
+    {
+        public void EncolarCambio(TenantProduct actual) => real.EncolarCambio(actual);
+
+        public void EncolarCredencialDiagnosticoActualizada(Guid tenantId, long version, DateTimeOffset occurredAt)
+        {
+            fabrica.AntesDelGuardado?.Invoke();
+            real.EncolarCredencialDiagnosticoActualizada(tenantId, version, occurredAt);
+        }
+
+        public Task EncolarReintentoAsync(Guid tenantId, string productCode, Guid solicitadoPor, CancellationToken cancellationToken = default) =>
+            real.EncolarReintentoAsync(tenantId, productCode, solicitadoPor, cancellationToken);
     }
 
     /// <summary>Doble del proveedor: responde con <see cref="Responder"/> y recuerda la última petición.</summary>

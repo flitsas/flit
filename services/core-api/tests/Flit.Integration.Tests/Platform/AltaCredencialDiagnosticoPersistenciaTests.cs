@@ -150,21 +150,23 @@ public sealed class AltaCredencialDiagnosticoPersistenciaTests(PostgresDatabaseF
         await SeedAsync();
         await using (var ctx = NewContext())
         {
-            var marcar = await new TenantProductProvisioningRepository(ctx).PrepararPendienteAltaDiagnosticoAsync(Tenant, Ct);
-            marcar(Momento);
+            var preparacion = await new TenantProductProvisioningRepository(ctx).PrepararPendienteAltaDiagnosticoAsync(Tenant, Ct);
+            preparacion.FilaExiste.Should().BeFalse();
+            preparacion.Marcar(Momento);
             await ctx.SaveChangesAsync(Ct);
         }
 
         await using (var ctx = NewContext())
         {
-            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoAsync(
+            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(
                 new EstadoAltaDiagnostico(Tenant, "ERROR", "PROVEEDOR_NO_DISPONIBLE", "x", null, 5, null, Momento.AddMinutes(1)), Ct);
         }
 
         await using (var ctx = NewContext())
         {
-            var marcar = await new TenantProductProvisioningRepository(ctx).PrepararPendienteAltaDiagnosticoAsync(Tenant, Ct);
-            marcar(Momento.AddMinutes(2));
+            var preparacion = await new TenantProductProvisioningRepository(ctx).PrepararPendienteAltaDiagnosticoAsync(Tenant, Ct);
+            preparacion.FilaExiste.Should().BeTrue();
+            preparacion.Marcar(Momento.AddMinutes(2));
             await ctx.SaveChangesAsync(Ct);
         }
 
@@ -184,7 +186,7 @@ public sealed class AltaCredencialDiagnosticoPersistenciaTests(PostgresDatabaseF
         await SeedAsync();
         await using (var ctx = NewContext())
         {
-            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoAsync(
+            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(
                 new EstadoAltaDiagnostico(Tenant, "PENDIENTE", "PROVEEDOR_NO_DISPONIBLE", "x", null, 2, Momento.AddMinutes(-1), Momento.AddMinutes(-6)), Ct);
         }
 
@@ -193,7 +195,7 @@ public sealed class AltaCredencialDiagnosticoPersistenciaTests(PostgresDatabaseF
         await using var ctx2 = NewContext();
         var segunda = await new TenantProductProvisioningRepository(ctx2).ReservarPendientesAltaDiagnosticoAsync(Momento, TimeSpan.FromMinutes(10), 20, Ct);
 
-        primera.Should().Equal(new PendienteAltaDiagnostico(Tenant, 2));
+        primera.Should().Equal(new PendienteAltaDiagnostico(Tenant, 2, 1));
         segunda.Should().BeEmpty();
         await using var lectura = NewContext();
         (await lectura.Set<TenantProductProvisioningEntity>().AsNoTracking().SingleAsync(p => p.TenantId == Tenant, Ct))
@@ -206,7 +208,7 @@ public sealed class AltaCredencialDiagnosticoPersistenciaTests(PostgresDatabaseF
         await SeedAsync();
         await using (var ctx = NewContext())
         {
-            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoAsync(
+            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(
                 new EstadoAltaDiagnostico(Tenant, "PENDIENTE", null, null, null, 0, null, Momento), Ct);
         }
 
@@ -220,6 +222,146 @@ public sealed class AltaCredencialDiagnosticoPersistenciaTests(PostgresDatabaseF
 
         reservadas.Should().BeEmpty();
         await tx.RollbackAsync(Ct);
+    }
+
+    // ── M-1: el guardado de la ronda va condicionado a la versión reservada ─────────────────────────────────
+
+    private async Task<TenantProductProvisioningEntity> FilaAsync()
+    {
+        await using var ctx = NewContext();
+        return await ctx.Set<TenantProductProvisioningEntity>().AsNoTracking().SingleAsync(p => p.TenantId == Tenant, Ct);
+    }
+
+    private async Task SembrarPendienteAsync()
+    {
+        await using var ctx = NewContext();
+        await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(
+            new EstadoAltaDiagnostico(Tenant, "PENDIENTE", null, null, null, 0, null, Momento.AddMinutes(-5)), Ct);
+    }
+
+    private async Task<PendienteAltaDiagnostico> ReservarAsync(DateTimeOffset ahora)
+    {
+        await using var ctx = NewContext();
+        return (await new TenantProductProvisioningRepository(ctx).ReservarPendientesAltaDiagnosticoAsync(ahora, TimeSpan.FromMinutes(10), 20, Ct)).Single();
+    }
+
+    private async Task<bool> RegistrarAsync(EstadoAltaDiagnostico estado, long version)
+    {
+        await using var ctx = NewContext();
+        return await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoAsync(estado, version, Ct);
+    }
+
+    [PostgresFact]
+    public async Task Registrar_ConLaVersionReservada_Aplica_YSubeLaVersion()
+    {
+        await SeedAsync();
+        await SembrarPendienteAsync();
+        var reservada = await ReservarAsync(Momento);
+
+        var aplicado = await RegistrarAsync(new EstadoAltaDiagnostico(Tenant, "LISTO", null, null, null, 0, null, Momento), reservada.Version);
+
+        aplicado.Should().BeTrue();
+        var fila = await FilaAsync();
+        (fila.Status, fila.ReportedVersion).Should().Be(("LISTO", reservada.Version + 1));
+    }
+
+    [PostgresFact]
+    public async Task Registrar_NoPisaUnPendienteReiniciadoDuranteLaRonda()
+    {
+        await SeedAsync();
+        await SembrarPendienteAsync();
+        var reservada = await ReservarAsync(Momento);
+
+        // Mientras la ronda atiende, el SuperAdmin apaga y vuelve a encender diagnostico: el alta se reinicia a PENDIENTE.
+        await using (var ctx = NewContext())
+        {
+            var preparacion = await new TenantProductProvisioningRepository(ctx).PrepararPendienteAltaDiagnosticoAsync(Tenant, Ct);
+            preparacion.Marcar(Momento.AddMinutes(1));
+            await ctx.SaveChangesAsync(Ct);
+        }
+
+        var aplicado = await RegistrarAsync(new EstadoAltaDiagnostico(Tenant, "LISTO", null, null, null, 0, null, Momento.AddMinutes(2)), reservada.Version);
+
+        aplicado.Should().BeFalse("el resultado de la ronda es obsoleto");
+        var fila = await FilaAsync();
+        (fila.Status, fila.ReportedVersion).Should().Be(("PENDIENTE", reservada.Version + 1));
+        await using (var ctx = NewContext())
+        {
+            (await new TenantProductProvisioningRepository(ctx).ReservarPendientesAltaDiagnosticoAsync(Momento.AddMinutes(2), TimeSpan.FromMinutes(10), 20, Ct))
+                .Should().BeEmpty("la reserva de la ronda en curso sigue vigente: otra réplica no la toma a la vez");
+        }
+    }
+
+    // ── N-3: el estado del botón sin cambios no sube la versión ────────────────────────────────────────────
+
+    [PostgresFact]
+    public async Task RegistrarManual_ConElMismoEstado_NoSubeLaVersion_YConOtroSi()
+    {
+        await SeedAsync();
+        var listo = new EstadoAltaDiagnostico(Tenant, "LISTO", null, null, null, 0, null, Momento);
+        await using (var ctx = NewContext())
+            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(listo, Ct);
+        await using (var ctx = NewContext())
+            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(listo with { En = Momento.AddMinutes(1) }, Ct);
+
+        (await FilaAsync()).ReportedVersion.Should().Be(1);
+
+        await using (var ctx = NewContext())
+        {
+            await new TenantProductProvisioningRepository(ctx).RegistrarEstadoAltaDiagnosticoManualAsync(
+                new EstadoAltaDiagnostico(Tenant, "LISTO_SIN_WEBHOOK", "SIN_WEBHOOK_SECRET", "x", "REINTENTAR", 0, null, Momento.AddMinutes(2)), Ct);
+        }
+
+        (await FilaAsync()).ReportedVersion.Should().Be(2);
+    }
+
+    // ── M-3: dos guardados a la vez ────────────────────────────────────────────────────────────────────────
+
+    [PostgresFact]
+    public async Task GuardarAlta_ChocaConOtroGuardado_SaleComoConflicto_YElContextoQuedaLimpio()
+    {
+        await SeedAsync();
+        await using var ctx = NewContext();
+        var repo = new TenantProductCredentialRepository(ctx);
+
+        // La otra escritura (el botón o la ronda) entra entre la lectura y el guardado de esta.
+        var act = () => repo.GuardarAltaProveedorAsync(
+            Tenant, "diagnostico", [new EscrituraCredencialAlta("impuesto_api_key", "cifrado-llave-esta-0123456789")], "CREDENCIAL_OBTENIDA", null,
+            _ =>
+            {
+                using var otro = NewContext();
+                new TenantProductCredentialRepository(otro).GuardarAltaProveedorAsync(
+                    Tenant, "diagnostico", [new EscrituraCredencialAlta("impuesto_api_key", "cifrado-llave-otra-0123456789")], "CREDENCIAL_OBTENIDA", null, null, Ct)
+                    .GetAwaiter().GetResult();
+            },
+            Ct);
+
+        await act.Should().ThrowAsync<TenantProductCredentialConflictException>();
+        ctx.ChangeTracker.Entries().Should().BeEmpty("lo que no se guardó no queda pendiente para el siguiente guardado");
+        await repo.RegistrarAuditoriaAltaProveedorAsync(Tenant, "diagnostico", "ALTA_EN_CURSO", false, null, Ct);
+    }
+
+    // ── L-3: fila resumen sin cambios y en los fallos ──────────────────────────────────────────────────────
+
+    [PostgresFact]
+    public async Task AuditoriaAltaProveedor_SinCambiosYFallo_DejanLaFilaResumen_SinValores()
+    {
+        await SeedAsync();
+        await using (var ctx = NewContext())
+        {
+            var repo = new TenantProductCredentialRepository(ctx);
+            await repo.RegistrarAuditoriaAltaProveedorAsync(Tenant, "diagnostico", "SIN_CAMBIOS", true, UserAdmin, Ct);
+            await repo.RegistrarAuditoriaAltaProveedorAsync(Tenant, "diagnostico", "PROVEEDOR_NO_DISPONIBLE", false, null, Ct);
+        }
+
+        await using var lectura = NewContext();
+        var filas = await lectura.TenantConfigAuditLogs.AsNoTracking().Where(a => a.TenantId == Tenant).ToListAsync(Ct);
+        filas.Should().HaveCount(2).And.OnlyContain(a =>
+            a.FieldName == "impuesto_alta_proveedor" && a.Operation == "obtain_from_provider" && a.OldValue == null);
+        var sinCambios = filas.Single(a => a.ChangedBy == UserAdmin);
+        (sinCambios.NewValue, sinCambios.Result, sinCambios.ErrorCode).Should().Be((JsonSerializer.Serialize("SIN_CAMBIOS"), "success", (string?)null));
+        var fallo = filas.Single(a => a.ChangedBy == null);
+        (fallo.NewValue, fallo.Result, fallo.ErrorCode).Should().Be((JsonSerializer.Serialize("PROVEEDOR_NO_DISPONIBLE"), "failure", "PROVEEDOR_NO_DISPONIBLE"));
     }
 
     // ── Ronda completa en el host de core-identity (AC-DC-03 + AC-DC-01) ──────────────────────────────────

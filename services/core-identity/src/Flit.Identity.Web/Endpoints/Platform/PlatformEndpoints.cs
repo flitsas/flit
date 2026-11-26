@@ -294,7 +294,8 @@ public static class PlatformEndpoints
 
         // HU #14711 (plan §3.1) POST /admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener — alta
         // idempotente en el proveedor del impuesto: guarda la api_key y el webhook_secret. Sin cuerpo (el servidor arma los datos
-        // del alta); responde solo metadatos, nunca valores. Límite por empresa (AltaCredencialImpuestoRateLimit).
+        // del alta); responde solo metadatos, nunca valores. Límite por usuario y empresa detrás de la autorización
+        // (AltaCredencialImpuestoRateLimit). Si choca con la ronda del alta automática: 409 ALTA_EN_CURSO, nunca un 500.
         group.MapPost("/admin/tenants/{tenantId:guid}/products/diagnostico/credentials/impuesto/obtener", async (
             Guid tenantId,
             ClaimsPrincipal user,
@@ -311,8 +312,9 @@ public static class PlatformEndpoints
             {
                 Guid? changedBy = Guid.TryParse(user.FindFirstValue("sub"), out var sub) ? sub : null;
                 var r = await handler.HandleAsync(tenantId, changedBy, ct);
-                // El estado del alta de diagnostico queda listo también cuando la credencial se obtiene a mano.
-                await provisioning.RegistrarEstadoAltaDiagnosticoAsync(AltaCredencialDiagnosticoAutomatica.EstadoTrasExito(tenantId, r, clock.GetUtcNow()), ct);
+                // El estado del alta de diagnostico queda listo también cuando la credencial se obtiene a mano; sin cambio de
+                // estado no sube la versión (N-3).
+                await provisioning.RegistrarEstadoAltaDiagnosticoManualAsync(AltaCredencialDiagnosticoAutomatica.EstadoTrasExito(tenantId, r, clock.GetUtcNow()), ct);
                 return Results.Ok(new
                 {
                     apiKeyPrefix = r.ApiKeyPrefix,
@@ -329,7 +331,7 @@ public static class PlatformEndpoints
                 {
                     CodigosAltaCredencialImpuesto.NitAusente or CodigosAltaCredencialImpuesto.NitAmbiguo
                         or CodigosAltaCredencialImpuesto.NitIgualACabeza or CodigosAltaCredencialImpuesto.SinAdmin => StatusCodes.Status422UnprocessableEntity,
-                    CodigosAltaCredencialImpuesto.ProductoNoHabilitado => StatusCodes.Status409Conflict,
+                    CodigosAltaCredencialImpuesto.ProductoNoHabilitado or CodigosAltaCredencialImpuesto.AltaEnCurso => StatusCodes.Status409Conflict,
                     CodigosAltaCredencialImpuesto.TenantNotFound => StatusCodes.Status404NotFound,
                     CodigosAltaCredencialImpuesto.ProveedorNoConfigurado => StatusCodes.Status503ServiceUnavailable,
                     _ => StatusCodes.Status502BadGateway,
@@ -337,7 +339,7 @@ public static class PlatformEndpoints
                 return Problem(status, ex.Code, ex.Message);
             }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
-          .RequireRateLimiting(AltaCredencialImpuestoRateLimit.PolicyName)
+          .RequireAltaCredencialImpuestoRateLimit()
           .WithName("ObtenerCredencialImpuestoDiagnostico");
 
         return app;

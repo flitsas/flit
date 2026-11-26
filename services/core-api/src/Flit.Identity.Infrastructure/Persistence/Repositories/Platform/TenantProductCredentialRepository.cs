@@ -4,6 +4,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Modules.Platform.Domain.TenantProducts;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories.Platform;
 
@@ -162,7 +163,9 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
     /// HU #14711 — las credenciales del alta del proveedor en UN <c>SaveChanges</c>: crea o reemplaza cada fila (todas con el
     /// mismo <c>updated_at</c>; el del secreto anterior marca el inicio de su ventana de 24 h), una auditoría por fila con su
     /// código real y una fila resumen (<see cref="CampoAltaProveedor"/>) con el motivo. <paramref name="antesDeGuardar"/> encola
-    /// en el mismo contexto. Sin valores ni huellas en la auditoría.
+    /// en el mismo contexto. Sin valores ni huellas en la auditoría. Si otro guardado de las mismas credenciales llegó primero
+    /// (<c>23505</c> en el unique o <c>row_version</c> distinto) suelta lo que no se guardó y lanza
+    /// <see cref="TenantProductCredentialConflictException"/> (M-3).
     /// </summary>
     public async Task<DateTimeOffset> GuardarAltaProveedorAsync(
         Guid tenantId,
@@ -234,8 +237,54 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
         });
 
         antesDeGuardar?.Invoke(now);
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex is DbUpdateConcurrencyException || ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Lo que no se guardó (filas, auditoría y el trabajo de la outbox) no debe viajar en el siguiente guardado del scope.
+            _context.ChangeTracker.Clear();
+            throw new TenantProductCredentialConflictException("Otro guardado de las credenciales del alta llegó primero.", ex);
+        }
+
         return now;
+    }
+
+    /// <summary>
+    /// HU #14711 (L-3) — fila resumen <see cref="OperacionAltaProveedor"/> sin credenciales escritas, en su propio guardado:
+    /// <c>SIN_CAMBIOS</c> (éxito) o el código del fallo (también en <c>error_code</c>). Nunca un valor ni una huella.
+    /// </summary>
+    public async Task RegistrarAuditoriaAltaProveedorAsync(
+        Guid tenantId,
+        string productCode,
+        string resultado,
+        bool exito,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(resultado);
+
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = AuditEntityName,
+            FieldName = CampoAltaProveedor,
+            OldValue = null,
+            NewValue = JsonSerializer.Serialize(resultado),
+            ChangedAt = _clock.GetUtcNow(),
+            ChangedBy = changedBy,
+            ClientIp = _auditContext.ClientIp,
+            Operation = OperacionAltaProveedor,
+            Result = exito ? AuditVocabulary.Results.Success : AuditVocabulary.Results.Failure,
+            ErrorCode = exito ? null : resultado,
+            Module = AuditVocabulary.Modules.Companies,
+            TargetEntityType = AuditTargetType,
+            TargetEntityId = null,
+        });
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> DeleteAsync(
