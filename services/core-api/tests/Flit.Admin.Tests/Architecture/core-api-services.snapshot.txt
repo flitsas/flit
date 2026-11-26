@@ -477,6 +477,7 @@ Flit.Infrastructure.Ai.Providers.DeepSeekAiProviderAdapter => Flit.Infrastructur
 Flit.Infrastructure.Ai.Providers.KimiAiProviderAdapter => Flit.Infrastructure.Ai.Providers.KimiAiProviderAdapter (Scoped)
 Flit.Infrastructure.Ai.Providers.OpenAiAiProviderAdapter => Flit.Infrastructure.Ai.Providers.OpenAiAiProviderAdapter (Scoped)
 Flit.Infrastructure.Ai.Providers.OpenAiCompatibleClient => factory (Transient)
+Flit.Infrastructure.Ai.Routing.AiAutoReturnGate => instance:Flit.Infrastructure.Ai.Routing.AiAutoReturnGate (Singleton)
 Flit.Infrastructure.Ai.Routing.IAiChatProvider => factory (Scoped)
 Flit.Infrastructure.Ai.Routing.IAiChatProvider => factory (Scoped)
 Flit.Infrastructure.Ai.Routing.IAiChatProvider => factory (Scoped)
