@@ -55,6 +55,32 @@ public sealed class PdfPaginasVisionTests
         PdfPaginasVision.AJpeg(basura).Should().BeNull();
     }
 
+    /// <summary>
+    /// La sonda de orientación endereza reescribiendo <c>/Rotate</c> y vuelve a preguntar. Con OpenAI o Kimi
+    /// la página viaja como imagen: si el rasterizado ignorara <c>/Rotate</c>, el modelo vería siempre la
+    /// misma imagen y nunca daría la página por derecha.
+    /// </summary>
+    [Fact]
+    public void AJpeg_RespetaElGiroQueDeclaraElPdf()
+    {
+        var vertical = Pdf(1);
+        var girado = new PdfSharpPageExtractor(NullLogger<PdfSharpPageExtractor>.Instance).Rotate(vertical, 1);
+        girado.Should().NotBeNull();
+
+        var (anchoV, altoV) = Tamano(PdfPaginasVision.AJpeg(vertical)![0]);
+        var (anchoG, altoG) = Tamano(PdfPaginasVision.AJpeg(girado!)![0]);
+
+        altoV.Should().BeGreaterThan(anchoV, "la página A4 sale vertical");
+        anchoG.Should().BeGreaterThan(altoG, "un cuarto de vuelta la deja horizontal");
+        (anchoG, altoG).Should().Be((altoV, anchoV));
+    }
+
+    private static (int Ancho, int Alto) Tamano(byte[] jpeg)
+    {
+        using var codec = SkiaSharp.SKCodec.Create(new MemoryStream(jpeg));
+        return (codec.Info.Width, codec.Info.Height);
+    }
+
     private sealed class Captura : HttpMessageHandler
     {
         public string? Cuerpo { get; private set; }
