@@ -50,6 +50,8 @@ internal sealed class TenantRuntPersonOverrideChainResolverDecorator(
             return await inner.ConsultAsync(kind, ctx, tenantOverride, ct).ConfigureAwait(false);
 
         // Buscar override activo para este tenant + documento.
+        // document_type puede venir ya remapeado a código de proveedor (p. ej. PAS→PA);
+        // el reader canoniza alias a CC|CE|PAS|TI|PPT (bug #14721).
         var @override = await overrideReader
             .FindActiveAsync(ctx.TenantId, documentType, documentNumber, ct)
             .ConfigureAwait(false);
