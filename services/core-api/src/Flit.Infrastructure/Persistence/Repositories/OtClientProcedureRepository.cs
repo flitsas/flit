@@ -2453,21 +2453,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         if (firma.Count == 0)
             return filter;
 
-        // Cada condición exige su valor (varias condiciones = AND); una con ambos valores no acota.
-        bool? requerido = null;
+        // Cada condición acota a sus valores (varias condiciones = AND, es decir, intersección); una que
+        // admite los tres valores no acota. Valores: «true» completas, «false» faltan, «sin_partes».
+        HashSet<string>? permitidos = null;
         foreach (var c in firma)
         {
             var valores = c.Values
-                .Select(v => v.Trim().ToLowerInvariant()).Where(v => v is "true" or "false").Distinct().ToList();
-            if (valores.Count != 1) continue;
-            var quiere = valores[0] == "true";
-            if (requerido is { } previo && previo != quiere)
-                return filter.ConIdsPorFirma([]); // Sí AND No = nadie
-            requerido = quiere;
+                .Select(v => v.Trim().ToLowerInvariant())
+                .Where(v => v is "true" or "false" or FirmaTextos.ValorSinPartes)
+                .ToHashSet();
+            if (valores.Count == 0 || valores.Count == 3) continue;
+            permitidos = permitidos is null ? valores : [.. permitidos.Intersect(valores)];
         }
 
-        if (requerido is not { } esperado)
+        if (permitidos is null)
             return filter;
+        if (permitidos.Count == 0)
+            return filter.ConIdsPorFirma([]); // p. ej. Completas AND Sin partes = nadie
 
         // El universo ya acotado por el resto de filtros (sin la parte de firma): solo ese se evalúa.
         var tramites = await ApplyListFilters(BuildAccessibleQuery(transitOfficeId), filter)
@@ -2481,7 +2483,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         var ahora = DateTimeOffset.UtcNow;
         var contexto = await _firma.CargarContextoAsync(tramites, ahora, cancellationToken).ConfigureAwait(false);
         var ids = tramites
-            .Where(t => _firma.Evaluar(t, contexto, ahora).FirmadoPorTodas == esperado)
+            .Where(t => permitidos.Contains(_firma.Evaluar(t, contexto, ahora).ValorFiltro))
             .Select(t => t.Id)
             .ToList();
 

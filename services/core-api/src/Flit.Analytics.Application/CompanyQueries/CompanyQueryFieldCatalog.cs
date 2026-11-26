@@ -123,6 +123,7 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
     [
         new("true", "Completas"),
         new("false", "Faltan firmas"),
+        new("sin_partes", "Sin partes que firmen"),
     ];
 
     private static readonly QueryFieldOptionDto[] SiNoOptions =
@@ -156,7 +157,7 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
         // HU #14699 — la regla la calcula ITramiteFirmaEvaluator en memoria (ADR-0092), nunca SQL.
         new(FirmadoPorTodas, "Firmas", QueryFieldKind.Booleano, GrupoPersonas,
             BooleanoOperators, FirmasOptions,
-            "Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una.",
+            "Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una. Sin partes que firmen: el trámite no tiene a nadie que firme.",
             AdmiteLista: false),
         // Sin operadores = solo columna: el normalizador descarta cualquier condición sobre él.
         new(FaltaFirmar, "Falta firmar", QueryFieldKind.Texto, GrupoPersonas, [], [],

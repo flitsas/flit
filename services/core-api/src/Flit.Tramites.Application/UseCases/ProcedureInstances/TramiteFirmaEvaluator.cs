@@ -65,6 +65,8 @@ public static class FirmaTextos
     public const string Faltan = "Faltan firmas";
     /// <summary>Trámite sin ninguna parte que firme: no se afirma «completas», porque nadie firmó.</summary>
     public const string SinPartes = "Sin partes que firmen";
+    /// <summary>Valor del filtro «Firmas» para un trámite sin partes que firmen.</summary>
+    public const string ValorSinPartes = "sin_partes";
     public const string Firmo = "Firmó";
     public const string Pendiente = "Pendiente";
     public const string Rechazada = "Rechazada";
@@ -95,6 +97,14 @@ public sealed record TramiteFirmaResultado(
 
     /// <summary>Partes que ya firmaron (N de «N de M»).</summary>
     public int Firmaron => Partes.Count(p => p.Firmo);
+
+    /// <summary>
+    /// Valor del filtro «Firmas» (un solo valor por trámite): <c>sin_partes</c>, <c>true</c> (completas) o
+    /// <c>false</c> (faltan firmas). Épica #14666 / HU #14698: sin partes NO es «completas» ni «faltan».
+    /// </summary>
+    public string ValorFiltro => TotalPartes == 0
+        ? FirmaTextos.ValorSinPartes
+        : FirmadoPorTodas ? "true" : "false";
 
     /// <summary>«2 de 3 · Faltan firmas» / «3 de 3 · Firmas completas»; sin partes que firmen: «Sin partes que firmen».</summary>
     public string TextoResumen => TotalPartes == 0
