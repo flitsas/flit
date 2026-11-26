@@ -53,7 +53,14 @@ public sealed class HostPorPruebaArchitectureTests
         "PersonaNaturalRadicacionPostgresTests",
         "PlatformEndpointsTests",
         "PublicBrandingEndpointsTests",
-        "SessionPolicyEndpointTests",
+                "SessionPolicyEndpointTests",
+        // En staging/release aún no migradas (en develop ya usan fixture Hosts / HostPorClase).
+        "PermissionEnforcementStateTests",
+        "OidcProductTokenTests",
+        "TiposTramiteGrpcTests",
+        "MensajesMuertosEndpointTests",
+        "ActivarIdentidadManualEndpointTests",
+        "RegenerarEnlaceManualEndpointTests",
     };
 
     private static readonly string[] ProyectosBarridos = ["Flit.Admin.Tests", "Flit.Integration.Tests"];
