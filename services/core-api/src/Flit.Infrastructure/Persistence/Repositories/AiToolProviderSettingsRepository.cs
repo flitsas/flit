@@ -143,6 +143,51 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
         var from = AiProviderCodes.Normalize(fromProvider);
         var to = AiProviderCodes.Normalize(toProvider);
 
+        var trimmedDetail = string.IsNullOrWhiteSpace(detail)
+            ? null
+            : detail.Trim()[..Math.Min(detail.Trim().Length, 1000)];
+
+        // El modelo EF no relaciona la alerta con su transición (las dos tablas se crean por SQL), así que
+        // en un solo SaveChanges podía insertar la alerta primero y chocar con fk_ai_failover_alerts_transition:
+        // ningún failover automático llegaba a quedar guardado. Se guardan en dos pasos dentro de una
+        // transacción; con EnableRetryOnFailure la transacción tiene que ir dentro de la estrategia.
+        if (db.Database.CurrentTransaction is not null)
+        {
+            await GuardarFailoverAsync(normalizedTool, from, to, trimmedDetail, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(
+                async ct =>
+                {
+                    await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+                    await GuardarFailoverAsync(normalizedTool, from, to, trimmedDetail, ct).ConfigureAwait(false);
+                    await tx.CommitAsync(ct).ConfigureAwait(false);
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Cambia el activo y deja transición + alerta, la transición primero. Relee la fila cada vez: si la
+    /// estrategia reintenta, lo guardado en el intento anterior se deshizo con el rollback.
+    /// </summary>
+    private async Task GuardarFailoverAsync(
+        string normalizedTool,
+        string from,
+        string to,
+        string? trimmedDetail,
+        CancellationToken cancellationToken)
+    {
+        // Restos de un intento anterior de la estrategia: ya no existen en la base y no deben reinsertarse.
+        foreach (var previa in db.ChangeTracker.Entries()
+                     .Where(e => e.Entity is AiProviderTransitionRow or AiFailoverAlertRow)
+                     .ToList())
+        {
+            previa.State = EntityState.Detached;
+        }
+
         var row = await db.AiToolProviderSettings
             .FirstOrDefaultAsync(x => x.ToolCode == normalizedTool, cancellationToken)
             .ConfigureAwait(false);
@@ -152,6 +197,7 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
             return;
         }
 
+        await db.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
         if (!string.Equals(row.ActiveProvider, to, StringComparison.Ordinal))
         {
             row.ActiveProvider = to;
@@ -159,10 +205,6 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
         }
 
         var occurredAt = DateTimeOffset.UtcNow;
-        var trimmedDetail = string.IsNullOrWhiteSpace(detail)
-            ? null
-            : detail.Trim()[..Math.Min(detail.Trim().Length, 1000)];
-
         var transition = new AiProviderTransitionRow
         {
             Id = Guid.CreateVersion7(),
@@ -175,7 +217,10 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
             OccurredAt = occurredAt,
         };
 
-        var alert = new AiFailoverAlertRow
+        db.AiProviderTransitions.Add(transition);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        db.AiFailoverAlerts.Add(new AiFailoverAlertRow
         {
             Id = Guid.CreateVersion7(),
             TransitionId = transition.Id,
@@ -183,11 +228,7 @@ internal sealed class AiToolProviderSettingsRepository(FlitDbContext db) : IAiTo
             FromProvider = from,
             ToProvider = to,
             OccurredAt = occurredAt,
-        };
-
-        db.AiProviderTransitions.Add(transition);
-        db.AiFailoverAlerts.Add(alert);
-
+        });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

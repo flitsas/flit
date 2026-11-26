@@ -46,6 +46,20 @@ internal sealed record AiRouterResult(
         new(false, null, status, message, providerCode, Unavailable: false);
 }
 
+/// <summary>
+/// Para qué es una llamada de visión. Cada proveedor traduce el perfil a SUS topes de salida y tiempo:
+/// la sonda de orientación cabe en 100 tokens en Anthropic u OpenAI, pero un modelo que razona antes de
+/// responder (kimi-k3) necesita bastante más para llegar al JSON.
+/// </summary>
+internal enum AiVisionPerfil
+{
+    /// <summary>Lectura de un documento (OCR): topes generales del proveedor.</summary>
+    Lectura = 0,
+
+    /// <summary>Pregunta corta sobre una página (orientación): respuesta de pocas palabras y espera corta.</summary>
+    Sonda = 1,
+}
+
 /// <summary>Bloque de system prompt para chat multi-proveedor.</summary>
 internal sealed record AiChatSystemBlock(string Text, bool Cache);
 
