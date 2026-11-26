@@ -136,6 +136,47 @@ public sealed partial class IaConsumoSchemaTests
     }
 
     [Fact]
+    public void LasTarifasDeOpenAiKimiYDeepSeekDelDdl206SonLasDelSdk()
+    {
+        const string resource = "Flit.Infrastructure.Persistence.Sql.Ddl.206-ia-tarifas-openai-kimi-deepseek.sql";
+        using var stream = typeof(FlitDbContext).Assembly.GetManifestResourceStream(resource);
+        stream.Should().NotBeNull($"el DDL embebido {resource} debe existir");
+        using var reader = new StreamReader(stream!, Encoding.UTF8);
+        var ddl = Espacios().Replace(SinComentarios(reader.ReadToEnd()), " ");
+
+        var filas = Regex.Matches(ddl, @"\('(?<p>\w+)', '(?<modelo>[\w.-]+)', DATE '(?<fecha>[\d-]+)', (?<e>[\d.]+), (?<s>[\d.]+), (?<l>[\d.]+), (?<w>[\d.]+)\)")
+            .Select(m => (m.Groups["p"].Value, m.Groups["modelo"].Value, m.Groups["fecha"].Value,
+                decimal.Parse(m.Groups["e"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                decimal.Parse(m.Groups["s"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                decimal.Parse(m.Groups["l"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                decimal.Parse(m.Groups["w"].Value, System.Globalization.CultureInfo.InvariantCulture)))
+            .ToList();
+
+        filas.Should().BeEquivalentTo(IaTarifasSemilla.OtrosProveedores.Select(t =>
+            (t.Proveedor, t.Modelo, IaTarifasSemilla.VigenteDesdeOtros.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+             t.Entrada, t.Salida, t.CacheLectura, t.CacheEscritura)));
+        filas.Should().NotContain(f => f.Item1 == IaProveedores.Anthropic, "Anthropic ya se sembró en el DDL 203");
+        ddl.Should().Contain("ON CONFLICT (proveedor, modelo, vigente_desde) DO NOTHING");
+        ddl.Should().Contain("WHERE l.costo_usd_estimado IS NULL", "el recálculo solo toca filas sin costo (idempotente)");
+        IaTarifasSemilla.SqlOtrosProveedores("admin").Should().Contain("('kimi', 'kimi-k3', DATE '2026-11-26', 3.00, 15.00, 0.30, 3.00)");
+    }
+
+    [Fact]
+    public void LaMigracionDeTarifasCargaElDdl206()
+    {
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        new TestableIaTarifas().Subir(builder);
+
+        builder.Operations.OfType<SqlOperation>().Single().Sql.Should().Contain("INSERT INTO admin.ia_tarifa_modelo")
+            .And.Contain("'deepseek', 'deepseek-flash'");
+    }
+
+    private sealed class TestableIaTarifas : IaTarifasOpenAiKimiDeepSeek
+    {
+        public void Subir(MigrationBuilder b) => Up(b);
+    }
+
+    [Fact]
     public void ElModeloEfMapeaLasMismasColumnasQueElDdlFueraDeLasMigraciones()
     {
         using var db = new FlitDbContext(new DbContextOptionsBuilder<FlitDbContext>()
