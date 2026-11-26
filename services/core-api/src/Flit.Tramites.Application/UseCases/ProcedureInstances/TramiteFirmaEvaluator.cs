@@ -81,7 +81,7 @@ public sealed record PersonaFirma(
     string Rol, int Ordinal, string Nombre, string? TipoDocumento, string? Documento,
     bool Firmo, string Estado, DateTimeOffset? FechaFirma);
 
-/// <summary>Resultado por trámite: sin partes que deban firmar ⇒ <c>FirmadoPorTodas = true</c> y lista vacía.</summary>
+/// <summary>Resultado por trámite: sin partes que deban firmar ⇒ <c>FirmadoPorTodas = false</c> (no es «completas») y lista vacía.</summary>
 public sealed record TramiteFirmaResultado(
     bool FirmadoPorTodas,
     IReadOnlyList<ParteFirmaPendiente> Pendientes,
@@ -198,7 +198,8 @@ public sealed partial class TramiteFirmaEvaluator(
             }
         }
 
-        return new TramiteFirmaResultado(pendientes.Count == 0, pendientes, personas);
+        // Sin ninguna parte que firme no es «Firmas completas»: nadie firmó. Épica #14666 / HU #14698.
+        return new TramiteFirmaResultado(personas.Count > 0 && pendientes.Count == 0, pendientes, personas);
     }
 
     private static string Etiqueta(string parte) =>
