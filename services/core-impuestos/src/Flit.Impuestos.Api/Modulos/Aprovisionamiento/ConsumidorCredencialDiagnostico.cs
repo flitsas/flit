@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Flit.Impuestos.Api.Modulos.Credenciales;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
@@ -15,8 +16,9 @@ public sealed record CredencialDiagnosticoActualizada(Guid TenantId, string? Pro
 /// <c>plataforma</c> y <c>tramites</c>). En la transacción del SDK (bandeja de entrada en el mismo guardado):
 /// <list type="number">
 ///   <item>Sin credencial en Impuestos, o con Diagnóstico sin llave: sin efecto (el aprovisionamiento normal se encarga).</item>
-///   <item>Se pide la llave vigente a Identidad (<c>ObtenerCredencialImpuestoParaCopia</c>); si Identidad no responde, el SDK
-///   reintenta.</item>
+///   <item>Se pide la llave vigente a Identidad (<c>ObtenerCredencialImpuestoParaCopia</c>) ANTES de bloquear (N-4: el
+///   <c>FOR UPDATE</c> no se mantiene durante el gRPC); si Identidad no responde, el SDK reintenta. Después, en el tramo corto
+///   final, se bloquea el aprovisionamiento, se relee la credencial y se compara y escribe.</item>
 ///   <item>Si es la misma llave que ya hay: sin efecto (idempotente).</item>
 ///   <item>Si la credencial es <see cref="OrigenCredencial.CopiaDiagnostico"/> o su prefijo difiere del de la llave nueva, se
 ///   reemplaza (origen <c>COPIA_DIAGNOSTICO</c>, conservando el secreto del webhook y el id de empresa del API); si es propia con
@@ -55,19 +57,27 @@ public sealed partial class ConsumidorCredencialDiagnostico(
 
         var compania = envelope.TenantId;
         empresa.Fijar(compania);
-        // Orden de bloqueos: aprovisionamiento antes que credencial (BloqueoAprovisionamiento).
-        await BloqueoAprovisionamiento.BloquearAsync(db, compania, ct).ConfigureAwait(false);
-        var fila = await almacen.FilaAsync(db, compania, ct).ConfigureAwait(false);
-        if (fila is null)
+        // Sin credencial no hace falta preguntar a Identidad (lectura sin bloqueo; se vuelve a mirar ya bloqueada).
+        if (!await db.Set<CredencialEmpresa>().AsNoTracking().AnyAsync(c => c.TenantId == compania, ct).ConfigureAwait(false))
         {
             SinEfecto(log, compania, "sin credencial en Impuestos");
             return;
         }
 
+        // N-4: el rpc va antes del bloqueo, para no tener la fila tomada mientras responde Identidad.
         var llave = await identidad.ObtenerLlaveDiagnosticoAsync(compania, ct).ConfigureAwait(false);
         if (!llave.Existe || string.IsNullOrEmpty(llave.ApiKey))
         {
             SinEfecto(log, compania, "Diagnóstico sin llave");
+            return;
+        }
+
+        // Tramo corto: bloquear, releer, comparar y escribir. Orden de bloqueos: aprovisionamiento antes que credencial.
+        await BloqueoAprovisionamiento.BloquearAsync(db, compania, ct).ConfigureAwait(false);
+        var fila = await almacen.FilaAsync(db, compania, ct).ConfigureAwait(false);
+        if (fila is null)
+        {
+            SinEfecto(log, compania, "sin credencial en Impuestos");
             return;
         }
 

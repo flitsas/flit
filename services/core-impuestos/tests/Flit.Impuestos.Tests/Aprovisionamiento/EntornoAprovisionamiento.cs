@@ -243,10 +243,15 @@ internal sealed class IdentidadDePrueba : IClienteIdentidadAlta
         return DatosCaido ? throw new IdentidadNoDisponibleException("caída de prueba") : Task.FromResult(Datos);
     }
 
-    public Task<LlaveDiagnostico> ObtenerLlaveDiagnosticoAsync(Guid empresa, CancellationToken ct)
+    /// <summary>HU #14711 (N-4) — se ejecuta dentro de <c>ObtenerLlaveDiagnosticoAsync</c>, mientras dura el rpc.</summary>
+    public Func<Guid, Task>? AlLeerLlave { get; set; }
+
+    public async Task<LlaveDiagnostico> ObtenerLlaveDiagnosticoAsync(Guid empresa, CancellationToken ct)
     {
         Interlocked.Increment(ref _llaves);
-        return LlaveCaida ? throw new IdentidadNoDisponibleException("caída de prueba") : Task.FromResult(Llave);
+        if (AlLeerLlave is { } alLeer)
+            await alLeer(empresa).ConfigureAwait(false);
+        return LlaveCaida ? throw new IdentidadNoDisponibleException("caída de prueba") : Llave;
     }
 
     public Task<bool> ActualizarLlaveDiagnosticoAsync(Guid empresa, string apiKey, CancellationToken ct)
