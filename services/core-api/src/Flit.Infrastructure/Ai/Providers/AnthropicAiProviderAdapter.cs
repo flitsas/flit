@@ -21,8 +21,15 @@ internal sealed class AnthropicAiProviderAdapter(
         CancellationToken cancellationToken,
         string? model = null,
         int? maxTokens = null,
-        int? timeoutSeconds = null)
+        int? timeoutSeconds = null,
+        AiVisionPerfil perfil = AiVisionPerfil.Lectura)
     {
+        if (perfil == AiVisionPerfil.Sonda)
+        {
+            maxTokens ??= _options.OrientacionMaxTokens;
+            timeoutSeconds ??= _options.OrientacionTimeoutSeconds;
+        }
+
         var vision = await client
             .SendVisionAsync(base64, mediaType, prompt, cancellationToken, model, maxTokens, timeoutSeconds)
             .ConfigureAwait(false);

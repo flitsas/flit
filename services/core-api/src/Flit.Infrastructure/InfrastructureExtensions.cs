@@ -706,6 +706,8 @@ public static class InfrastructureExtensions
             o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5";
             o.TimeoutSeconds = int.TryParse(Cfg("Anthropic:TimeoutSeconds", "ANTHROPIC_TIMEOUT_SECONDS"), out var t) ? t : 60;
             o.MaxTokens = int.TryParse(Cfg("Anthropic:MaxTokens", "ANTHROPIC_MAX_TOKENS"), out var m) ? m : 2000;
+            o.OrientacionMaxTokens = int.TryParse(Cfg("Anthropic:OrientacionMaxTokens", "ANTHROPIC_ORIENTACION_MAX_TOKENS"), out var om) ? om : 100;
+            o.OrientacionTimeoutSeconds = int.TryParse(Cfg("Anthropic:OrientacionTimeoutSeconds", "ANTHROPIC_ORIENTACION_TIMEOUT_SECONDS"), out var ots) ? ots : 30;
             o.ClassifierModel = Cfg("Anthropic:ClassifierModel", "ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-sonnet-5";
             o.ClassifierMaxTokens = int.TryParse(Cfg("Anthropic:ClassifierMaxTokens", "ANTHROPIC_CLASSIFIER_MAX_TOKENS"), out var cm) ? cm : 8000;
             o.ClassifierTimeoutSeconds = int.TryParse(Cfg("Anthropic:ClassifierTimeoutSeconds", "ANTHROPIC_CLASSIFIER_TIMEOUT_SECONDS"), out var ctd) ? ctd : 180;
@@ -760,7 +762,7 @@ public static class InfrastructureExtensions
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
         services.AddScoped<RoutedDocumentOcrAnalyzer>();
         services.AddScoped<AnthropicDocumentBatchClassifier>();
-        services.AddScoped<AnthropicOrientationProbe>();
+        services.AddScoped<RoutedOrientationProbe>();
 
         // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
         // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
@@ -778,7 +780,7 @@ public static class InfrastructureExtensions
 
             // HU #12036 — el enderezado SOLO se registra con el proveedor real: con el mock no hay a
             // quién preguntarle si la página está derecha, y el handler lo trata como opcional.
-            services.AddScoped<IDocumentOrientationProbe>(sp => sp.GetRequiredService<AnthropicOrientationProbe>());
+            services.AddScoped<IDocumentOrientationProbe>(sp => sp.GetRequiredService<RoutedOrientationProbe>());
             services.AddScoped<PdfOrientationNormalizer>();
         }
         else
@@ -804,6 +806,8 @@ public static class InfrastructureExtensions
             o.MaxTokens = int.TryParse(cfg("OpenAI:MaxTokens", "OPENAI_MAX_TOKENS"), out var m) ? m : 2000;
             o.DrFlitMaxTokens = int.TryParse(cfg("OpenAI:DrFlitMaxTokens", "OPENAI_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
             o.DrFlitTimeoutSeconds = int.TryParse(cfg("OpenAI:DrFlitTimeoutSeconds", "OPENAI_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+            o.OrientacionMaxTokens = int.TryParse(cfg("OpenAI:OrientacionMaxTokens", "OPENAI_ORIENTACION_MAX_TOKENS"), out var om) ? om : 100;
+            o.OrientacionTimeoutSeconds = int.TryParse(cfg("OpenAI:OrientacionTimeoutSeconds", "OPENAI_ORIENTACION_TIMEOUT_SECONDS"), out var ot) ? ot : 30;
         });
 
         services.Configure<KimiProviderOptions>(o =>
@@ -816,6 +820,8 @@ public static class InfrastructureExtensions
             o.MaxTokens = int.TryParse(cfg("Kimi:MaxTokens", "KIMI_MAX_TOKENS"), out var m) ? m : 2000;
             o.DrFlitMaxTokens = int.TryParse(cfg("Kimi:DrFlitMaxTokens", "KIMI_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
             o.DrFlitTimeoutSeconds = int.TryParse(cfg("Kimi:DrFlitTimeoutSeconds", "KIMI_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+            o.OrientacionMaxTokens = int.TryParse(cfg("Kimi:OrientacionMaxTokens", "KIMI_ORIENTACION_MAX_TOKENS"), out var om) ? om : 2000;
+            o.OrientacionTimeoutSeconds = int.TryParse(cfg("Kimi:OrientacionTimeoutSeconds", "KIMI_ORIENTACION_TIMEOUT_SECONDS"), out var ot) ? ot : 45;
         });
 
         services.Configure<DeepSeekProviderOptions>(o =>
@@ -828,6 +834,8 @@ public static class InfrastructureExtensions
             o.MaxTokens = int.TryParse(cfg("DeepSeek:MaxTokens", "DEEPSEEK_MAX_TOKENS"), out var m) ? m : 2000;
             o.DrFlitMaxTokens = int.TryParse(cfg("DeepSeek:DrFlitMaxTokens", "DEEPSEEK_DRFLIT_MAX_TOKENS"), out var dm) ? dm : 600;
             o.DrFlitTimeoutSeconds = int.TryParse(cfg("DeepSeek:DrFlitTimeoutSeconds", "DEEPSEEK_DRFLIT_TIMEOUT_SECONDS"), out var dt) ? dt : 20;
+            o.OrientacionMaxTokens = int.TryParse(cfg("DeepSeek:OrientacionMaxTokens", "DEEPSEEK_ORIENTACION_MAX_TOKENS"), out var om) ? om : 100;
+            o.OrientacionTimeoutSeconds = int.TryParse(cfg("DeepSeek:OrientacionTimeoutSeconds", "DEEPSEEK_ORIENTACION_TIMEOUT_SECONDS"), out var ot) ? ot : 30;
         });
     }
 
