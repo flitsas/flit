@@ -115,24 +115,22 @@ describe('Chips de estado de la tabla de Identidad (HU #13288)', () => {
   it('«Esperando captura del cliente» se muestra corto en la tabla y completo en title y aria-label', async () => {
     const fila = await filaDe('Ana Espera');
     const chip = within(fila).getByRole('status', { name: 'Estado: Esperando captura del cliente' });
-    expect(chip).toHaveTextContent(/^Esperando captura$/);
+    expect(chip).toHaveTextContent(/^Por capturar$/);
     expect(chip).toHaveAttribute('title', 'Esperando captura del cliente');
     expect(fila.getAttribute('aria-label')).toMatch(/estado Esperando captura del cliente/);
   });
 
-  it('el chip de la tabla lleva la red de seguridad: max-w-full, min-w-0, texto que se parte y centrado', async () => {
+  it('el chip de la tabla va en una sola línea: no se parte ni se desplaza hacia abajo', async () => {
     const fila = await filaDe('Ana Espera');
     const chip = within(fila).getByRole('status', { name: /Estado: / });
-    for (const cls of ['max-w-full', 'min-w-0', 'whitespace-normal', 'text-center', 'leading-tight']) {
-      expect(chip.className).toContain(cls);
-    }
-    expect(chip.className).not.toContain('whitespace-nowrap');
+    expect(chip.className).toContain('whitespace-nowrap');
+    expect(chip.className).not.toContain('whitespace-normal');
   });
 
-  it('«Pendiente de revisión» ya es corta: mismo texto en tabla y title', async () => {
+  it('«Pendiente de revisión» se muestra «Por revisar» en la tabla y completo en title y aria-label', async () => {
     const fila = await filaDe('Beto Revision');
     const chip = within(fila).getByRole('status', { name: 'Estado: Pendiente de revisión' });
-    expect(chip).toHaveTextContent('Pendiente de revisión');
+    expect(chip).toHaveTextContent(/^Por revisar$/);
     expect(chip).toHaveAttribute('title', 'Pendiente de revisión');
   });
 
@@ -145,7 +143,7 @@ describe('Chips de estado de la tabla de Identidad (HU #13288)', () => {
     const enviada = (await screen.findByText('Cata Enviada')).closest('tr') as HTMLElement;
     expect(within(enviada).getByRole('status', { name: 'Estado: Enviado' })).toHaveAttribute('title', 'Enviado');
     const pendiente = (await screen.findByText('Eli Pendiente')).closest('tr') as HTMLElement;
-    expect(within(pendiente).getByText('Pendiente de envío')).toHaveAttribute('title', 'Pendiente de envío');
+    expect(within(pendiente).getByText('Por enviar')).toHaveAttribute('title', 'Pendiente de envío');
     const rechazada = (await screen.findByText('Dani Rechazada')).closest('tr') as HTMLElement;
     expect(within(rechazada).getByText('Rechazado (intentos disponibles)')).toHaveAttribute(
       'title',
@@ -155,8 +153,8 @@ describe('Chips de estado de la tabla de Identidad (HU #13288)', () => {
 
   it('MANUAL_ESTADO_META conserva la etiqueta larga del detalle y suma la corta de la tabla', () => {
     expect(MANUAL_ESTADO_META.manual_activo.label).toBe('Esperando captura del cliente');
-    expect(MANUAL_ESTADO_META.manual_activo.shortLabel).toBe('Esperando captura');
+    expect(MANUAL_ESTADO_META.manual_activo.shortLabel).toBe('Por capturar');
     expect(MANUAL_ESTADO_META.pendiente_revision_manual.label).toBe('Pendiente de revisión');
-    expect(MANUAL_ESTADO_META.pendiente_revision_manual.shortLabel).toBe('Pendiente de revisión');
+    expect(MANUAL_ESTADO_META.pendiente_revision_manual.shortLabel).toBe('Por revisar');
   });
 });

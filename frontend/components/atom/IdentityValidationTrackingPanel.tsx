@@ -127,6 +127,10 @@ function auditDetailText(e: IdentityAuditEvent): string {
     const verbo = e.stage === 'manual_aprobado' ? 'Aprobada' : 'Rechazada';
     return quien ? `${verbo} por ${quien}` : `${verbo} en revisión manual`;
   }
+  if (e.stage === 'manual_activado') {
+    const quien = descripcionRevisor(e.revisor);
+    return quien ? `Flujo manual activado por ${quien}` : 'Flujo manual activado';
+  }
   if (e.message) {
     // Otros eventos manuales (p. ej. consulta de imágenes) citan «usuario <id>»: nunca se muestra el id.
     return e.stage.startsWith('manual_')
