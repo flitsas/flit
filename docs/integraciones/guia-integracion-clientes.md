@@ -187,7 +187,7 @@ Todos los errores tienen esta forma: `{"error": {"code": "...", "message": "..."
 
 ## 4. Paso 2: consultar los departamentos disponibles
 
-`GET /api/v1/fuentes` con `X-API-Key` devuelve los departamentos activos y el esquema de datos que exige cada uno.
+`GET /api/v1/fuentes` con `X-API-Key` devuelve los departamentos, si cada uno está activo y el esquema de datos que exige.
 
 ```bash
 curl -sS "$FLIT_API_BASE_URL/api/v1/fuentes" -H "X-API-Key: $FLIT_API_KEY"
@@ -196,7 +196,7 @@ curl -sS "$FLIT_API_BASE_URL/api/v1/fuentes" -H "X-API-Key: $FLIT_API_KEY"
 ```json
 {
   "items": [
-    { "id": "uuid", "name": "Antioquia", "department_code": "05", "department_name": "ANTIOQUIA",
+    { "id": "uuid", "name": "Antioquia", "department_code": "05", "department_name": "ANTIOQUIA", "active": true,
       "params_schema": { "type": "object", "required": ["documentType", "documentNumber", "plateNumber", "detail"],
                          "properties": { "detail": { "required": ["secretaryDepartmentCode", "vehicleModel", "secretaryCity", "OwnerName"] } } } }
   ]
@@ -216,7 +216,14 @@ Departamentos implementados (código DANE en `detail.secretaryDepartmentCode`):
 | `08` | Atlántico | opcional `vehicleModel` y `vehicleBrand` (inscribe el vehículo en la cuenta del portal) |
 | `25` | Cundinamarca | `OwnerEmail` y `OwnerCellPhone` u `OwnerPhone`. Sin ellos, el portal no genera la factura y la consulta termina en `invalid_params` |
 
-La lista y los esquemas vigentes son siempre los de `GET /api/v1/fuentes`. Una fuente puede estar inactiva temporalmente.
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `department_code` | string | Código DANE de 2 dígitos. Es la llave de la fuente |
+| `name` / `department_name` | string | Nombre para mostrar; se usa `name` y, si viene vacío, `department_name` |
+| `active` | boolean | **Obligatorio.** `true` si el departamento acepta consultas ahora; `false` si está deshabilitado temporalmente. La API siempre lo envía; si un cliente no lo recibe, debe tratar la fuente como **inactiva** y no enviarle consultas |
+| `params_schema` | object | JSON Schema de los datos que exige la consulta de ese departamento |
+
+La lista y los esquemas vigentes son siempre los de `GET /api/v1/fuentes`. Una fuente puede estar inactiva temporalmente (`active: false`); una consulta a ella responde `409 source_inactive`.
 
 ## 5. Paso 3: solicitar una liquidación
 
@@ -676,6 +683,7 @@ Cuando `consulta.status` es `failed`, el código aparece en dos lugares: en `err
 - [ ] `FLIT_INTEGRATION_TOKEN` en el almacén de secretos, si el sistema crea empresas.
 - [ ] `api_key` y `webhook_secret` de cada empresa guardados al recibir la respuesta del alta, con `company.id` como llave.
 - [ ] NIT enviado solo con dígitos (con o sin `-DV`), y el `400` por DV incorrecto mostrado al usuario.
+- [ ] Departamentos tomados de `GET /api/v1/fuentes` y consultados solo si `active: true` (un ítem sin `active` cuenta como inactivo).
 - [ ] El alta se reintenta sin miedo ante un timeout, y `api_key_rotated: true` reemplaza la clave guardada.
 - [ ] Endpoint de webhook en `https` público, con respuesta `2xx` en menos de 10 s y sin redirecciones.
 - [ ] Verificación de la firma probada con el vector de la sección 6.
