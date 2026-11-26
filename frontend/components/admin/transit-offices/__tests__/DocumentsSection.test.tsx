@@ -252,7 +252,8 @@ describe("DocumentsSection — prenda opcional por compañía (Super Admin)", ()
     expect(await screen.findByText("Documento de prenda por compañía")).toBeInTheDocument();
     expect(fetchOtPrendaDocumentPoliciesForOffice).toHaveBeenCalledWith(OT_ID, expect.anything());
 
-    const toggle = await screen.findByRole("switch", { name: /gestora uno — prenda opcional/i });
+    // El nombre accesible del interruptor es la compañía; «Prenda opcional» es su descripción.
+    const toggle = await screen.findByRole("switch", { name: /gestora uno/i });
     await user.click(toggle);
 
     await waitFor(() =>
