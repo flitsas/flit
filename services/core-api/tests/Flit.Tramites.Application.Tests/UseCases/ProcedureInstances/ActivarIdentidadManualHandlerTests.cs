@@ -78,7 +78,7 @@ public sealed class ActivarIdentidadManualHandlerTests
         error.Should().BeNull();
         result!.Provider.Should().Be("manual");
         result.Status.Should().Be("manual_activo");
-        result.ExpiresAt.Should().Be(Now.AddHours(24));
+        result.ExpiresAt.Should().Be(Now.AddDays(30));
         v.Provider.Should().Be(BiometricProviders.Manual);
         v.Status.Should().Be(BiometricEstados.ManualActivo);
         v.ManualActivatedBy.Should().Be(User);
@@ -91,7 +91,7 @@ public sealed class ActivarIdentidadManualHandlerTests
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado.Token)).And.NotBe(enviado.Token);
         // HU #14305 (AC1): además del hash, la fila guarda el token CIFRADO (descifrable a lo enviado, nunca en claro).
         v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token).And.NotBe(enviado.Token);
-        enviado.ExpiresAt.Should().Be(Now.AddHours(24));
+        enviado.ExpiresAt.Should().Be(Now.AddDays(30));
         enviado.TenantId.Should().Be(v.TenantId);
     }
 
@@ -383,7 +383,7 @@ public sealed class ActivarIdentidadManualHandlerTests
         error.Should().BeNull();
         result!.KyverumCancelado.Should().BeFalse();
         v.TokenHash.Should().NotBe(hashViejo);
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
     }
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

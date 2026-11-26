@@ -71,7 +71,7 @@ public sealed class RechazarValidacionManualHandlerTests
         error.Should().BeNull();
         result!.Status.Should().Be("rechazado");
         result.RejectionReasonCode.Should().Be("rostro_no_coincide");
-        result.LinkExpiresAt.Should().Be(Now.AddHours(24));
+        result.LinkExpiresAt.Should().Be(Now.AddDays(30));
         result.ReviewedAt.Should().Be(Now);
         result.EmailEnviado.Should().BeTrue();
         v.Status.Should().Be(BiometricEstados.Rechazado);
@@ -84,7 +84,7 @@ public sealed class RechazarValidacionManualHandlerTests
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado!.Token)).And.NotBe(hashViejo).And.NotBe(enviado.Token);
         // HU #14305 (AC1): el token cifrado sustituye al anterior.
         v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token);
-        enviado.ExpiresAt.Should().Be(Now.AddHours(24));
+        enviado.ExpiresAt.Should().Be(Now.AddDays(30));
     }
 
     [Fact]

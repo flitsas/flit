@@ -61,7 +61,7 @@ public sealed class RegenerarEnlaceManualHandler(
             IdentityValidationAuditStages.ManualEnlaceRegenerado, IdentityValidationAuditOutcomes.Ok,
             TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id, PartyRole: v.PartyRole,
             Message: $"Enlace de captura manual regenerado por el usuario {command.RegeneratedByUserId}; el anterior dejó de valer; "
-                + $"vigente {BiometricRules.TokenTtlHoras} h.",
+                + $"vigente {BiometricRules.TokenTtlManualDias} días.",
             Detail: $"usuario={command.RegeneratedByUserId}; expira_at={v.ExpiresAt:O}; reenvios_acumulados={v.ResendCount}"),
             ct).ConfigureAwait(false);
 

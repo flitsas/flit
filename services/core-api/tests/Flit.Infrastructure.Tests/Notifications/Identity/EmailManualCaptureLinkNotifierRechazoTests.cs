@@ -62,7 +62,7 @@ public sealed class EmailManualCaptureLinkNotifierRechazoTests
         enviado.Subject.Should().Contain("Repite tu verificación de identidad");
         enviado.HtmlBody.Should().Contain(Html("Motivo: " + etiqueta))
             .And.Contain("https://app.flit.example/verificacion/enlace-de-prueba-dos")
-            .And.Contain("24 horas").And.Contain("Hola Ana Perez.")
+            .And.Contain(Html("30 días")).And.Contain("Hola Ana Perez.")
             .And.Contain(Html("Repetir mi verificación")).And.Contain(Html("Verificación de identidad"));
         enviado.HtmlBody.Should().NotContain("rostro_no_coincide", "el cliente ve el texto, no el código");
         enviado.HtmlBody.Should().NotContainEquivalentOf("kyverum", "el correo nunca nombra al proveedor");

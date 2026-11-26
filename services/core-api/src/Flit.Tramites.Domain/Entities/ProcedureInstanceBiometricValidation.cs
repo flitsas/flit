@@ -366,7 +366,7 @@ public sealed class ProcedureInstanceBiometricValidation
         Status = BiometricEstados.ManualActivo;
         TokenHash = tokenHash;
         ManualCaptureTokenEncrypted = tokenEncrypted;
-        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ExpiresAt = now.AddDays(BiometricRules.TokenTtlManualDias);
         ManualActivatedBy = userId;
         ManualActivatedAt = now;
         UpdatedAt = now;
@@ -419,7 +419,7 @@ public sealed class ProcedureInstanceBiometricValidation
 
         TokenHash = tokenHash;
         ManualCaptureTokenEncrypted = tokenEncrypted; // sustituye al cifrado anterior (HU #14305)
-        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ExpiresAt = now.AddDays(BiometricRules.TokenTtlManualDias);
         ResendCount++;
         LastResentAt = now;
         UpdatedAt = now;
@@ -581,7 +581,7 @@ public sealed class ProcedureInstanceBiometricValidation
 
         TokenHash = tokenHash;
         ManualCaptureTokenEncrypted = tokenEncrypted;
-        ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        ExpiresAt = now.AddDays(BiometricRules.TokenTtlManualDias);
         ManualActivatedAt = now;
         UpdatedAt = now;
     }
@@ -784,6 +784,9 @@ public static class BiometricRules
 
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
+
+    /// <summary>Vigencia (días) del enlace de captura del FLUJO MANUAL: activación, regeneración y enlace nuevo tras rechazo.</summary>
+    public const int TokenTtlManualDias = 30;
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
