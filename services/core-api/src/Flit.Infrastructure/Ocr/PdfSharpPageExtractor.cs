@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Documents;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
 using PdfSharpCore.Pdf;
@@ -23,7 +24,7 @@ internal sealed class PdfSharpPageExtractor(ILogger<PdfSharpPageExtractor> logge
             using var doc = PdfReader.Open(stream, PdfDocumentOpenMode.InformationOnly);
             return doc.PageCount;
         }
-        catch (Exception ex) when (ex is PdfReaderException or InvalidOperationException or IOException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (PdfModifyNormalizer.IsRecoverablePdfException(ex))
         {
             PdfExtractLog.ExtractFailed(logger, ex.Message);
             return null;
@@ -57,7 +58,7 @@ internal sealed class PdfSharpPageExtractor(ILogger<PdfSharpPageExtractor> logge
             doc.Save(outStream, closeStream: false);
             return outStream.ToArray();
         }
-        catch (Exception ex) when (ex is PdfReaderException or InvalidOperationException or IOException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (PdfModifyNormalizer.IsRecoverablePdfException(ex))
         {
             PdfExtractLog.ExtractFailed(logger, ex.Message);
             return null;
@@ -97,7 +98,7 @@ internal sealed class PdfSharpPageExtractor(ILogger<PdfSharpPageExtractor> logge
             target.Save(outStream, closeStream: false);
             return outStream.ToArray();
         }
-        catch (Exception ex) when (ex is PdfReaderException or InvalidOperationException or IOException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (PdfModifyNormalizer.IsRecoverablePdfException(ex))
         {
             PdfExtractLog.ExtractFailed(logger, ex.Message);
             return null;
