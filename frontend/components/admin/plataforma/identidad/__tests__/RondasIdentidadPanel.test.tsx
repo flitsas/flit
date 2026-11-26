@@ -31,7 +31,7 @@ const AJUSTES: IdentityRoundSettings = {
 };
 
 async function cargado() {
-  render(<RondasIdentidadPanel />);
+  renderConToast();
   return screen.findByRole("form", { name: /rondas de validación/i });
 }
 
@@ -49,6 +49,12 @@ async function agregar(correo: string) {
   await userEvent.click(screen.getByRole("button", { name: /^agregar$/i }));
 }
 
+import { ToastProvider } from "@/components/admin/Toast";
+
+function renderConToast() {
+  return render(<ToastProvider><RondasIdentidadPanel /></ToastProvider>);
+}
+
 describe("RondasIdentidadPanel", () => {
   beforeEach(() => {
     getMock.mockReset();
@@ -57,14 +63,14 @@ describe("RondasIdentidadPanel", () => {
 
   it("cargando: estado accesible mientras llega el GET", () => {
     getMock.mockReturnValue(new Promise(() => {}));
-    render(<RondasIdentidadPanel />);
+    renderConToast();
     expect(screen.getByTestId("rondas-identidad-loading")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/cargando/i);
+    expect(screen.getAllByRole("status").map((el) => el.textContent ?? "").join(" ")).toMatch(/cargando/i);
   });
 
   it("error al cargar: mensaje y «Reintentar» vuelve a pedir el GET", async () => {
     getMock.mockRejectedValueOnce(new ApiError(500, "x")).mockResolvedValueOnce(AJUSTES);
-    render(<RondasIdentidadPanel />);
+    renderConToast();
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo cargar/i);
     await userEvent.click(screen.getByRole("button", { name: /reintentar/i }));
     expect(await screen.findByRole("form", { name: /rondas de validación/i })).toBeInTheDocument();
@@ -73,7 +79,7 @@ describe("RondasIdentidadPanel", () => {
 
   it("403 al cargar: «Sin permiso» y sin reintento", async () => {
     getMock.mockRejectedValue(new ApiError(403, "x"));
-    render(<RondasIdentidadPanel />);
+    renderConToast();
     expect(await screen.findByRole("alert")).toHaveTextContent(/sin permiso/i);
     expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
   });
@@ -130,6 +136,21 @@ describe("RondasIdentidadPanel", () => {
     expect(screen.getByRole("button", { name: /^agregar$/i })).toBeDisabled();
   });
 
+  it("límite apagado: aparece el umbral de alerta y el guardado envía limiteActivo=false con ese umbral", async () => {
+    getMock.mockResolvedValue(AJUSTES);
+    putMock.mockResolvedValue({ ...AJUSTES, limiteActivo: false, umbralAlertaSoporte: 5 });
+    await cargado();
+    expect(screen.queryByLabelText(/avisar a operación cada/i)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("switch", { name: /límite de rondas/i }));
+    const umbral = screen.getByLabelText(/avisar a operación cada/i);
+    await userEvent.clear(umbral);
+    await userEvent.type(umbral, "5");
+    await userEvent.click(guardar());
+    await waitFor(() =>
+      expect(putMock).toHaveBeenCalledWith(expect.objectContaining({ limiteActivo: false, umbralAlertaSoporte: 5 })),
+    );
+  });
+
   it("guardado correcto: envía el cuerpo, confirma visiblemente y deja Guardar deshabilitado", async () => {
     getMock.mockResolvedValue(AJUSTES);
     const guardado: IdentityRoundSettings = {
@@ -144,9 +165,8 @@ describe("RondasIdentidadPanel", () => {
     await agregar("Nuevo@flit.co");
     expect(guardar()).toBeEnabled();
     await userEvent.click(guardar());
-    await waitFor(() => expect(putMock).toHaveBeenCalledWith(guardado));
+    await waitFor(() => expect(putMock).toHaveBeenCalledWith({ ...guardado, limiteActivo: true, umbralAlertaSoporte: 3 }));
     expect(await screen.findByText(/configuración guardada/i)).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/configuración guardada/i);
     expect(guardar()).toBeDisabled();
   });
 
@@ -174,7 +194,7 @@ describe("RondasIdentidadPanel", () => {
     expect(await screen.findByText(/fuera de rango/i)).toBeInTheDocument();
     expect(rondas()).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText(/ops2@flit\.co está duplicado/i)).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/no se guardó/i);
+    expect(await screen.findByText(/no se guardó/i)).toBeInTheDocument();
   });
 
   it("403 al guardar: mensaje de permiso y se conserva lo escrito", async () => {

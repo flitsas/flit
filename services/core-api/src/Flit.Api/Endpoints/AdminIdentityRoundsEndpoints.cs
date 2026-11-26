@@ -60,7 +60,8 @@ public static class AdminIdentityRoundsEndpoints
         {
             var saved = await handler.HandleAsync(
                 new UpdateIdentityRoundsConfigCommand(
-                    request.RondasMaximas, request.DisparadorAlerta, request.CorreosAlerta, AdminRuntConfirmationEndpoints.ResolveUserId(user)),
+                    request.RondasMaximas, request.DisparadorAlerta, request.CorreosAlerta, AdminRuntConfirmationEndpoints.ResolveUserId(user),
+                    request.LimiteActivo, request.UmbralAlertaSoporte),
                 ct).ConfigureAwait(false);
             return Results.Ok(IdentityRoundsConfigResponse.From(saved));
         }
@@ -72,10 +73,12 @@ public static class AdminIdentityRoundsEndpoints
 }
 
 /// <summary>Cuerpo del PUT. Todo se valida en el dominio; <c>correosAlerta</c> omitido equivale a lista vacía.</summary>
-public sealed record SaveIdentityRoundsConfigRequest(int? RondasMaximas, string? DisparadorAlerta, string?[]? CorreosAlerta);
+public sealed record SaveIdentityRoundsConfigRequest(
+    int? RondasMaximas, string? DisparadorAlerta, string?[]? CorreosAlerta, bool? LimiteActivo = null, int? UmbralAlertaSoporte = null);
 
-public sealed record IdentityRoundsConfigResponse(int RondasMaximas, string DisparadorAlerta, IReadOnlyList<string> CorreosAlerta)
+public sealed record IdentityRoundsConfigResponse(
+    int RondasMaximas, string DisparadorAlerta, IReadOnlyList<string> CorreosAlerta, bool LimiteActivo, int UmbralAlertaSoporte)
 {
     internal static IdentityRoundsConfigResponse From(IdentityRoundsConfigDto dto) =>
-        new(dto.RondasMaximas, dto.DisparadorAlerta, dto.CorreosAlerta);
+        new(dto.RondasMaximas, dto.DisparadorAlerta, dto.CorreosAlerta, dto.LimiteActivo, dto.UmbralAlertaSoporte);
 }
