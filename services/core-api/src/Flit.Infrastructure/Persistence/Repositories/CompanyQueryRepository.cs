@@ -569,7 +569,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         CompanyQueryFieldCatalog.Transformaciones => r => r.Transformaciones,
         CompanyQueryFieldCatalog.Leasing => r => [Bool(r.EsLeasing)],
         // Sin evaluación (no debería llegar aquí sin filtro) cuenta como «No»: nunca como firmado.
-        CompanyQueryFieldCatalog.FirmadoPorTodas => r => [Bool(r.Firma?.FirmadoPorTodas ?? false)],
+        CompanyQueryFieldCatalog.FirmadoPorTodas => r => [r.Firma?.ValorFiltro ?? "false"],
         CompanyQueryFieldCatalog.MetodoPago => r => Single(r.MetodoPago),
         // En matrícula inicial no hay traspaso que clasificar: devolver «bilateral» ahí haría que un
         // filtro por bilateral arrastrara todas las matrículas.

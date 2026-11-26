@@ -92,7 +92,7 @@ public sealed class OtQueryFirmaTests
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FaltaFirmar)!.Operators.Should().BeEmpty("es solo columna");
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmadoPorTodas)!.Label.Should().Be("Firmas");
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmadoPorTodas)!.Options.Select(o => o.Label)
-            .Should().Equal("Completas", "Faltan firmas");
+            .Should().Equal("Completas", "Faltan firmas", "Sin partes que firmen");
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmaVendedor)!.Label.Should().Be("Firma vendedor");
         OtQueryFieldCatalog.Find(OtQueryFieldCatalog.FirmaComprador)!.Operators.Should().BeEmpty("es solo columna");
     }

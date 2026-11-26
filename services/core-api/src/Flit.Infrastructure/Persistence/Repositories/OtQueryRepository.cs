@@ -451,7 +451,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         OtQueryFieldCatalog.LicenciaTransito => r => [Bool(r.TieneLicencia)],
         OtQueryFieldCatalog.Transformaciones => r => r.Transformaciones,
         // Sin evaluación (no debería llegar aquí sin filtro) cuenta como «No»: nunca como firmado.
-        OtQueryFieldCatalog.FirmadoPorTodas => r => [Bool(r.Firma?.FirmadoPorTodas ?? false)],
+        OtQueryFieldCatalog.FirmadoPorTodas => r => [r.Firma?.ValorFiltro ?? "false"],
         _ => _ => [],
     };
 

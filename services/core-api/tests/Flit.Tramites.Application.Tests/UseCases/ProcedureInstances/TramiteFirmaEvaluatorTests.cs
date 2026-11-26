@@ -214,6 +214,18 @@ public sealed class TramiteFirmaEvaluatorTests
     }
 
     [Fact]
+    public void ValorFiltro_distingue_completas_faltan_y_sin_partes()
+    {
+        // Épica #14666 / HU #14698: el filtro «Firmas» tiene tres valores, uno por trámite.
+        var persona = new PersonaFirma("Vendedor", 1, "Ana", null, null, true, "Firmó", null);
+        var pendiente = new PersonaFirma("Comprador", 1, "Luis", null, null, false, "Pendiente", null);
+
+        new TramiteFirmaResultado(true, [], [persona]).ValorFiltro.Should().Be("true");
+        new TramiteFirmaResultado(false, [], [persona, pendiente]).ValorFiltro.Should().Be("false");
+        new TramiteFirmaResultado(false, [], []).ValorFiltro.Should().Be("sin_partes");
+    }
+
+    [Fact]
     public void Tramite_sin_partes_que_deban_firmar_no_cuenta_como_completas()
     {
         var t = Tramite(ProcedureTypeFixture.Traspaso);

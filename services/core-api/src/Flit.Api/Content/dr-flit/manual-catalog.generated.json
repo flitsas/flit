@@ -1323,7 +1323,7 @@
           ],
           "bullets": [
             "Paso 1. Pulsa «+ Filtro», busca el grupo «Personas» y elige «Firmas».",
-            "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, o «Faltan firmas» para ver los que tienen al menos una parte pendiente. Pulsa «Aplicar»; la tabla y el contador cambian.",
+            "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, «Faltan firmas» para ver los que tienen al menos una parte pendiente, o «Sin partes que firmen» para los que no tienen a nadie que deba firmar. Pulsa «Aplicar»; la tabla y el contador cambian.",
             "Paso 3. Sin filtro, la columna «Firmas» muestra el resumen del trámite («2 de 3 · Faltan firmas») y, debajo, una línea por persona con su estado: Firmó, Pendiente, Rechazada, Expirada o Sin validar. Si el trámite no tiene partes que deban firmar, dice «Sin partes que firmen».",
             "Paso 4. Para ver cada parte en su propia columna, abre el selector de columnas y activa «Firma comprador» y «Firma vendedor».",
             "Paso 5. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro y las columnas que dejaste visibles.",
@@ -1827,7 +1827,7 @@
           ],
           "bullets": [
             "Paso 1. Pulsa «+ Filtro», busca el grupo «Personas» y elige «Firmas».",
-            "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, o «Faltan firmas» para ver los que tienen al menos una parte pendiente. Pulsa «Aplicar»; la tabla y el contador cambian.",
+            "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, «Faltan firmas» para ver los que tienen al menos una parte pendiente, o «Sin partes que firmen» para los que no tienen a nadie que deba firmar. Pulsa «Aplicar»; la tabla y el contador cambian.",
             "Paso 3. Sin filtro, la columna «Firmas» muestra el resumen del trámite («2 de 3 · Faltan firmas») y, debajo, una línea por persona con su estado: Firmó, Pendiente, Rechazada, Expirada o Sin validar. Si el trámite no tiene partes que deban firmar, dice «Sin partes que firmen».",
             "Paso 4. Para ver cada parte en su propia columna, abre el selector de columnas y activa «Firma comprador» y «Firma vendedor».",
             "Paso 5. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro y las columnas que dejaste visibles.",

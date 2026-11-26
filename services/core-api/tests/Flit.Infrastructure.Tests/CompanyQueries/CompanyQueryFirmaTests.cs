@@ -70,9 +70,9 @@ public sealed class CompanyQueryFirmaTests
         firmado.Group.Should().Be(CompanyQueryFieldCatalog.GrupoPersonas);
         firmado.Label.Should().Be("Firmas");
         firmado.Operators.Should().Equal(QueryOperator.EsAlguno);
-        firmado.Options.Select(o => o.Label).Should().Equal("Completas", "Faltan firmas");
-        firmado.Options.Select(o => o.Value).Should().Equal("true", "false");
-        firmado.Hint.Should().Be("Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una.");
+        firmado.Options.Select(o => o.Label).Should().Equal("Completas", "Faltan firmas", "Sin partes que firmen");
+        firmado.Options.Select(o => o.Value).Should().Equal("true", "false", "sin_partes");
+        firmado.Hint.Should().Be("Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una. Sin partes que firmen: el trámite no tiene a nadie que firme.");
 
         foreach (var (id, etiqueta) in new[]
                  {
