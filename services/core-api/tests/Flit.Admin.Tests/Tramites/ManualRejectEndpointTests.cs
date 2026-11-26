@@ -52,7 +52,7 @@ public sealed class ManualRejectEndpointTests : IClassFixture<ManualReviewFactor
         json.RootElement.GetProperty("rejectionReasonCode").GetString().Should().Be("rostro_no_coincide");
         json.RootElement.GetProperty("emailEnviado").GetBoolean().Should().BeTrue();
         json.RootElement.GetProperty("linkExpiresAt").GetDateTimeOffset()
-            .Should().BeCloseTo(antes.AddHours(BiometricRules.TokenTtlHoras), TimeSpan.FromMinutes(2));
+            .Should().BeCloseTo(antes.AddDays(BiometricRules.TokenTtlManualDias), TimeSpan.FromMinutes(2));
 
         var v = await _host.ReloadAsync(seeded.Id);
         v.Status.Should().Be(BiometricEstados.Rechazado);
@@ -60,7 +60,7 @@ public sealed class ManualRejectEndpointTests : IClassFixture<ManualReviewFactor
         v.RejectionReasonCode.Should().Be("rostro_no_coincide");
         v.ReviewedBy.Should().Be(_host.SuperAdmin);
         v.ReviewedAt.Should().BeOnOrAfter(antes.AddSeconds(-5));
-        v.ExpiresAt.Should().BeCloseTo(antes.AddHours(BiometricRules.TokenTtlHoras), TimeSpan.FromMinutes(2));
+        v.ExpiresAt.Should().BeCloseTo(antes.AddDays(BiometricRules.TokenTtlManualDias), TimeSpan.FromMinutes(2));
         v.TokenHash.Should().NotBe(seeded.TokenHash).And.HaveLength(64);
         v.TenantId.Should().Be(_host.Dueno);
         v.ApprovalOrigin.Should().BeNull();
