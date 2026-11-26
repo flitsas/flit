@@ -79,6 +79,47 @@ public sealed class ProcedureSyncItemsTests(PostgresDatabaseFixture fixture) : P
     }
 
     [PostgresFact]
+    public async Task Gestor_EsQuienRadicoYAlReasignarCambiaElGestorYSubeLaVersion()
+    {
+        await SembrarAsync();
+        var id = await TramiteAsync(1);
+        await HistorialAsync(id, "preasignacion");
+
+        var antes = (await LeerAsync()).Single(e => e.Item.Id == id).Item;
+        antes.NombreGestor.Should().Be("Gestor 13079");
+        antes.CorreoGestor.Should().Be("it-13079@flit.test");
+
+        var otro = new Guid("5a5a5a5a-0004-4000-8000-000000013079");
+        await using (var ctx = NewContext())
+        {
+            ctx.Users.Add(new User
+            {
+                Id = otro,
+                Email = "reasignado-13079@flit.test",
+                DisplayName = "Reasignado 13079",
+                Status = "active",
+                HomeTenantId = Compania,
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-30),
+            });
+            await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var conn = await Fixture.OpenConnectionAsync())
+        {
+            await using var cmd = new NpgsqlCommand(
+                "UPDATE tramites.procedure_instances SET assigned_to_user_id = @otro WHERE id = @id", conn);
+            cmd.Parameters.AddWithValue("otro", otro);
+            cmd.Parameters.AddWithValue("id", id);
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var despues = (await LeerAsync()).Single(e => e.Item.Id == id).Item;
+        despues.NombreGestor.Should().Be("Reasignado 13079");
+        despues.CorreoGestor.Should().Be("reasignado-13079@flit.test");
+        despues.SyncVersion.Should().BeGreaterThan(antes.SyncVersion, "reasignar mueve syncVersion");
+    }
+
+    [PostgresFact]
     public async Task AC2_CopropiedadConSusPorcentajesPorOrdinal()
     {
         await SembrarAsync();

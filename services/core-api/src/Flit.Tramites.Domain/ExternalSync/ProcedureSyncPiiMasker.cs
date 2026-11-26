@@ -10,6 +10,7 @@ namespace Flit.Tramites.Domain.ExternalSync;
 ///   <item>celular: últimos 4 (<c>******0000</c>);</item>
 ///   <item>nombre: inicial de cada palabra (<c>P*** E***</c>);</item>
 ///   <item>dirección: oculta entera (<c>***</c>).</item>
+///   <item>gestor del trámite (v3.4): <c>nombreGestor</c> y <c>correoGestor</c> con las reglas de nombre y correo.</item>
 /// </list>
 /// </summary>
 public static class ProcedureSyncPiiMasker
@@ -21,6 +22,8 @@ public static class ProcedureSyncPiiMasker
         ArgumentNullException.ThrowIfNull(item);
         return item with
         {
+            NombreGestor = Nombre(item.NombreGestor),
+            CorreoGestor = Correo(item.CorreoGestor),
             Compradores = item.Compradores
                 .Select(c => c with
                 {
