@@ -75,6 +75,8 @@ export interface ManualDetail extends ManualListItem {
    * reciben `null` o nada. Todos sus campos pueden venir vacíos.
    */
   reviewer?: RevisorIdentidad | null;
+  /** Quién activó el flujo manual (nombre, correo y rol). Solo para el Super Admin FLIT; puede venir `null` o vacío. */
+  activator?: RevisorIdentidad | null;
   rejectionReasonCode: string | null;
   /**
    * Vencimiento del enlace de captura vigente (30 días): solo con `manual_activo` (el cliente aún no capturó) o `rechazado`
