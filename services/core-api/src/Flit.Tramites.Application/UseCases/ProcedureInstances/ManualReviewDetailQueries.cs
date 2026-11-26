@@ -40,7 +40,9 @@ public sealed record ManualDetail(
     // HU #14302 — misma regla que BiometricValidationDto.cartaDisponible: manual, aprobada y con carta generada.
     bool CartaDisponible = false,
     // Quién revisó (nombre, correo, rol); null si no hubo revisión. El endpoint es solo Super Admin.
-    ReviewerInfo? Reviewer = null);
+    ReviewerInfo? Reviewer = null,
+    // Quién activó el flujo manual (nombre, correo, rol); null si no se registró. El endpoint es solo Super Admin.
+    ReviewerInfo? Activator = null);
 
 /// <summary>
 /// HU #14310 — resultado de la validación en el dispositivo de UNA foto: <c>estado</c> ∈ {verificada, no_verificada};
@@ -102,7 +104,8 @@ public sealed class GetManualDetailHandler(
             r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt,
             ManualPhotoChecksDto.From(r.PhotoChecks),
             r.CartaDisponible,
-            r.Reviewer), null);
+            r.Reviewer,
+            r.Activator), null);
     }
 }
 
