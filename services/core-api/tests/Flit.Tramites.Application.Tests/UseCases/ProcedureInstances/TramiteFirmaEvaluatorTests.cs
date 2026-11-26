@@ -214,16 +214,15 @@ public sealed class TramiteFirmaEvaluatorTests
     }
 
     [Fact]
-    public void Tramite_sin_partes_que_deban_firmar_es_si_con_lista_vacia()
+    public void Tramite_sin_partes_que_deban_firmar_no_cuenta_como_completas()
     {
         var t = Tramite(ProcedureTypeFixture.Traspaso);
 
         var r = _sut.Evaluar(t, Ctx(), Now);
 
-        // Sin actores no hay a quién pedirle firma: no se reporta pendiente alguno.
-        r.FirmadoPorTodas.Should().BeTrue();
+        // Épica #14666 / HU #14698: nadie firmó, así que no es «Completas» aunque no haya pendientes.
+        r.FirmadoPorTodas.Should().BeFalse();
         r.Pendientes.Should().BeEmpty();
-        // Y el texto no afirma «Firmas completas» donde nadie firmó.
         r.TextoResumen.Should().Be("Sin partes que firmen");
     }
 
