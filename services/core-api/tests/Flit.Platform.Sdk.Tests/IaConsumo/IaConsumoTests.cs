@@ -275,6 +275,48 @@ public sealed class IaConsumoTests
         IaCalculadoraCosto.Calcular(Tarifas, fila).Should().Be(2.2m);
     }
 
+    private static IaTarifaModelo[] TarifasOtros() =>
+        IaTarifasSemilla.OtrosProveedores.Select(t => new IaTarifaModelo
+        {
+            Proveedor = t.Proveedor, Modelo = t.Modelo, VigenteDesde = IaTarifasSemilla.VigenteDesdeOtros,
+            PrecioEntradaMtok = t.Entrada, PrecioSalidaMtok = t.Salida,
+            PrecioCacheLecturaMtok = t.CacheLectura, PrecioCacheEscrituraMtok = t.CacheEscritura,
+        }).ToArray();
+
+    // Los tokens son los de las llamadas reales del 2026-11-26 en DEV (OCR de un PDF de improntas).
+    [Theory]
+    [InlineData("openai", "gpt-4o", "gpt-4o-2024-08-06", 3556, 318, 0.01207)]            // 3556×2,5 + 318×10
+    [InlineData("openai", "gpt-4o-mini", "gpt-4o-mini-2024-07-18", 1_000_000, 0, 0.15)]
+    [InlineData("kimi", "kimi-k3", "kimi-k3", 6048, 1837, 0.045699)]                      // 6048×3 + 1837×15
+    [InlineData("deepseek", "deepseek-chat", "deepseek-flash", 1000, 100, 0.00042)]       // 1000×0,3 + 100×1,2
+    public void LosOtrosProveedoresTienenCostoConElModeloQueDevuelveLaApi(
+        string proveedor, string solicitado, string respondido, int entrada, int salida, double esperado)
+    {
+        var fila = new IaConsumoLog
+        {
+            Proveedor = proveedor,
+            ModeloSolicitado = solicitado,
+            ModeloRespondido = respondido,
+            FechaInicio = new DateTimeOffset(2026, 11, 26, 11, 53, 0, TimeSpan.Zero),
+            TokensEntrada = entrada,
+            TokensSalida = salida,
+        };
+
+        IaCalculadoraCosto.Calcular(TarifasOtros(), fila).Should().Be((decimal)esperado);
+    }
+
+    [Fact]
+    public void ElSufijoDeFechaConGuionesSoloSeQuitaAlFinal()
+    {
+        var fila = new IaConsumoLog
+        {
+            Proveedor = "openai", ModeloSolicitado = "gpt-4o", ModeloRespondido = "gpt-4o-2024-08-06-preview",
+            FechaInicio = new DateTimeOffset(2026, 11, 26, 12, 0, 0, TimeSpan.Zero), TokensEntrada = 10,
+        };
+
+        IaCalculadoraCosto.Calcular(TarifasOtros(), fila).Should().BeNull("solo se recorta una fecha al final del id");
+    }
+
     [Fact]
     public void SinTarifaElCostoEsNullYNoCero()
     {
