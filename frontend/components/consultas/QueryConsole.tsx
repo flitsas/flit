@@ -154,6 +154,8 @@ export function QueryConsole<TRow>({
   // vez que se refresca la cifra, que es todo el rato mientras alguien ajusta los filtros.
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Separado de `error`: las consultas lo limpian en cada ejecución, y el catálogo se carga una sola vez.
+  const [camposError, setCamposError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -209,7 +211,15 @@ export function QueryConsole<TRow>({
     void source
       .fetchFields(controller.signal)
       .then((data) => !controller.signal.aborted && setFields(data))
-      .catch(() => undefined);
+      .catch((e: unknown) => {
+        // Sin el catálogo no hay filtros que ofrecer: se dice por qué, en vez de mostrar un constructor vacío.
+        if (controller.signal.aborted) return;
+        setCamposError(
+          e instanceof Error
+            ? `No se pudieron cargar los campos de filtro: ${e.message}`
+            : "No se pudieron cargar los campos de filtro.",
+        );
+      });
 
     void source
       .fetchSaved(controller.signal)
@@ -606,6 +616,7 @@ export function QueryConsole<TRow>({
           />
         </Section>
 
+        {camposError && <ErrorNotice message={camposError} />}
         {error && <ErrorNotice message={error} />}
         {result && (
           <CoverageNotice
