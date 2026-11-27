@@ -133,8 +133,13 @@ internal static class ExcelLote
 
     /// <summary>
     /// HU #14752 (SP-2): la <see cref="Firma"/> de una copia de las hojas en la que las celdas de <see cref="ColumnasExcel.EnClaro"/> se
-    /// sustituyen (número de documento → «****» + 4 con <see cref="EnmascaradorDocumento"/>; nombre, garantías y detalle de comparendos → «»).
+    /// sustituyen: el número de documento por «****» + 4 (<see cref="EnmascaradorDocumento"/>); el nombre del locatario, las garantías a
+    /// favor, las garantías mobiliarias y el detalle de comparendos del locatario por "" (celda vacía).
     /// Va al encabezado de la huella: ningún dato personal en claro, ni un SHA sin clave de él, entra a la evidencia.
+    /// <para>
+    /// Consecuencia aceptada (contrato-excel §3.5): un cambio solo del nombre (o de una lista) con el mismo documento no cambia esta firma;
+    /// lo detectan la versión del tablero y las celdas de la huella, que suben cuando la consulta que trae ese dato se vuelve a guardar.
+    /// </para>
     /// </summary>
     public static string FirmaHuella(IReadOnlyList<Hoja> hojas)
     {
