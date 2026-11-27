@@ -573,9 +573,14 @@ function ValidacionesLista({
     visible: visibleColumns,
     saving: savingColumns,
     setVisible: setVisibleColumns,
+    order: columnOrder,
+    setOrder: setColumnOrder,
+    reset: resetColumns,
   } = useUiPreferences('identidad.columns', IDENTIDAD_COLUMN_KEYS, { catalog: IDENTIDAD_COLUMN_KEYS });
   const tableColumns = useMemo<IdentidadColumnKey[]>(() => {
-    const elegidas = IDENTIDAD_COLUMN_KEYS.filter((k) => visibleColumns.includes(k));
+    const elegidas = visibleColumns.filter((k): k is IdentidadColumnKey =>
+      (IDENTIDAD_COLUMN_KEYS as readonly string[]).includes(k),
+    );
     return showCompanyColumn ? ['compania', ...elegidas] : elegidas;
   }, [visibleColumns, showCompanyColumn]);
 
@@ -1207,6 +1212,9 @@ function ValidacionesLista({
               columns={IDENTIDAD_COLUMNS.map(({ key, label }) => ({ key, label }))}
               visible={visibleColumns}
               onChange={setVisibleColumns}
+              order={columnOrder}
+              onReorder={setColumnOrder}
+              onReset={resetColumns}
               disabled={savingColumns}
               buttonClassName={controlCls(visibleColumns.length < IDENTIDAD_COLUMN_KEYS.length)}
             />

@@ -252,7 +252,11 @@ export interface BuildTramitesGridLayoutOptions {
  * conocida (preferencia corrupta o vacía), cae a TODAS: nunca se construye una tabla sin columnas.
  */
 function resolveColumns(visibleKeys: readonly string[]): readonly TramitesColumnDef[] {
-  const matched = TRAMITES_COLUMNS.filter((c) => visibleKeys.includes(c.key));
+  // Respeta el orden de `visibleKeys` (orden elegido por el usuario), sin duplicados ni claves ajenas.
+  const matched = visibleKeys
+    .filter((k, i) => visibleKeys.indexOf(k) === i)
+    .map((k) => TRAMITES_COLUMNS.find((c) => c.key === k))
+    .filter((c): c is TramitesColumnDef => c !== undefined);
   return matched.length > 0 ? matched : TRAMITES_COLUMNS;
 }
 

@@ -385,7 +385,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Columna «Marcas»: si el organismo recibe el trámite por Quipux, verás una etiqueta pequeña que dice en qué va: «QX · En cola» (se radica solo, espera la confirmación de Quipux), «QX · Radicado» (ya está en Quipux, esperando la decisión del organismo) o «QX · Falló», en rojo (Quipux no respondió y el trámite sigue en Preparado). Cuando el trámite ya está Aprobado o Rechazado no lleva etiqueta: su estado lo dice. Pasa el ratón sobre la etiqueta para ver qué significa; si tienes acceso a Log QX, un clic te lleva a la trazabilidad del envío.",
           "La estrella marca un trámite como prioritario; el filtro «solo prioritarios» los aísla y, sin orden explícito, van primero.",
           "«Exportar» genera un Excel con TODAS las filas que cumplen los filtros actuales, no solo las de pantalla.",
-          "El selector de columnas te deja elegir qué ver; la elección se guarda por usuario.",
+          "Pulsa «Columnas» para elegir qué ver. Arrastra cada columna por su asa (⋮⋮) para cambiar el orden; con el teclado, ponte en el asa y usa las flechas ↑ y ↓. «Por defecto», arriba en el panel, vuelve a las columnas y al orden de siempre. Todo se guarda solo, por usuario y por tabla: al volver sigues viendo la tabla como la dejaste.",
         ],
       },
       {
@@ -665,6 +665,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Filtra por estado (Aprobadas, En proceso, Rechazadas) desde las tarjetas superiores.",
           "«Vence en ≤ N días» encuentra validaciones cuya vigencia está por expirar: renuévalas antes de reutilizarlas en un trámite.",
           "Desde DR. FLIT: Buscar por cliente → «Ver validación de identidad».",
+          "Pulsa «Columnas» para elegir qué ver. Arrastra cada columna por su asa (⋮⋮) para cambiar el orden; con el teclado, ponte en el asa y usa las flechas ↑ y ↓. «Por defecto», arriba en el panel, vuelve a las columnas y al orden de siempre. Todo se guarda solo, por usuario y por tabla: al volver sigues viendo la tabla como la dejaste.",
         ],
       },
       {
