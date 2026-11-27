@@ -5,9 +5,16 @@ public readonly record struct FurXPlacement(double FontSize, double LeftX, doubl
 /// <summary>
 /// Centra las X de tipo de documento dentro de la casilla del blank (Size del manifiesto).
 /// Con 2–4 copropietarios la altura se divide en franjas iguales, una X por franja.
+/// x/y del manifiesto de una casilla son la esquina superior izquierda de una casilla cuadrada
+/// size×size y su centro debe coincidir con el centro de la casilla impresa. Las proporciones
+/// GlyphWidthRatio=0.771 y CapHeightRatio=0.729 se midieron en DejaVuSans-Bold.ttf (avance de la X
+/// y altura de mayúscula).
 /// </summary>
 public static class FurCheckboxLayout
 {
+    /// <summary>Tamaño de casilla por defecto cuando el manifiesto trae size &lt;= 0.</summary>
+    public const double DefaultBoxSize = 9;
+
     public const double GlyphWidthRatio = 0.771;
 
     public const double CapHeightRatio = 0.729;
@@ -17,7 +24,7 @@ public static class FurCheckboxLayout
     public static IReadOnlyList<FurXPlacement> Place(double x, double y, double size, int count, double singleFontSize)
     {
         var n = Math.Clamp(count, 1, 4);
-        var s = size > 0 ? size : 9;
+        var s = size > 0 ? size : DefaultBoxSize;
         var strip = s / n;
 
         var fontSize = n == 1

@@ -29,7 +29,7 @@ public sealed class FurCheckboxCenteringTests
     public void Place_CentersWithinBoxWithoutOverlap(FurTemplateFormat format, string id, int count)
     {
         var f = FurFieldManifestLoader.LoadEmbedded(format).Fields.Single(x => x.Id == id);
-        var size = f.Size > 0 ? f.Size : 9;
+        var size = f.Size > 0 ? f.Size : FurCheckboxLayout.DefaultBoxSize;
 
         var items = FurCheckboxLayout.Place(f.X, f.Y, size, count, f.FontSize);
 
