@@ -161,6 +161,12 @@ export interface QuerySource<TRow> {
   columnsStorageKey: string;
   /** Prefijo del nombre del archivo exportado. */
   exportPrefix: string;
+  /**
+   * Solo el organismo: su API no trae el máximo de personas por rol, así que el ancho de las columnas por
+   * persona se calcula con las filas del propio lote. Las demás fuentes lo traen; si no lo traen, no se
+   * inventa el ancho.
+   */
+  anchoPorActorDesdeFilas?: boolean;
   /** Cómo se nombra una fila en singular y plural («trámite» / «trámites»). */
   rowNoun: [string, string];
   fetchFields: (signal?: AbortSignal) => Promise<QueryField[]>;

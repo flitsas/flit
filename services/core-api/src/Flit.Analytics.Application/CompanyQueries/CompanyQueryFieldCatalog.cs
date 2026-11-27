@@ -36,6 +36,18 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
     public const string MetodoPago = "metodo_pago";
     public const string TipoTraspaso = "tipo_traspaso";
 
+    /// <summary>Épica #14666 / HU #14699 (A2): ¿firmaron todas las partes? Filtro «es» Sí/No.</summary>
+    public const string FirmadoPorTodas = "firmado_por_todas";
+
+    /// <summary>Épica #14666 / HU #14699 (A2): quién falta por firmar. Solo columna, sin filtro.</summary>
+    public const string FaltaFirmar = "falta_firmar";
+
+    /// <summary>Estado de firma por vendedor (una columna por persona en el Excel). Solo columna.</summary>
+    public const string FirmaVendedor = "firma_vendedor";
+
+    /// <summary>Estado de firma por comprador (una columna por persona en el Excel). Solo columna.</summary>
+    public const string FirmaComprador = "firma_comprador";
+
     /// <summary>
     /// Solo para SuperAdmin en modo «todas las compañías» (<c>ExecuteForSuperAdminAsync</c>).
     /// Se excluye del catálogo que ve una empresa normal (<see cref="CompanyQueryRepository.GetFieldsAsync"/>)
@@ -107,6 +119,13 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
         new("subsanacion", "En subsanación"),
     ];
 
+    private static readonly QueryFieldOptionDto[] FirmasOptions =
+    [
+        new("true", "Completas"),
+        new("false", "Faltan firmas"),
+        new("sin_partes", "Sin partes que firmen"),
+    ];
+
     private static readonly QueryFieldOptionDto[] SiNoOptions =
     [
         new("true", "Sí"),
@@ -134,6 +153,21 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
             "Busca por nombre y también por número de documento.", AdmiteLista: true),
         new(Vendedor, "Vendedor", QueryFieldKind.Texto, GrupoPersonas, TextoOperators, [],
             "Solo los traspasos tienen vendedor; en matrícula inicial no hay.", AdmiteLista: true),
+
+        // HU #14699 — la regla la calcula ITramiteFirmaEvaluator en memoria (ADR-0092), nunca SQL.
+        new(FirmadoPorTodas, "Firmas", QueryFieldKind.Booleano, GrupoPersonas,
+            BooleanoOperators, FirmasOptions,
+            "Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una. Sin partes que firmen: el trámite no tiene a nadie que firme.",
+            AdmiteLista: false),
+        // Sin operadores = solo columna: el normalizador descarta cualquier condición sobre él.
+        new(FaltaFirmar, "Falta firmar", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Nombre y rol de quien aún no ha firmado. Vacío si ya firmaron todos.",
+            AdmiteLista: false),
+        // Una columna por persona en el Excel («Firma vendedor», «Firma vendedor 2»…); solo columna.
+        new(FirmaVendedor, "Firma vendedor", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Firmó, Pendiente o Rechazada, por cada vendedor.", AdmiteLista: false),
+        new(FirmaComprador, "Firma comprador", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Firmó, Pendiente o Rechazada, por cada comprador.", AdmiteLista: false),
 
         // Las opciones las pone el repositorio con los organismos con los que esta empresa tramita.
         new(Organismo, "Organismo de tránsito", QueryFieldKind.Opcion, GrupoTramite,

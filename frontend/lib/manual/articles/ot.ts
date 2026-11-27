@@ -216,6 +216,8 @@ export const OT_ARTICLES: ManualArticle[] = [
       "informe",
       "revisores",
       "consultas personalizadas",
+      "firmado por todas las partes",
+      "falta firmar",
       "programacion y alertas",
     ],
     summary: "Cinco pestañas para mirar tu operación como organismo: la cola de ahora, por qué rechazas, qué recibiste, qué hizo cada revisor y tu propia consulta.",
@@ -253,6 +255,27 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "4. Buenas prácticas",
         paragraphs: [
           "Usa los mismos filtros de fecha que usarías en auditorías internas. Si un número no cuadra, cruza con la bandeja: los reportes se calculan con los mismos estados que ves ahí.",
+        ],
+      },
+      {
+        id: "consultas-firma",
+        title: "5. Consultas personalizadas: saber quién falta por firmar",
+        paragraphs: [
+          "En la pestaña «Consultas personalizadas» ves, trámite por trámite, quién ya firmó y quién falta. La columna «Firmas» muestra el resumen «N de M»: cuántas partes que deben firmar ya firmaron, de cuántas en total.",
+        ],
+        bullets: [
+          "Paso 1. Pulsa «+ Filtro», busca el grupo «Personas» y elige «Firmas».",
+          "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, «Faltan firmas» para ver los que tienen al menos una parte pendiente, o «Sin partes que firmen» para los que no tienen a nadie que deba firmar. Pulsa «Aplicar»; la tabla y el contador cambian.",
+          "Paso 3. Sin filtro, la columna «Firmas» muestra el resumen del trámite («2 de 3 · Faltan firmas») y, debajo, una línea por persona con su estado: Firmó, Pendiente, Rechazada, Expirada o Sin validar. Si el trámite no tiene partes que deban firmar, dice «Sin partes que firmen».",
+          "Paso 4. Para ver cada parte en su propia columna, abre el selector de columnas y activa «Firma comprador» y «Firma vendedor».",
+          "Paso 5. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro y las columnas que dejaste visibles.",
+          "Paso 6. Pulsa «Exportar a Excel»: el archivo trae las mismas columnas y los mismos valores que ves en la tabla.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Las columnas de firma se calculan al ejecutar la consulta. Si una consulta no las trae, la celda muestra «—». Las consultas guardadas antes de este cambio funcionan igual que siempre; puedes agregarles la columna «Firmas» después.",
+          },
         ],
       },
     ],

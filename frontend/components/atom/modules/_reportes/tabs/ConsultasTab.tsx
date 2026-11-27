@@ -33,6 +33,7 @@ import {
   defaultCompanyQueryColumns,
   estadoEmpresa,
 } from "../consultas/company-columns";
+import { FirmasCell } from "@/components/consultas/firmas";
 import { renderCeldaIdentidad } from "../consultas/ActoresValidacionCell";
 
 export interface ConsultasTabProps {
@@ -138,6 +139,8 @@ export function ConsultasTab({
             >
               {estadoEmpresa(fila.status).label}
             </span>
+          ) : columnId === "firmado_por_todas" ? (
+            <FirmasCell fila={fila} />
           ) : (
             renderCeldaIdentidad(columnId, fila)
           )
@@ -162,6 +165,8 @@ export function ConsultasTab({
           >
             {estadoEmpresa(fila.status).label}
           </span>
+        ) : columnId === "firmado_por_todas" ? (
+          <FirmasCell fila={fila} />
         ) : (
           renderCeldaIdentidad(columnId, fila)
         )

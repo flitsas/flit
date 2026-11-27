@@ -12,6 +12,7 @@ import {
   type ColumnPreset,
   type DataColumn,
 } from "@/components/consultas/columns";
+import { columnasDeFirma } from "@/components/consultas/firmas";
 import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow, MaxActoresPorRol } from "@/lib/api/company-queries";
 import {
@@ -241,6 +242,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   },
   ...columnasDelRol("comprador"),
   ...columnasDelRol("vendedor"),
+  ...columnasDeFirma<CompanyQueryRow>(GRUPO_PERSONAS),
   {
     id: "prenda",
     label: "Prenda",

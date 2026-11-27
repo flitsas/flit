@@ -49,6 +49,13 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
     public const string Prioritario = OtQueryFieldCatalog.Prioritario;
     public const string Prenda = OtQueryFieldCatalog.Prenda;
 
+    /// <summary>HU #14700 (A3): mismo id y misma ayuda que en Consultas del organismo y del gestor.</summary>
+    public const string FirmadoPorTodas = OtQueryFieldCatalog.FirmadoPorTodas;
+
+    public const string FaltaFirmar = OtQueryFieldCatalog.FaltaFirmar;
+    public const string FirmaVendedor = OtQueryFieldCatalog.FirmaVendedor;
+    public const string FirmaComprador = OtQueryFieldCatalog.FirmaComprador;
+
     /// <summary>Quién radicó el trámite en la empresa cliente. La bandeja ya lo muestra en su tabla.</summary>
     public const string Gestor = "gestor";
 
@@ -137,6 +144,9 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
             SiNoOptions,
             "Los que llevan un gravamen vigente y también los trámites que SON de prenda "
             + "(inscribir, levantar, cambio de acreedor).", AdmiteLista: false),
+
+        // HU #14700 — la misma definición que Consultas (ayuda incluida): ver OtQueryFieldCatalog.CamposFirma.
+        .. OtQueryFieldCatalog.CamposFirma,
     ];
 
     // ── IQueryFieldCatalog ────────────────────────────────────────────────────────────────────
