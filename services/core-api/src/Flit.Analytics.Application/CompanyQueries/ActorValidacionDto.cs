@@ -20,7 +20,10 @@ public sealed record ActorValidacionDto(
     string? Documento,
     string EstadoValidacion,
     string? MotivoRechazo,
-    int Intentos);
+    int Intentos,
+    /// <summary>Texto de la firma («Firmó», «Pendiente», «Rechazada»…); <c>null</c> si el actor no firma o no se calculó.</summary>
+    string? EstadoFirma = null,
+    DateTimeOffset? FechaFirma = null);
 
 /// <summary>Máximo de actores por rol sobre TODO el filtro (no solo la página); define el ancho del Excel.</summary>
 public readonly record struct MaxActoresPorRolDto(int Comprador, int Vendedor, int Propietario);

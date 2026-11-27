@@ -1,0 +1,17 @@
+<!-- nombre: Documento del comparendo al conductor (Renting) -->
+<!-- asunto: Documento de la fotomulta N° {{comparendo.numero}} asociada al vehículo con placa {{comparendo.placa}} -->
+<p style="margin:0 0 12px">Hola, <strong>{{conductor.nombres}}</strong>. Recibe un cordial saludo.</p>
+<p style="margin:0 0 12px"><strong>Renting Colombia</strong> {{#si evidencia.reemplazo}}actualizó el documento{{#sino}}recibió el documento{{/si}} de la fotomulta en asunto y lo adjunta a este correo como evidencia.</p>
+<p style="margin:25px 0 10px;font-weight:bold">Información del comparendo:</p>
+<ul style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px"><strong>Organismo de tránsito:</strong> {{ot.nombre}}</li>
+<li style="margin-bottom:6px"><strong>Placa:</strong> {{comparendo.placa}}</li>
+<li style="margin-bottom:6px"><strong>Número de comparendo:</strong> {{comparendo.numero}}</li>
+<li style="margin-bottom:6px"><strong>Código de Infracción:</strong> {{comparendo.codigo_infraccion}} {{comparendo.descripcion_infraccion}}.</li>
+<li style="margin-bottom:6px"><strong>Fecha de infracción:</strong> {{comparendo.fecha_imposicion}}</li>
+<li style="margin-bottom:6px"><strong>Valor:</strong> {{comparendo.valor_total}}</li>
+<li style="margin-bottom:6px"><strong>Cliente:</strong> {{conductor.nombres}}</li>
+</ul>
+<p style="margin:0 0 12px">Si tienes alguna pregunta, por favor escríbenos a <strong><a href="mailto:tramitesvehiculos@rentingcolombia.com">tramitesvehiculos@rentingcolombia.com</a></strong>.</p>
+<p style="margin:0 0 12px">Si ya has resuelto este asunto, por favor hacer caso omiso a este mensaje.</p>
+<p style="margin:0 0 12px;font-size:13px;color:#555555">Saludos.</p>

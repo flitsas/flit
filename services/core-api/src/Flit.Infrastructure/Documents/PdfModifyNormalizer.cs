@@ -210,23 +210,43 @@ internal static class PdfModifyNormalizer
         }
     }
 
-    internal static bool IsRecoverablePdfException(Exception ex) =>
-        ex is PdfReaderException
-            or InvalidOperationException
-            or IOException
-            or ArgumentException
-            or NotSupportedException
-            or FormatException;
+    /// <summary>
+    /// Excepciones de PdfSharp / filtros ZIP que el consolidador debe absorber (N1/N2/PDFium/placeholder)
+    /// en vez de tumbar el merge con 500. Incluye <c>ICSharpCode.SharpZipLib.SharpZipBaseException</c>
+    /// (p. ej. <c>Unexpected EOF</c> en PDFs linearizados mal empaquetados, caso FT2-0000781) y su
+    /// cadena <see cref="Exception.InnerException"/>.
+    /// </summary>
+    internal static bool IsRecoverablePdfException(Exception ex)
+    {
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            if (cur is PdfReaderException
+                or InvalidOperationException
+                or IOException
+                or ArgumentException
+                or NotSupportedException
+                or FormatException)
+                return true;
+
+            // PdfSharpCore descomprime streams con SharpZipLib; ese fallo no es PdfReaderException.
+            var ns = cur.GetType().Namespace;
+            if (ns is not null
+                && ns.StartsWith("ICSharpCode.SharpZipLib", StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>DllNotFound / BadImageFormat / TypeLoad al cargar libpdfium o Skia en Alpine/musl.</summary>
-    private static bool IsNativePdfiumFailure(Exception ex) =>
+    internal static bool IsNativePdfiumFailure(Exception ex) =>
         ex is DllNotFoundException
             or BadImageFormatException
             or TypeLoadException
             or EntryPointNotFoundException;
 
     /// <summary>Excepciones del paquete PDFtoImage (PdfInvalidFormatException, etc.).</summary>
-    private static bool IsPdfiumLibraryException(Exception ex)
+    internal static bool IsPdfiumLibraryException(Exception ex)
     {
         for (var cur = ex; cur is not null; cur = cur.InnerException)
         {

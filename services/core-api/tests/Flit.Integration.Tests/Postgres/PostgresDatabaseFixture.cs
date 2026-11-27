@@ -82,6 +82,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // Contrato ia-consumo v1 (ADR-0090, DDL 202): tarifas de Anthropic por modelo, sin tenant ni FK; el costo estimado
         // del registro de consumo de IA las lee.
         "admin.ia_tarifa_modelo",
+        // Configuración global de rondas de identidad (fila única sembrada por la migración 205).
+        "admin.identity_rounds_config",
     };
 
     /// <summary>
@@ -212,10 +214,27 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         return BuildContext();
     }
 
-    private FlitDbContext BuildContext()
+    /// <summary>
+    /// Igual que <see cref="CreateDbContext"/> pero CON <c>EnableRetryOnFailure</c>, como el contexto de
+    /// producto. Sirve para afirmar que el código abre sus transacciones dentro de la estrategia de
+    /// ejecución (Bug #14714: una transacción manual fuera de ella lanza InvalidOperationException).
+    /// </summary>
+    public FlitDbContext CreateRetryingDbContext()
+    {
+        EnsureInitialized();
+        return BuildContext(retry: true);
+    }
+
+    private FlitDbContext BuildContext(bool retry = false)
     {
         var options = new DbContextOptionsBuilder<FlitDbContext>()
-            .UseNpgsql(ConnectionString)
+            .UseNpgsql(ConnectionString, npgsql =>
+            {
+                if (retry)
+                {
+                    npgsql.EnableRetryOnFailure();
+                }
+            })
             .UseSnakeCaseNamingConvention()
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;

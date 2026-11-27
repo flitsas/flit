@@ -111,6 +111,21 @@ public sealed class KyverumVerifyClientTests
     }
 
     [Fact]
+    public async Task GetStatus_RechazoConIntentosAgotados_ExponeIntentosYTope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK,
+            """{"id":"kyv_1","status":"rechazado","result":{"aprobado":false,"closedAt":"2026-11-25T16:37:52Z"},"subjects":[{"rol":"titular","status":"rechazado","intentos":3,"maxIntentos":3,"intentosRestantes":0,"motivo":"documento no legible"}]}"""));
+
+        var result = await Client(handler).GetStatusAsync("kyv_1", "titular", ct);
+
+        result.Should().NotBeNull();
+        result!.Status.Should().Be("rechazado");
+        result.Intentos.Should().Be(3);
+        result.MaxIntentos.Should().Be(3);
+    }
+
+    [Fact]
     public async Task GetStatus_Approved_ReturnsStatusAndScore()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -197,6 +212,123 @@ public sealed class KyverumVerifyClientTests
         var act = async () => await Client(handler).GetStatusAsync("kyv_1", null, ct);
 
         (await act.Should().ThrowAsync<KyverumVerifyException>()).Which.Transient.Should().BeTrue();
+    }
+
+    // ── Reenvío (POST .../subjects/{subjectId}/reissue) ─────────────────────────
+
+    private const string EstadoConSujeto =
+        """{"status":"enviado","subjects":[{"id":"sub_1","rol":"titular","status":"enviado"}]}""";
+
+    [Fact]
+    public async Task Reissue_ObtieneSujetoYDevuelveEnlaceNuevo_SinTocarLaVerificacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) => req.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, EstadoConSujeto)
+            : Json(HttpStatusCode.OK, """{"subjectId":"sub_1","captureUrl":"https://verify.kyverum.test/session/s2?t=new","enviado":true,"tieneEmail":true}"""));
+
+        var result = await Client(handler).ReissueAsync("kyv_1", ct);
+
+        result.Outcome.Should().Be(KyverumReissueOutcome.Reemitido);
+        result.CaptureUrl.Should().Be("https://verify.kyverum.test/session/s2?t=new");
+        result.Enviado.Should().BeTrue("Kyverum confirmó que el correo salió o quedó en cola");
+        // La última llamada es el POST de reissue sobre el sujeto de la validación existente (no un create).
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/v1/validations/kyv_1/subjects/sub_1/reissue");
+        handler.LastRequest!.Headers.Authorization!.Parameter.Should().Be("secret-key");
+        // enviarCorreo: true ⇒ Kyverum manda el enlace al correo ya registrado.
+        handler.LastBody.Should().Contain("\"enviarCorreo\":true");
+    }
+
+    [Fact]
+    public async Task Reissue_SinCorreoEnviado_DevuelveEnlacePeroNoConfirmaElEnvio()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) => req.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, EstadoConSujeto)
+            : Json(HttpStatusCode.OK, """{"subjectId":"sub_1","captureUrl":"https://verify.kyverum.test/session/s3?t=new","enviado":false,"tieneEmail":false}"""));
+
+        var result = await Client(handler).ReissueAsync("kyv_1", ct);
+
+        result.Outcome.Should().Be(KyverumReissueOutcome.Reemitido);
+        result.CaptureUrl.Should().Be("https://verify.kyverum.test/session/s3?t=new");
+        result.Enviado.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reissue_SiYaEstaAprobada_NoReenvia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK,
+            """{"status":"aprobado","result":{"aprobado":true,"closedAt":"2026-11-24T10:00:00Z"},"subjects":[{"id":"sub_1","status":"aprobado"}]}"""));
+
+        var result = await Client(handler).ReissueAsync("kyv_1", ct);
+
+        result.Outcome.Should().Be(KyverumReissueOutcome.Aprobada);
+        // Solo la consulta de estado: nunca se llega al POST.
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
+    }
+
+    [Fact]
+    public async Task Reissue_Conflicto409_EsAprobadaEnElPostSinLanzar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) => req.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, EstadoConSujeto)
+            : Json(HttpStatusCode.Conflict, "{}"));
+
+        var result = await Client(handler).ReissueAsync("kyv_1", ct);
+
+        result.Outcome.Should().Be(KyverumReissueOutcome.Aprobada);
+    }
+
+    [Fact]
+    public async Task Reissue_ValidacionDesconocida404_EsNoExiste()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.NotFound, "{}"));
+
+        var result = await Client(handler).ReissueAsync("kyv_gone", ct);
+
+        result.Outcome.Should().Be(KyverumReissueOutcome.NoExiste);
+        result.CaptureUrl.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Reissue_5xxEnElPost_EsTransitorio()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) => req.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, EstadoConSujeto)
+            : Json(HttpStatusCode.ServiceUnavailable, "{}"));
+
+        var act = async () => await Client(handler).ReissueAsync("kyv_1", ct);
+
+        (await act.Should().ThrowAsync<KyverumVerifyException>()).Which.Transient.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reissue_4xxEnElPost_EsDefinitivo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) => req.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, EstadoConSujeto)
+            : Json(HttpStatusCode.BadRequest, "{}"));
+
+        var act = async () => await Client(handler).ReissueAsync("kyv_1", ct);
+
+        (await act.Should().ThrowAsync<KyverumVerifyException>()).Which.Transient.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reissue_SinSujetoEnLaRespuesta_EsDefinitivo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK, """{"status":"enviado","subjects":[]}"""));
+
+        var act = async () => await Client(handler).ReissueAsync("kyv_1", ct);
+
+        (await act.Should().ThrowAsync<KyverumVerifyException>()).Which.Transient.Should().BeFalse();
     }
 
     private static HttpResponseMessage Json(HttpStatusCode code, string body) =>

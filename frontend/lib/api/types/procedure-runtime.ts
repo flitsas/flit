@@ -281,6 +281,13 @@ export interface InstanceSummary {
    */
   multiplesPropietarios?: boolean;
   /**
+   * En qué punto del canal Quipux está el trámite. Nulo o ausente: no va por Quipux (o backend
+   * anterior al campo). La columna «Marcas» lo pinta como píldora con texto.
+   */
+  quipuxEstado?: 'en_cola' | 'radicado' | 'fallido' | 'rechazado' | 'aprobado' | null;
+  /** Id del último envío Quipux del trámite (trazabilidad en `/log-qx/{id}`). Nulo: aún sin envío. */
+  quipuxEnvioId?: string | null;
+  /**
    * ADR-0053 — todos los propietarios de cada lado, principal primero, con la acreditación de CADA
    * persona. `vendedorNombre`/`compradorNombre` traen solo al principal; con copropietarios la celda
    * ofrece un desplegable con esta lista. Ausentes en backends anteriores al campo: la celda cae al
@@ -1864,7 +1871,7 @@ export interface IdentityAuditEvent {
   // puntual: a diferencia de BiometricValidation.rejectionReason (que la siguiente captura borra),
   // este queda fijo en la bitácora. Ya es texto seguro, se ve igual para todos.
   rejectionReasonLabel?: string | null;
-  /** Quién aprobó/rechazó (solo manual_aprobado/manual_rechazado y solo para el Super Admin FLIT). */
+  /** Quién activó (manual_activado) o aprobó/rechazó (manual_aprobado/manual_rechazado); solo para el Super Admin FLIT. */
   revisor?: { name: string | null; email: string | null; role: string | null } | null;
 }
 

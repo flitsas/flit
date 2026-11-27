@@ -173,6 +173,7 @@ describe("catálogo de Trámites", () => {
       "Mensajes muertos",
       "Descarga masiva",
       "Overrides persona RUNT",
+      "Rondas de identidad",
       "Banners",
       "Persona Natural",
     ]);
@@ -282,5 +283,24 @@ describe("Bug #13445 — permisos del contenedor ICT", () => {
 
   it("sin slugs no hay contenedor ICT", () => {
     expect(ictChildren({})).toBeUndefined();
+  });
+});
+
+describe("Rondas de identidad (configuración global)", () => {
+  it("solo SuperAdmin ve «Rondas de identidad» y apunta a su pantalla; AdminCompany y OT no la ven", () => {
+    const keys = (v: Partial<NavViewer>, ctx: Partial<TramitesNavContext> = {}) =>
+      dock(ctx, v).flatMap((g) => g.items.flatMap((i) => [i.key, ...(i.children?.map((c) => c.key) ?? [])]));
+    const plataforma = dock({}, { isSuperAdmin: true })
+      .find((g) => g.id === "administradores")
+      ?.items.find((i) => i.key === "admin-plataforma");
+    expect(plataforma?.children?.find((c) => c.key === "admin-rondas-identidad")?.href).toBe(
+      "/admin/plataforma/rondas-identidad",
+    );
+    expect(keys({ roles: ["AdminCompany"], permissions: ["banners.manage"] }, { isAdminCompany: true })).not.toContain(
+      "admin-rondas-identidad",
+    );
+    expect(
+      keys({ roles: ["ot_admin"], modules: ["tramites"] }, { isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" }),
+    ).not.toContain("admin-rondas-identidad");
   });
 });

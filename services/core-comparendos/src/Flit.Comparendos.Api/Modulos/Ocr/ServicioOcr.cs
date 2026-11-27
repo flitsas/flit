@@ -17,6 +17,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Comparendos.Api.Modulos.Ocr;
 
+/// <summary>
+/// GDC-EVID §9: un duplicado de comparendo del paquete visto por «Asociar los N». <c>Revision</c> null = entra al lote;
+/// «reemplazo» = el comparendo ya tiene documento (cola de reemplazos); «numeroDistinto» = el número leído no coincide a la
+/// vista con el del sistema (revisión uno por uno).
+/// </summary>
+public sealed record DocumentoEnLote(Guid DocumentoId, string NombreArchivo, Guid ArchivoId, Guid ComparendoId, string Numero, string? Revision)
+{
+    public const string Reemplazo = "reemplazo";
+    public const string NumeroDistinto = "numeroDistinto";
+}
+
+/// <summary>Resultado de asociar un documento a un comparendo que ya existía (<c>Reemplazo</c>: había otro documento y se cambió).</summary>
+public sealed record Asociacion(Guid ComparendoId, string Numero, bool Reemplazo, bool YaAsociado = false);
+
 /// <summary>Resultado de registrar un documento: el comparendo creado y la oferta de monitorear la placa (RN-062).</summary>
 public sealed record Registro(Guid DocumentoId, Guid ComparendoId, string Numero, string? Placa, bool PlacaYaMonitoreada, TipoIngreso TipoIngreso);
 
@@ -44,7 +58,7 @@ public sealed partial class ServicioOcr(
     public const string MotivoConfirmacionNumero = "Número confirmado por el operador";
     public static readonly string[] Formatos = ["application/pdf", "image/jpeg", "image/png", "image/tiff"];
     private static readonly TimeSpan[] Esperas = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(45)];
-    private static readonly EstadoDocumentoOcr[] Finales = [EstadoDocumentoOcr.Registrado, EstadoDocumentoOcr.Descartado, EstadoDocumentoOcr.Duplicado];
+    private static readonly EstadoDocumentoOcr[] Finales = [EstadoDocumentoOcr.Registrado, EstadoDocumentoOcr.Descartado, EstadoDocumentoOcr.Duplicado, EstadoDocumentoOcr.Asociado];
 
     public async Task<PaqueteOcr> CrearPaqueteAsync(Guid tenant, string? nombre, IReadOnlyList<IFormFile> lista, Guid usuario, CancellationToken ct, string? usuarioNombre = null)
     {
@@ -143,7 +157,7 @@ public sealed partial class ServicioOcr(
         var mismoArchivo = await (from d in db.DocumentosOcr.AsNoTracking()
                                   join f in db.Archivos.AsNoTracking() on d.ArchivoId equals f.Id
                                   where d.TenantId == doc.TenantId && d.Id != doc.Id && f.Sha256 == a.Archivo.Sha256
-                                      && (d.Estado == EstadoDocumentoOcr.Completo || d.Estado == EstadoDocumentoOcr.Incompleto || d.Estado == EstadoDocumentoOcr.Registrado)
+                                      && (d.Estado == EstadoDocumentoOcr.Completo || d.Estado == EstadoDocumentoOcr.Incompleto || d.Estado == EstadoDocumentoOcr.Registrado || d.Estado == EstadoDocumentoOcr.Asociado)
                                   orderby d.Id
                                   select d.Id).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (mismoArchivo != Guid.Empty)
@@ -348,8 +362,10 @@ public sealed partial class ServicioOcr(
         p.CantidadIncompletos = C(EstadoDocumentoOcr.Incompleto);
         p.CantidadFallidos = C(EstadoDocumentoOcr.Fallido);
         p.CantidadDuplicados = C(EstadoDocumentoOcr.Duplicado);
+        p.CantidadPorAsociar = C(EstadoDocumentoOcr.PorAsociar);
         p.CantidadRegistrados = C(EstadoDocumentoOcr.Registrado);
         p.CantidadDescartados = C(EstadoDocumentoOcr.Descartado);
+        p.CantidadAsociados = C(EstadoDocumentoOcr.Asociado);
         if (p.Estado == EstadoPaqueteOcr.EnProcesamiento && p.CantidadPendientes == 0)
             p.Estado = p.CantidadFallidos > 0 ? EstadoPaqueteOcr.ProcesadoConErrores : EstadoPaqueteOcr.Procesado;
         if (p.Estado is EstadoPaqueteOcr.Procesado or EstadoPaqueteOcr.ProcesadoConErrores
@@ -364,6 +380,7 @@ public sealed partial class ServicioOcr(
     public async Task CorregirAsync(DocumentoOcr doc, IReadOnlyDictionary<string, string?> cambios, string? motivo, Guid usuario, CancellationToken ct, string? usuarioNombre = null)
     {
         ArgumentNullException.ThrowIfNull(doc);
+        ExigirNoEnAsociacion(doc);
         ArgumentNullException.ThrowIfNull(cambios);
         if (doc.Estado is not (EstadoDocumentoOcr.Completo or EstadoDocumentoOcr.Incompleto or EstadoDocumentoOcr.Duplicado))
             throw ReglaException.Conflicto("DOCUMENTO_NO_EDITABLE", doc.Estado == EstadoDocumentoOcr.Registrado
@@ -415,6 +432,7 @@ public sealed partial class ServicioOcr(
     public async Task<Registro> RegistrarAsync(DocumentoOcr doc, Actor actor, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(doc);
+        ExigirNoEnAsociacion(doc);
         ArgumentNullException.ThrowIfNull(actor);
         var campos = await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ToListAsync(ct).ConfigureAwait(false);
         // GDC punto 6: el NIT con el dígito equivocado deja el documento incompleto; se responde con el motivo exacto.
@@ -445,7 +463,8 @@ public sealed partial class ServicioOcr(
         var imposicion = ValoresOcr.Fecha(V(CamposOcr.FechaInfraccion));
         var item = new ItemFuente
         {
-            Numero = V(CamposOcr.Numero)!,
+            // GDC-ASOC §8: sin la letra inicial (misma regla que la llave); lo leído queda intacto en los campos del documento.
+            Numero = NumeroComparendo.ParaGuardar(V(CamposOcr.Numero)) ?? V(CamposOcr.Numero)!,
             Placa = V(CamposOcr.Placa),
             TipoDocumentoInfractor = ValoresOcr.Documento(V(CamposOcr.TipoDocumento)),
             NumeroDocumentoInfractor = EsNit(campos) ? Nit.Normalizar(V(CamposOcr.NumeroDocumento)) ?? V(CamposOcr.NumeroDocumento) : V(CamposOcr.NumeroDocumento),
@@ -566,13 +585,167 @@ public sealed partial class ServicioOcr(
     public async Task DescartarAsync(DocumentoOcr doc, string? motivo, Guid usuario, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(doc);
-        if (doc.Estado is EstadoDocumentoOcr.Registrado or EstadoDocumentoOcr.Descartado or EstadoDocumentoOcr.EnProcesamiento or EstadoDocumentoOcr.Pendiente)
+        ExigirNoEnAsociacion(doc);
+        if (doc.Estado is EstadoDocumentoOcr.Registrado or EstadoDocumentoOcr.Asociado or EstadoDocumentoOcr.Descartado or EstadoDocumentoOcr.EnProcesamiento or EstadoDocumentoOcr.Pendiente)
             throw ReglaException.Conflicto("DOCUMENTO_NO_DESCARTABLE", "Este documento no se puede descartar en su estado actual.");
         if (string.IsNullOrWhiteSpace(motivo))
             throw new ReglaException("MOTIVO_REQUERIDO", "Indica el motivo del descarte.");
         (doc.Estado, doc.DescartadoPor, doc.MotivoDescarte) = (EstadoDocumentoOcr.Descartado, usuario, motivo.Trim().Length > 500 ? motivo.Trim()[..500] : motivo.Trim());
         var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
         await CerrarProcesoAsync(paquete, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Por qué un documento no se puede asociar a un comparendo, o null si se puede. Solo el duplicado de un comparendo que
+    /// ya existe se asocia: el mismo archivo ya cargado o el choque contra otro documento no.
+    /// </summary>
+    /// <summary>
+    /// GDC-EVID §9: LA preselección de «Asociar los N», usada por la vista previa, por el endpoint y por el flag <c>revision</c>
+    /// del listado. Solo duplicados asociables (<see cref="MotivoNoAsociable"/>) contra un comparendo de la misma empresa.
+    /// Con documento previo va a la cola de reemplazos (aunque además difiera el número: el reemplazo ya se revisa uno a uno).
+    /// </summary>
+    public async Task<IReadOnlyList<DocumentoEnLote>> ClasificarLoteAsync(PaqueteOcr paquete, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(paquete);
+        // Solo las columnas que decide la regla (no la respuesta del lector, que pesa): corre también en cada GET del paquete.
+        var docs = await db.DocumentosOcr.AsNoTracking()
+            .Where(d => d.PaqueteId == paquete.Id && d.TenantId == paquete.TenantId && d.DuplicadoDeComparendoId != null
+                && (d.Estado == EstadoDocumentoOcr.Duplicado || d.Estado == EstadoDocumentoOcr.PorAsociar))
+            .OrderBy(d => d.Id)
+            .Select(d => new DocumentoOcr
+            {
+                Id = d.Id, TenantId = d.TenantId, PaqueteId = d.PaqueteId, NombreArchivo = d.NombreArchivo, ArchivoId = d.ArchivoId, Estado = d.Estado,
+                FuenteDuplicado = d.FuenteDuplicado, DuplicadoDeComparendoId = d.DuplicadoDeComparendoId, NumeroComparendoExtraido = d.NumeroComparendoExtraido,
+            })
+            .ToListAsync(ct).ConfigureAwait(false);
+        // Los que ya están en un lote en curso no se vuelven a ofrecer, pero su comparendo cuenta como «tomado»: otro escaneado del
+        // mismo comparendo sería un reemplazo, no otro asociable.
+        var enCurso = docs.Where(d => d.Estado == EstadoDocumentoOcr.PorAsociar).Select(d => d.DuplicadoDeComparendoId!.Value).ToHashSet();
+        docs = docs.Where(d => d.Estado == EstadoDocumentoOcr.Duplicado && MotivoNoAsociable(d) is null).ToList();
+        var ids = docs.Select(d => d.DuplicadoDeComparendoId!.Value).Distinct().ToList();
+        var comparendos = await db.Comparendos.AsNoTracking().Where(c => c.TenantId == paquete.TenantId && ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.Numero, c.ArchivoEvidenciaId }).ToDictionaryAsync(c => c.Id, ct).ConfigureAwait(false);
+        var lista = new List<DocumentoEnLote>();
+        var tomados = new HashSet<Guid>(enCurso);
+        foreach (var d in docs)
+        {
+            if (!comparendos.TryGetValue(d.DuplicadoDeComparendoId!.Value, out var c))
+                continue;
+            // Dos escaneados del mismo comparendo en el paquete: el primero entra; el otro ya sería un reemplazo (se revisa uno a uno).
+            var revision = c.ArchivoEvidenciaId is not null || tomados.Contains(c.Id) ? DocumentoEnLote.Reemplazo
+                : NumeroComparendo.DifiereALaVista(d.NumeroComparendoExtraido, c.Numero) ? DocumentoEnLote.NumeroDistinto
+                : null;
+            if (revision is null)
+                tomados.Add(c.Id);
+            lista.Add(new DocumentoEnLote(d.Id, d.NombreArchivo, d.ArchivoId, c.Id, c.Numero, revision));
+        }
+
+        return lista;
+    }
+
+    /// <summary>GDC-EVID §10: el texto del 409 de un documento que el lote está asociando en segundo plano.</summary>
+    public const string MotivoEnAsociacion = "Este documento se está asociando en segundo plano; espera a que termine.";
+
+    /// <summary>GDC-EVID §10: un documento PorAsociar no se toca a mano (asociar, corregir, descartar, reprocesar, registrar).</summary>
+    public static void ExigirNoEnAsociacion(DocumentoOcr doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc.Estado == EstadoDocumentoOcr.PorAsociar)
+            throw ReglaException.Conflicto("EN_ASOCIACION", MotivoEnAsociacion);
+    }
+
+    /// <param name="desdeLote">Solo el trabajador de «Asociar los N»: un documento PorAsociar cuenta como duplicado asociable.</param>
+    public static string? MotivoNoAsociable(DocumentoOcr doc, bool desdeLote = false)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc.Estado == EstadoDocumentoOcr.PorAsociar && !desdeLote)
+            return MotivoEnAsociacion;
+        if (doc.Estado == EstadoDocumentoOcr.Asociado)
+            return "Este documento ya se asoció al comparendo.";
+        if (doc.Estado != EstadoDocumentoOcr.Duplicado && !(desdeLote && doc.Estado == EstadoDocumentoOcr.PorAsociar))
+            return "Solo se asocian los documentos cuyo comparendo ya existe.";
+        if (doc.FuenteDuplicado == "ARCHIVO")
+            return "Este archivo ya se había cargado: no se puede asociar de nuevo.";
+        return doc.DuplicadoDeComparendoId is null
+            ? "El comparendo todavía no existe: este número está en otro documento escaneado que aún no se registra."
+            : null;
+    }
+
+    /// <summary>
+    /// GDC-ASOC: asocia el documento escaneado a un comparendo que ya existía (el de la fuente manda: solo se agrega el
+    /// archivo). <paramref name="evidenciaVista"/> es el documento que el operador vio en el comparendo; si otro usuario lo
+    /// cambió entretanto se rechaza. El comparendo no tiene token de concurrencia, así que la escritura es condicional.
+    /// </summary>
+    /// <param name="desdeLote">Solo el trabajador de «Asociar los N» (§10): permite el estado PorAsociar.</param>
+    public async Task<Asociacion> AsociarAsync(DocumentoOcr doc, bool reemplazar, Guid? evidenciaVista, Actor actor, CancellationToken ct, bool desdeLote = false)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(actor);
+        if (!desdeLote)
+            ExigirNoEnAsociacion(doc);
+        if (doc is { Estado: EstadoDocumentoOcr.Asociado, ComparendoId: { } ya })
+        {
+            var numeroYa = await db.Comparendos.AsNoTracking().Where(c => c.Id == ya && c.TenantId == doc.TenantId).Select(c => c.Numero).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            return new Asociacion(ya, numeroYa ?? string.Empty, false, YaAsociado: true);
+        }
+
+        if (MotivoNoAsociable(doc, desdeLote) is { } motivo)
+            throw ReglaException.Conflicto("NO_ASOCIABLE", motivo);
+
+        // Como al registrar: el comparendo pudo cambiar desde que se leyó el documento.
+        var campos = await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ToListAsync(ct).ConfigureAwait(false);
+        await EvaluarAsync(doc, campos, ct).ConfigureAwait(false);
+        if (MotivoNoAsociable(doc, desdeLote) is { } cambio)
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            throw ReglaException.Conflicto("NO_ASOCIABLE", cambio);
+        }
+
+        var comparendoId = doc.DuplicadoDeComparendoId!.Value;
+        var comparendo = await db.Comparendos.FirstOrDefaultAsync(c => c.Id == comparendoId && c.TenantId == doc.TenantId, ct).ConfigureAwait(false)
+            ?? throw ReglaException.Conflicto("NO_ASOCIABLE", "El comparendo ya no existe.");
+        var actual = comparendo.ArchivoEvidenciaId;
+        if (actual != evidenciaVista)
+            throw ReglaException.Conflicto("EVIDENCIA_CAMBIO", "Otra persona cambió el documento del comparendo mientras lo revisabas. Vuelve a abrirlo para compararlos.");
+        if (actual is not null && !reemplazar)
+            throw ReglaException.Conflicto("EVIDENCIA_EXISTENTE", "El comparendo ya tiene un documento: elige si lo reemplazas o descartas este.");
+
+        var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
+        var anterior = actual is { } id ? await db.Archivos.AsNoTracking().Where(a => a.Id == id && a.TenantId == doc.TenantId).Select(a => a.NombreOriginal).FirstOrDefaultAsync(ct).ConfigureAwait(false) : null;
+        var ahora = reloj.Ahora;
+        var hayReemplazo = actual is not null;
+        TimelineEvento? previo = null;
+
+        // Transacción corta y sin file-manager adentro: el archivo ya está guardado (lo subió el paquete).
+        var terminado = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            if (previo is not null)
+                db.Entry(previo).State = EntityState.Detached;
+            await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            var archivoId = doc.ArchivoId;
+            var escrito = await db.Comparendos.Where(c => c.Id == comparendoId && c.TenantId == doc.TenantId && c.ArchivoEvidenciaId == evidenciaVista)
+                .ExecuteUpdateAsync(u => u.SetProperty(c => c.ArchivoEvidenciaId, archivoId), ct).ConfigureAwait(false);
+            if (escrito == 0)
+                throw ReglaException.Conflicto("EVIDENCIA_CAMBIO", "Otra persona cambió el documento del comparendo mientras lo revisabas. Vuelve a abrirlo para compararlos.");
+            var usuario = actor.UsuarioId;
+            var cerrado = await db.DocumentosOcr.Where(d => d.Id == doc.Id && (d.Estado == EstadoDocumentoOcr.Duplicado || (desdeLote && d.Estado == EstadoDocumentoOcr.PorAsociar)))
+                .ExecuteUpdateAsync(u => u.SetProperty(d => d.Estado, EstadoDocumentoOcr.Asociado).SetProperty(d => d.ComparendoId, comparendoId)
+                    .SetProperty(d => d.RevisadoPor, usuario).SetProperty(d => d.RevisadoEn, ahora), ct).ConfigureAwait(false);
+            if (cerrado == 0)
+                throw ReglaException.Conflicto("NO_ASOCIABLE", "El documento ya no está pendiente de asociar.");
+
+            await db.Entry(doc).ReloadAsync(ct).ConfigureAwait(false);
+            previo = timeline.Agregar(comparendo, TipoEventoTimeline.DocumentoAsociadoOcr,
+                hayReemplazo
+                    ? $"Se reemplazó el documento del comparendo por el escaneado (paquete «{paquete.Nombre}», archivo {doc.NombreArchivo})."
+                    : $"Se asoció el documento escaneado (paquete «{paquete.Nombre}», archivo {doc.NombreArchivo}).",
+                actor, new { documentoOcr = doc.Id, archivo = archivoId, anterior = actual, anteriorNombre = anterior, reemplazo = hayReemplazo, paquete = paquete.Id },
+                "documento_ocr", doc.Id);
+            await CerrarProcesoAsync(paquete, ct).ConfigureAwait(false);
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+            return true;
+        }).ConfigureAwait(false);
+        return terminado ? new Asociacion(comparendoId, comparendo.Numero, hayReemplazo) : throw new InvalidOperationException("Asociación sin terminar.");
     }
 
     /// <summary>Reintento manual de un FALLIDO por fallo técnico (§4.8); un ilegible o un archivo inválido no se reintenta.</summary>
@@ -604,6 +777,7 @@ public sealed partial class ServicioOcr(
     public async Task ReprocesarAsync(DocumentoOcr doc, Guid usuario, CancellationToken ct, string? usuarioNombre = null)
     {
         ArgumentNullException.ThrowIfNull(doc);
+        ExigirNoEnAsociacion(doc);
         if (MotivoNoReprocesable(doc) is { } motivo)
             throw ReglaException.Conflicto("NO_REPROCESABLE", motivo);
         var prompt = await PromptPublicadoAsync(ct).ConfigureAwait(false);

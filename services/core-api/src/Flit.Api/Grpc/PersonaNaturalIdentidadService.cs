@@ -96,6 +96,7 @@ internal sealed class PersonaNaturalIdentidadService(
                 "not_found" => NoEncontrada(),
                 "identidad_aprobada" => PlatformRpcErrors.ToRpcException("identidad_aprobada", "La identidad ya fue validada.", StatusCode.FailedPrecondition),
                 "validacion_en_curso" => PlatformRpcErrors.ToRpcException("validacion_en_curso", "Ya hay una validación en curso.", StatusCode.AlreadyExists),
+                "limite_rondas_alcanzado" => PlatformRpcErrors.ToRpcException("limite_rondas_alcanzado", "La validación ya usó todas las rondas permitidas; no se puede reenviar.", StatusCode.FailedPrecondition),
                 _ => PlatformRpcErrors.ToRpcException("proveedor_no_disponible", "No fue posible reenviar el enlace por ahora.", StatusCode.Unavailable),
             };
 

@@ -50,6 +50,9 @@ public static class NotificationTemplateCatalog
 
         // HU #13299 (Feature #13282, Épica #13202) — mismo literal que ManualCaptureEmailComposer.RejectionTemplateId (también a mano).
         public const string IdentidadCapturaManualRechazo = "identidad.captura-manual-rechazo";
+
+        // Feature #14684 — mismo literal que IdentityRoundsAlertSender.TemplateKey (escrito a mano por la regla del AC3).
+        public const string IdentidadAlertaRondasAgotadas = "identidad.alerta-rondas-agotadas";
     }
 
     /// <summary>
@@ -127,6 +130,11 @@ public static class NotificationTemplateCatalog
             "Identidad: correo de rechazo de captura manual",
             NotificationModule.Identidad,
             [NotificationTrigger.ManualCaptureRejected]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.IdentidadAlertaRondasAgotadas,
+            "Identidad: alerta de rondas agotadas a operación",
+            NotificationModule.Identidad,
+            [NotificationTrigger.IdentityRoundsExhausted]),
     ];
 
     /// <summary>

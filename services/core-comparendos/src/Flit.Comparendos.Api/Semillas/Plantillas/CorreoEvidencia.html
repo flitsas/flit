@@ -1,0 +1,8 @@
+<!-- nombre: Documento del comparendo al conductor -->
+<!-- asunto: Documento del comparendo {{comparendo.numero}} del vehículo {{comparendo.placa}} -->
+<h1 style="margin:4px 0 18px;text-align:center;color:#2F6FED;font-size:19px;letter-spacing:0.02em">DOCUMENTO DEL COMPARENDO</h1>
+<p style="margin:0 0 12px">Estimado/a <strong style="color:#2F6FED">{{conductor.nombres}}</strong>.</p>
+<p style="margin:0 0 12px">{{#si evidencia.reemplazo}}Actualizamos el documento{{#sino}}Recibimos el documento{{/si}} del comparendo <strong>{{comparendo.numero}}</strong> (placa {{comparendo.placa}}), que va adjunto a este correo como evidencia.</p>
+<p style="margin:0 0 12px"><strong style="color:#2F6FED">Número de comparendo:</strong> {{comparendo.numero}}<br><strong style="color:#2F6FED">Placa del vehículo:</strong> {{comparendo.placa}}<br><strong style="color:#2F6FED">Fecha de la infracción:</strong> {{comparendo.fecha_imposicion}}<br><strong style="color:#2F6FED">Infracción:</strong> {{comparendo.codigo_infraccion}}. {{comparendo.descripcion_infraccion}}.<br><strong style="color:#2F6FED">Organismo de tránsito:</strong> {{ot.nombre}}<br><strong style="color:#2F6FED">Valor:</strong> {{comparendo.valor_total}}</p>
+<p style="margin:0 0 12px">Revísalo con calma: te sirve para verificar los datos de la infracción.{{#si portal.enlace}} También puedes <a href="{{portal.enlace}}" style="color:#2F6FED">ver el comparendo aquí</a> (enlace disponible hasta el {{portal.vence}}).{{/si}}</p>
+<p style="margin:0 0 12px">Si ya lo resolviste, ignora este mensaje.{{#si empresa.correo_respuesta}} Si tienes preguntas, escríbenos a <strong>{{empresa.correo_respuesta}}</strong>.{{/si}}</p>

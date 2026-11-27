@@ -360,6 +360,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Integración Quipux: un interruptor maestro prende o apaga toda la radicación automática; puedes guardar la configuración incompleta, pero mientras falten campos obligatorios los procesos no radicarán. Debajo del interruptor: la conexión (URLs de login, registro de documento y validación de estado, usuario y contraseña, código de consumidor), el almacenamiento S3 donde se publica el PDF consolidado que Quipux lee (bucket, prefijo, región y credenciales AWS), la entidad que radica (tipo y número de documento de FLIT ante la secretaría) y la cadencia y límites de los workers (intervalos de registro y consulta, tamaño de lote, máximo de intentos y de consultas, timeout).",
           "Log QX (píldora Integraciones): bandeja de trámites con integración Quipux, filtrable por estado, fecha, placa o documento; abre cualquiera para ver la trazabilidad completa de sus envíos. Requiere el permiso de lectura de Log QX.",
+          "En el listado de Trámites, la columna «Marcas» muestra en qué va cada trámite de Quipux («QX · En cola», «QX · Radicado» o «QX · Falló»); un clic en la etiqueta abre la trazabilidad de su envío en el Log QX (o la bandeja filtrada si aún no tiene envío). «QX · Falló» solo aparece mientras el trámite sigue en Preparado: es la señal de que hay que revisarlo y reintentarlo desde la consola de Quipux.",
         ],
       },
       {
@@ -893,7 +894,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "1. Qué es y cuándo usarla",
         paragraphs: [
           "La validación manual es la alternativa cuando la persona no logra validar su identidad por el camino normal. La persona toma sus fotos y su firma desde un enlace, y tú decides si aprueba o no. Solo el Super Admin puede activarla y resolverla.",
-          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 24 horas.",
+          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 30 días.",
         ],
       },
       {

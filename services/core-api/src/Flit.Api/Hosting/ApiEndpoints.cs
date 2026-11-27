@@ -78,6 +78,7 @@ internal static class ApiEndpoints
         app.MapAdminPlataformaAiEndpoints(); // Feature #13508 — Configuración multi-proveedor IA (HU #13509)
         app.MapAdminRuntConfirmationEndpoints();
         app.MapAdminRuntContingencyEndpoints(); // Épica #14644 — contingencia de proveedor RUNT (Super Admin FLIT)
+        app.MapAdminIdentityRoundsEndpoints(); // Configurador global de rondas de identidad (Super Admin FLIT)
         app.MapAdminLogQxEndpoints();
         app.MapAdminTransitOfficeTenantsEndpoints();
         app.MapAdminMandateSignersEndpoints();

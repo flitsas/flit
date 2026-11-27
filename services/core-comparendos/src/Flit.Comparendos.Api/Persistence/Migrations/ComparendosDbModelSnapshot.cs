@@ -247,6 +247,109 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("archivo_local", "comparendos");
                 });
 
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.AsociacionLote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("PaqueteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paquete_id");
+
+                    b.Property<DateTimeOffset>("SolicitadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("solicitado_en");
+
+                    b.Property<Guid?>("SolicitadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitado_por");
+
+                    b.Property<string>("SolicitadoPorNombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("solicitado_por_nombre");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("TerminadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("terminado_en");
+
+                    b.HasKey("Id")
+                        .HasName("pk_asociacion_lote");
+
+                    b.HasIndex("PaqueteId", "SolicitadoEn")
+                        .HasDatabaseName("ix_asociacion_lote_paquete_id_solicitado_en");
+
+                    b.ToTable("asociacion_lote", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.AsociacionLoteDocumento", b =>
+                {
+                    b.Property<Guid>("LoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lote_id");
+
+                    b.Property<Guid>("DocumentoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("documento_id");
+
+                    b.Property<string>("CorreoEstado")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("correo_estado");
+
+                    b.Property<string>("CorreoMotivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("correo_motivo");
+
+                    b.Property<short>("Intentos")
+                        .HasColumnType("smallint")
+                        .HasColumnName("intentos");
+
+                    b.Property<string>("Motivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("motivo");
+
+                    b.Property<DateTimeOffset?>("ProcesadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("procesado_en");
+
+                    b.Property<DateTimeOffset?>("ProximoIntentoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("proximo_intento_en");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("resultado");
+
+                    b.HasKey("LoteId", "DocumentoId")
+                        .HasName("pk_asociacion_lote_documento");
+
+                    b.HasIndex(new[] { "ProximoIntentoEn" }, "ix_asociacion_lote_documento_cola")
+                        .HasDatabaseName("ix_asociacion_lote_documento_cola")
+                        .HasFilter("resultado = 'PorAsociar'");
+
+                    b.HasIndex(new[] { "DocumentoId" }, "ix_asociacion_lote_documento_documento_id")
+                        .HasDatabaseName("ix_asociacion_lote_documento_documento_id");
+
+                    b.HasIndex(new[] { "DocumentoId" }, "ux_asociacion_lote_documento_activo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_asociacion_lote_documento_activo")
+                        .HasFilter("resultado = 'PorAsociar'");
+
+                    b.ToTable("asociacion_lote_documento", "comparendos");
+                });
+
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.AuditoriaConfiguracion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3233,6 +3336,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("CantidadAsociados")
+                        .HasColumnType("integer")
+                        .HasColumnName("cantidad_asociados");
+
                     b.Property<int>("CantidadCompletos")
                         .HasColumnType("integer")
                         .HasColumnName("cantidad_completos");
@@ -3260,6 +3367,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<int>("CantidadPendientes")
                         .HasColumnType("integer")
                         .HasColumnName("cantidad_pendientes");
+
+                    b.Property<int>("CantidadPorAsociar")
+                        .HasColumnType("integer")
+                        .HasColumnName("cantidad_por_asociar");
 
                     b.Property<int>("CantidadRegistrados")
                         .HasColumnType("integer")
@@ -4553,6 +4664,33 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasFilter("published_at IS NULL");
 
                     b.ToTable("outbox", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.AsociacionLote", b =>
+                {
+                    b.HasOne("Flit.Comparendos.Api.Persistence.Modelo.PaqueteOcr", null)
+                        .WithMany()
+                        .HasForeignKey("PaqueteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asociacion_lote_paquete_ocr_paquete_id");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.AsociacionLoteDocumento", b =>
+                {
+                    b.HasOne("Flit.Comparendos.Api.Persistence.Modelo.DocumentoOcr", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asociacion_lote_documento_documento_ocr_documento_id");
+
+                    b.HasOne("Flit.Comparendos.Api.Persistence.Modelo.AsociacionLote", null)
+                        .WithMany()
+                        .HasForeignKey("LoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asociacion_lote_documento_asociacion_lote_lote_id");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ComparendoCambio", b =>

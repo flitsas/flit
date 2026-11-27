@@ -30,6 +30,8 @@ public static class ActoresExcelColumns
         Validacion = 2,
         Intentos = 4,
         Motivo = 8,
+        /// <summary>Estado de la firma de la persona («Firmó», «Pendiente», «Rechazada»…). No entra en <see cref="Todos"/>.</summary>
+        Firma = 16,
         Todos = Nombre | Validacion | Intentos | Motivo,
     }
 
@@ -46,6 +48,7 @@ public static class ActoresExcelColumns
     public const int AnchoNombre = 26;
     public const int AnchoValidacion = 24;
     public const int AnchoIntentos = 12;
+    public const int AnchoFirma = 16;
     public const int AnchoMotivo = 34;
 
     /// <summary>Cantidad de bloques (actores) del grupo: el máximo del filtro, nunca menos de 1.</summary>
@@ -57,6 +60,7 @@ public static class ActoresExcelColumns
     public static int ColumnsPerActor(Campos campos) =>
         (campos.HasFlag(Campos.Nombre) ? 1 : 0)
         + (campos.HasFlag(Campos.Validacion) ? 1 : 0)
+        + (campos.HasFlag(Campos.Firma) ? 1 : 0)
         + (campos.HasFlag(Campos.Intentos) ? 1 : 0)
         + (campos.HasFlag(Campos.Motivo) ? 1 : 0);
 
@@ -72,6 +76,8 @@ public static class ActoresExcelColumns
                 headers.Add($"{etiqueta}{sufijo}");
             if (campos.HasFlag(Campos.Validacion))
                 headers.Add($"Validación {minuscula}{sufijo}");
+            if (campos.HasFlag(Campos.Firma))
+                headers.Add($"Firma {minuscula}{sufijo}");
             if (campos.HasFlag(Campos.Intentos))
                 headers.Add($"Intentos {minuscula}{sufijo}");
             if (campos.HasFlag(Campos.Motivo))
@@ -91,6 +97,7 @@ public static class ActoresExcelColumns
         {
             if (campos.HasFlag(Campos.Nombre)) widths.Add(AnchoNombre);
             if (campos.HasFlag(Campos.Validacion)) widths.Add(AnchoValidacion);
+            if (campos.HasFlag(Campos.Firma)) widths.Add(AnchoFirma);
             if (campos.HasFlag(Campos.Intentos)) widths.Add(AnchoIntentos);
             if (campos.HasFlag(Campos.Motivo)) widths.Add(AnchoMotivo);
         }
@@ -125,6 +132,7 @@ public static class ActoresExcelColumns
                 var fallback = n == 0 && (actores is null || actores.Count == 0) ? nombreSinActores : null;
                 if (campos.HasFlag(Campos.Nombre)) cells.Add(new ActorCell(fallback ?? string.Empty));
                 if (campos.HasFlag(Campos.Validacion)) cells.Add(new ActorCell(string.Empty));
+                if (campos.HasFlag(Campos.Firma)) cells.Add(new ActorCell(string.Empty));
                 if (campos.HasFlag(Campos.Intentos)) cells.Add(new ActorCell(string.Empty));
                 if (campos.HasFlag(Campos.Motivo)) cells.Add(new ActorCell(string.Empty));
                 continue;
@@ -135,6 +143,8 @@ public static class ActoresExcelColumns
                 cells.Add(new ActorCell(a.Nombre));
             if (campos.HasFlag(Campos.Validacion))
                 cells.Add(new ActorCell(ActorValidacionEstados.Etiqueta(a.EstadoValidacion)));
+            if (campos.HasFlag(Campos.Firma))
+                cells.Add(new ActorCell(a.EstadoFirma ?? string.Empty));
             if (campos.HasFlag(Campos.Intentos))
                 cells.Add(new ActorCell(a.Intentos.ToString(CultureInfo.InvariantCulture), a.Intentos));
             if (campos.HasFlag(Campos.Motivo))

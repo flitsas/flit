@@ -54,6 +54,8 @@ export interface DataColumn<TRow, TSort extends string = string> {
   /** Clave de orden del backend, si la columna es ordenable. */
   sort?: TSort;
   numeric?: boolean;
+  /** Texto potencialmente largo: la celda lo parte en líneas con un ancho tope en vez de ensanchar la tabla. */
+  wrap?: boolean;
   defaultVisible?: boolean;
   /** Si está, en el archivo esta columna se abre por actor, en su sitio. */
   expandirPorBloque?: ExpansionPorBloque<TRow>;

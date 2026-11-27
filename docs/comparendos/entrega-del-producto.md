@@ -142,6 +142,7 @@ Cuatro avisos por correo. Los tres primeros salen solos en días hábiles a las 
 - **Marca y canal:** los decide el «Enrutamiento de notificaciones» de la empresa en Trámites. Con «API Renting cliente» salen por la cuenta de correo de Renting, con los textos de V1 y su imagen, sin nada de FLIT. Con «Colas FLIT» salen por FLIT con el diseño de los correos de Trámites.
 - No salen si el comparendo está pagado, inactivo, notificado en persona o el conductor no tiene correo. Máximo uno automático por día. Nunca son retroactivos. Se pueden enviar a mano.
 - Si falta un adjunto (por ejemplo, el representante no tiene firma), el aviso sale sin ese adjunto y la línea de tiempo dice qué faltó.
+- **Correo con el documento al asociarlo:** además de los avisos, al asociar (o reemplazar) el documento escaneado de un comparendo que ya existe, el conductor recibe de inmediato un correo con ese documento adjunto. No es un aviso: no cambia la secuencia 1-2-3 ni el estado. Respeta las copias por tipo de envío; si no sale (conductor sin correo, comparendo pagado o inactivo, documento muy pesado…), la asociación se hace igual y se informa el motivo.
 
 ### Cambio de contraventor
 

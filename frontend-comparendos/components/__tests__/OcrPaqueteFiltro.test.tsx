@@ -45,9 +45,9 @@ const PAQUETE = {
   cerradoEn: null,
 };
 
-function abrir(estado = "") {
+function abrir(estado = "", paquete: Record<string, unknown> = PAQUETE, documentos: unknown[] = []) {
   query = estado ? `estado=${estado}` : "";
-  apiFetch.mockResolvedValue({ paquete: PAQUETE, documentos: [], completosPorConfirmar: 0 });
+  apiFetch.mockResolvedValue({ paquete, documentos, completosPorConfirmar: 0 });
   render(
     <ToastProvider>
       <Pagina />
@@ -110,5 +110,26 @@ describe("filtro del paquete OCR con las cifras (rediseño S3)", () => {
     expect(consultas()).toContainEqual({ estado: "EnProcesamiento" });
     fireEvent.click(await tarjeta(/^En cola/));
     expect(replace).toHaveBeenLastCalledWith("/ocr/paquetes/p1", { scroll: false });
+  });
+
+  it("«Asociados» muestra su contador (0 si la API no lo manda) y filtra por ?estado=Asociado", async () => {
+    abrir("", { ...PAQUETE, cantidadAsociados: 3 });
+    expect(await tarjeta(/^Asociados\s*3/)).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(await tarjeta(/^Asociados/));
+    expect(replace).toHaveBeenLastCalledWith("/ocr/paquetes/p1?estado=Asociado", { scroll: false });
+    cleanup();
+
+    abrir("Asociado");
+    expect(await tarjeta(/^Asociados\s*0/)).toHaveAttribute("aria-pressed", "true");
+    expect(consultas()).toContainEqual({ estado: "Asociado" });
+  });
+
+  it("el motivo de un documento asociado va en tono informativo, no de advertencia", async () => {
+    abrir("", PAQUETE, [
+      { id: "d1", nombreArchivo: "a.pdf", tipoArchivo: "PDF", estado: "Asociado", numeroComparendoExtraido: "1", camposFaltantes: [], tipoFallo: null, mensajeError: null, fuenteDuplicado: null, comparendoId: "c1", intentos: 1, procesadoEn: null, reprocesable: false },
+    ]);
+    const motivo = await screen.findByText("Documento agregado a un comparendo existente");
+    expect(motivo.className).toContain("badge-info-fg");
+    expect(motivo.className).not.toContain("badge-warning-fg");
   });
 });

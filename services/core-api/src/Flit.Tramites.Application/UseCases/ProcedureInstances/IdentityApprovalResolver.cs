@@ -209,6 +209,13 @@ internal static class IdentityApprovalResolver
     /// ¿Este actor tiene identidad acreditada, según las claves precomputadas del listado? Orden: baúl →
     /// fila propia vigente → identidad referenciada (o protegida tras vencimiento manual, HU #13824).
     /// </summary>
+    /// <summary>Un solo actor, misma comprobación que <see cref="ApprovedActorsFromKeys"/> (aislamiento de fallos por persona, HU #14698).</summary>
+    internal static bool ActorCubierto(
+        ProcedureInstance instance, string parte, ProcedureInstanceActor actor, IReadOnlySet<string> approvedKeys,
+        DateTimeOffset now, IReadOnlyDictionary<string, bool>? firmaBaul,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>? protegidasKeys, DateTimeOffset? salida) =>
+        ActorCubiertoPorClaves(instance, parte, actor, approvedKeys, now, firmaBaul, protegidasKeys, salida);
+
     private static bool ActorCubiertoPorClaves(
         ProcedureInstance instance,
         string parte,

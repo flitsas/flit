@@ -95,6 +95,8 @@ public static class DependencyInjection
         // Bug #13194 (P4, D2) — gate de firma para módulos que deciden un envío al OT fuera de una
         // transición (encolado de Quipux). Misma regla que el ciclo de vida.
         services.AddScoped<ITramiteFirmaGate, TramiteFirmaGate>();
+        // Épica #14666 / HU #14698 (ADR-0092) — «firmado por todas las partes» con el criterio del listado.
+        services.AddScoped<ITramiteFirmaEvaluator, TramiteFirmaEvaluator>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<CancelSubsanacionHandler>();
@@ -224,6 +226,12 @@ public static class DependencyInjection
         // Punto único de aplicación del resultado (webhook + reconciliación) y reconciliación por consulta
         // (fallback cuando el webhook se pierde): desatasca validaciones colgadas consultando a Kyverum.
         services.AddScoped<Identity.IdentityValidationResultApplier>();
+        // Configurador GLOBAL de rondas de identidad: tope de reenvíos (por fila) y alerta por correo al rechazo terminal.
+        services.AddScoped<Identity.Rounds.IIdentityRoundsPolicy, Identity.Rounds.IdentityRoundsPolicy>();
+        // Reemisión automática tras un rechazo terminal de Kyverum (respeta el tope de rondas).
+        services.AddScoped<Identity.IIdentityRejectionReissue, UseCases.Persons.IdentityRejectionReissueService>();
+        services.AddScoped<UseCases.IdentityRounds.GetIdentityRoundsConfigHandler>();
+        services.AddScoped<UseCases.IdentityRounds.UpdateIdentityRoundsConfigHandler>();
         services.AddScoped<ReconciliarIdentidadHandler>();
 
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los

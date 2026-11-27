@@ -18,8 +18,31 @@ import {
   motivoFallo,
   progreso,
   resumenEvaluacion,
+  numeroBase,
+  numerosDifieren,
+  tamanoLegible,
   valorInicial,
   versionAnterior,
+  vistaDuplicado,
+  textoCorreoAlAsociar,
+  avisosAlAsociar,
+  avisoLoteEncolado,
+  avisoSinAvanceLote,
+  cerrarResumenLote,
+  colaReemplazos,
+  type LoteEnCurso,
+  resumenLoteCerrado,
+  textoAvanceLote,
+  textosResumenLote,
+  etiquetaAsociarLote,
+  leerCola,
+  resumenCola,
+  siguienteEnCola,
+  textosVistaPreviaLote,
+  urlCola,
+  esEstadoFinalDocumento,
+  vistaPorContentType,
+  ESTADO_DOCUMENTO,
   vistaOriginal,
 } from "@/lib/ocr";
 
@@ -101,10 +124,10 @@ describe("revisión de campos", () => {
     expect(vistaOriginal("IMAGE", "a.jpg")).toBe("imagen");
   });
   it("decide los botones por estado", () => {
-    expect(accionesDocumento({ estado: "Completo", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: true, registrar: true, descartar: true, reintentar: false, reprocesar: false });
+    expect(accionesDocumento({ estado: "Completo", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: true, registrar: true, descartar: true, asociar: false, reintentar: false, reprocesar: false });
     expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "ARCHIVO" }).editar).toBe(false);
     expect(accionesDocumento({ estado: "Fallido", reintentable: true, fuenteDuplicado: null }).reintentar).toBe(true);
-    expect(accionesDocumento({ estado: "Registrado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, reintentar: false, reprocesar: false });
+    expect(accionesDocumento({ estado: "Registrado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, asociar: false, reintentar: false, reprocesar: false });
     // HU #13828: se reprocesa un incompleto o un ilegible; un fallido técnico se reintenta.
     expect(accionesDocumento({ estado: "Incompleto", reintentable: false, fuenteDuplicado: null }).reprocesar).toBe(true);
     expect(accionesDocumento({ estado: "Fallido", reintentable: false, fuenteDuplicado: null, tipoFallo: "Ilegible" }).reprocesar).toBe(true);
@@ -238,5 +261,264 @@ describe("número por verificar (GDC punto 14)", () => {
     expect(
       marcasRevision({ campos: [{ ...campos[0], valorCorregido: campos[0].valorFinal }], camposFaltantes: [], avisoNumero: aviso, numeroPorConfirmar: false }),
     ).toEqual({});
+  });
+});
+
+describe("asociar un documento a un comparendo existente", () => {
+  const evidencia = { archivoId: "a1", nombre: "x.pdf", contentType: "application/pdf", tamanoBytes: 10, cargadaEn: "2026-11-01T10:00:00Z" };
+  const dup = (extra: Record<string, unknown> = {}) => ({ tipo: "comparendo" as const, asociable: true, evidenciaActual: null, ...extra });
+
+  it("sin documento previo se ofrece asociar; con documento, comparar", () => {
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: dup() })).toBe("asociar");
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: dup({ evidenciaActual: evidencia }) })).toBe("comparar");
+  });
+
+  it("no asociable (o la API no lo dice) solo explica; documento contra documento y otros estados no ofrecen nada", () => {
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: dup({ asociable: false }) })).toBe("no-asociable");
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: { tipo: "comparendo" } })).toBe("no-asociable");
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: { tipo: "documento" } })).toBeNull();
+    expect(vistaDuplicado({ estado: "Completo", duplicado: dup() })).toBeNull();
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: null })).toBeNull();
+  });
+
+  it("estado Asociado: etiqueta, es final y se explica", () => {
+    expect(ESTADO_DOCUMENTO.Asociado.texto).toBe("Asociado");
+    expect(accionesDocumento({ estado: "Asociado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, asociar: false, reintentar: false, reprocesar: false });
+    expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "SIMIT" }).asociar).toBe(true);
+    expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "ARCHIVO" }).asociar).toBe(false);
+    expect(motivoDocumento({ nombreArchivo: "a.pdf", estado: "Asociado", numeroComparendoExtraido: "1", camposFaltantes: [], tipoFallo: null, mensajeError: null, fuenteDuplicado: null, comparendoId: "c" })).toMatch(/agregado/);
+  });
+
+  it("vista previa por tipo y tamaño legible", () => {
+    expect(vistaPorContentType("application/pdf", "a")).toBe("pdf");
+    expect(vistaPorContentType("image/tiff", "a.tif")).toBe("descarga");
+    expect(vistaPorContentType("image/png", "a.png")).toBe("imagen");
+    expect(vistaPorContentType("", "a.pdf")).toBe("pdf");
+    expect(tamanoLegible(500)).toBe("500 B");
+    expect(tamanoLegible(2048)).toBe("2 KB");
+  });
+});
+
+describe("comparar el número del documento con el del sistema", () => {
+  it("la letra inicial, los espacios y los guiones no cuentan", () => {
+    expect(numeroBase("D-1100 1000-0000")).toBe("110010000000");
+    expect(numerosDifieren("D11001000000012345678", "11001000000012345678")).toBe(false);
+    expect(numerosDifieren("A 11001-000000012345678", "11001000000012345678")).toBe(false);
+  });
+  it("otro dígito sí cuenta; sin uno de los dos no se avisa", () => {
+    expect(numerosDifieren("11001000000012345678", "11001000000012345679")).toBe(true);
+    expect(numerosDifieren(null, "11001000000012345678")).toBe(false);
+    expect(numerosDifieren("11001000000012345678", "")).toBe(false);
+  });
+});
+
+describe("correo de evidencia al asociar", () => {
+  it("antes: dice que se enviará, con el documento nuevo si es reemplazo", () => {
+    expect(textoCorreoAlAsociar({ seEnviara: true, motivoNo: null }, false)).toBe("Se enviará ahora al conductor un correo con este documento.");
+    expect(textoCorreoAlAsociar({ seEnviara: true, motivoNo: null }, true)).toContain("documento nuevo");
+  });
+  it("antes: si no sale, muestra el motivo literal (solo agrega el punto si falta); sin dato no promete nada", () => {
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: "El conductor no tiene correo registrado" }, false)).toBe("No se enviará correo al conductor. Motivo: El conductor no tiene correo registrado.");
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: "FLIT SAS no usa correo." }, false)).toBe("No se enviará correo al conductor. Motivo: FLIT SAS no usa correo.");
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: null }, false)).toBe("No se enviará correo al conductor.");
+    expect(textoCorreoAlAsociar(undefined, false)).toBeNull();
+    expect(textoCorreoAlAsociar(null, true)).toBeNull();
+  });
+  it("después: enviado o en cola = un solo aviso; en reemplazo dice reemplazado", () => {
+    expect(avisosAlAsociar("123", false, { estado: "Enviado", motivo: null })).toEqual([{ mensaje: "Documento asociado al comparendo 123 y enviado al conductor.", tono: "success" }]);
+    expect(avisosAlAsociar("123", true, { estado: "Enviado", motivo: null })).toEqual([{ mensaje: "Documento reemplazado en el comparendo 123 y enviado al conductor.", tono: "success" }]);
+    expect(avisosAlAsociar("123", false, { estado: "Pendiente", motivo: null })).toHaveLength(1);
+  });
+  it("después: omitido = éxito más aviso con el motivo literal", () => {
+    expect(avisosAlAsociar("123", false, { estado: "Omitido", motivo: "El comparendo ya está pagado" })).toEqual([
+      { mensaje: "Documento asociado al comparendo 123.", tono: "success" },
+      { mensaje: "No se envió correo al conductor. Motivo: El comparendo ya está pagado.", tono: "warning" },
+    ]);
+    expect(avisosAlAsociar("123", false, { estado: "Omitido", motivo: null })[1].tono).toBe("warning");
+  });
+  it("después: un estado desconocido cae en aviso, sin lanzar; sin correo solo el éxito de siempre", () => {
+    const raro = avisosAlAsociar("123", false, { estado: "Reintentando" as never, motivo: "Algo nuevo" });
+    expect(raro.map((a) => a.tono)).toEqual(["success", "warning"]);
+    expect(avisosAlAsociar("123", false, undefined)).toEqual([{ mensaje: "Documento asociado al comparendo 123.", tono: "success" }]);
+    expect(avisosAlAsociar("123", true, null)).toEqual([{ mensaje: "Documento reemplazado en el comparendo 123.", tono: "success" }]);
+  });
+});
+
+describe("estados finales del documento", () => {
+  it("Asociado, Registrado y Descartado son de solo lectura; el resto sigue en revisión", () => {
+    for (const e of ["Asociado", "Registrado", "Descartado"]) expect(esEstadoFinalDocumento(e)).toBe(true);
+    for (const e of ["Completo", "Incompleto", "Duplicado", "Fallido", "EnCola"]) expect(esEstadoFinalDocumento(e)).toBe(false);
+  });
+});
+
+describe("asociar en lote (GDC-EVID §9)", () => {
+  const vista = (o: Partial<import("@/lib/ocr").VistaPreviaLote> = {}) => ({
+    asociables: 12,
+    correos: { saldran: 10, conductores: 7, omitidos: [{ motivo: "El conductor no tiene correo registrado", cantidad: 2 }] },
+    porRevisar: { reemplazos: 3, numeroDistinto: 1 },
+    ...o,
+  });
+
+  it("botón y textos de la vista previa, con singulares", () => {
+    expect(etiquetaAsociarLote(12)).toBe("Asociar los 12");
+    expect(etiquetaAsociarLote(1)).toBe("Asociar el documento");
+    const t = textosVistaPreviaLote(vista());
+    expect(t.documentos).toBe("Se asociarán 12 documentos a sus comparendos.");
+    expect(t.correos).toBe("Saldrán 10 correos a 7 conductores (cada conductor recibe uno por comparendo).");
+    expect(t.porRevisar).toEqual([
+      "Quedan 3 reemplazos para revisar uno por uno.",
+      "1 documento tiene el número distinto al del sistema: se revisa uno por uno.",
+    ]);
+    const uno = textosVistaPreviaLote(vista({ asociables: 1, correos: { saldran: 1, conductores: 1, omitidos: [] }, porRevisar: { reemplazos: 1, numeroDistinto: 0 } }));
+    expect(uno.documentos).toBe("Se asociará 1 documento a su comparendo.");
+    expect(uno.correos).toBe("Saldrá 1 correo a 1 conductor (cada conductor recibe uno por comparendo).");
+    expect(uno.porRevisar).toEqual(["Queda 1 reemplazo para revisar uno por uno."]);
+    expect(textosVistaPreviaLote(vista({ correos: { saldran: 0, conductores: 0, omitidos: [] }, porRevisar: { reemplazos: 0, numeroDistinto: 0 } }))).toMatchObject({
+      correos: "No saldrá ningún correo al conductor.",
+      porRevisar: [],
+    });
+  });
+
+});
+
+describe("lote en segundo plano (GDC-EVID §10)", () => {
+  const lote = (o: Partial<LoteEnCurso> = {}): LoteEnCurso => ({
+    loteId: "l1",
+    porAsociar: 36,
+    total: 48,
+    asociados: 12,
+    noAsociados: [],
+    correosEnCamino: 11,
+    sinCorreo: [],
+    solicitadoPor: "admin@empresa.local",
+    solicitadoEn: "2026-11-25T15:00:00Z",
+    terminadoEn: null,
+    ...o,
+  });
+
+  it("aviso al encolar y avance de la franja", () => {
+    expect(avisoLoteEncolado(48)).toBe("Asociando 48 documentos en segundo plano; puedes seguir trabajando.");
+    expect(avisoLoteEncolado(1)).toBe("Asociando 1 documento en segundo plano; puedes seguir trabajando.");
+    expect(textoAvanceLote(lote())).toBe("Asociando 12 de 48…");
+    expect(textoAvanceLote(lote({ porAsociar: 60 }))).toBe("Asociando 0 de 48…");
+  });
+
+  it("resumen: asociados y correos en camino, con singulares; sin correos no hay línea", () => {
+    expect(textosResumenLote(lote({ porAsociar: 0, asociados: 47, correosEnCamino: 45 }))).toEqual({
+      titulo: "Se asociaron 47 documentos a sus comparendos.",
+      correos: "45 correos con el documento van en camino a los conductores.",
+    });
+    expect(textosResumenLote(lote({ porAsociar: 0, asociados: 1, correosEnCamino: 1 }))).toEqual({
+      titulo: "Se asoció 1 documento a su comparendo.",
+      correos: "1 correo con el documento va en camino al conductor.",
+    });
+    expect(textosResumenLote(lote({ porAsociar: 0, correosEnCamino: 0 })).correos).toBeNull();
+  });
+
+  it("el resumen cerrado se recuerda por lote; si el almacenamiento falla, se muestra igual y no rompe", () => {
+    window.localStorage.clear();
+    expect(resumenLoteCerrado("l1")).toBe(false);
+    cerrarResumenLote("l1");
+    expect(resumenLoteCerrado("l1")).toBe(true);
+    expect(resumenLoteCerrado("l2")).toBe(false);
+    // Navegador con el almacenamiento bloqueado: acceder a localStorage lanza.
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("bloqueado");
+      },
+    });
+    try {
+      expect(resumenLoteCerrado("l1")).toBe(false);
+      expect(() => cerrarResumenLote("l3")).not.toThrow();
+    } finally {
+      Object.defineProperty(window, "localStorage", original);
+    }
+    expect(resumenLoteCerrado("l1")).toBe(true);
+  });
+});
+
+describe("cola de reemplazos (GDC-EVID §9)", () => {
+  const docs = [
+    { id: "a", estado: "Duplicado", revision: "reemplazo" as const },
+    { id: "b", estado: "Duplicado", revision: null },
+    { id: "c", estado: "Asociado", revision: "reemplazo" as const },
+    { id: "d", estado: "Duplicado", revision: "numeroDistinto" as const },
+    { id: "e", estado: "Duplicado", revision: "reemplazo" as const },
+  ];
+
+  it("solo los reemplazos pendientes, en el orden del listado", () => {
+    expect(colaReemplazos(docs)).toEqual(["a", "e"]);
+  });
+
+  it("la URL lleva el avance y se lee de vuelta", () => {
+    const paso = { paquete: "p1", hechos: 1, total: 7, reemplazados: 1, descartados: 0 };
+    const url = urlCola("e", paso);
+    expect(url.startsWith("/ocr/documentos/e?")).toBe(true);
+    expect(leerCola(new URLSearchParams(url.split("?")[1]))).toEqual(paso);
+    expect(leerCola(new URLSearchParams("paquete=p1"))).toBeNull();
+    expect(leerCola(new URLSearchParams("cola=reemplazos"))).toBeNull();
+    expect(leerCola(new URLSearchParams("cola=reemplazos&paquete=p1&hechos=-3&total=x"))).toEqual({ paquete: "p1", hechos: 0, total: 1, reemplazados: 0, descartados: 0 });
+  });
+
+  it("al decidir pasa al siguiente (total recalculado) y al final vuelve al paquete con el resumen", () => {
+    const paso = { paquete: "p1", hechos: 0, total: 2, reemplazados: 0, descartados: 0 };
+    const sig = siguienteEnCola(["a", "e"], "a", paso, "reemplazado");
+    expect(leerCola(new URLSearchParams(sig.split("?")[1]))).toEqual({ paquete: "p1", hechos: 1, total: 2, reemplazados: 1, descartados: 0 });
+    expect(sig.startsWith("/ocr/documentos/e?")).toBe(true);
+    const fin = siguienteEnCola(["e"], "e", { ...paso, hechos: 1, reemplazados: 1 }, "descartado");
+    expect(fin).toBe("/ocr/paquetes/p1?cola=terminada&reemplazados=1&descartados=1");
+    expect(resumenCola(new URLSearchParams(fin.split("?")[1]))).toBe("Terminaste la revisión de reemplazos: 1 reemplazado y 1 descartado.");
+    expect(resumenCola(new URLSearchParams("cola=terminada&reemplazados=5&descartados=0"))).toBe("Terminaste la revisión de reemplazos: 5 reemplazados.");
+    expect(resumenCola(new URLSearchParams(""))).toBeNull();
+  });
+});
+
+describe("lote estancado (GDC-EVID §10)", () => {
+  const base = {
+    loteId: "l1", porAsociar: 10, total: 20, asociados: 10, noAsociados: [], correosEnCamino: 10, sinCorreo: [],
+    solicitadoPor: null, solicitadoEn: "2026-11-25T15:00:00Z", terminadoEn: null,
+  };
+  const ahora = Date.parse("2026-11-25T15:30:00Z");
+  const hace = (min: number) => new Date(ahora - min * 60000).toISOString();
+
+  it("más de 5 minutos en curso: avisa con los minutos; 5 o menos, sin campo, fecha inválida o terminado: null", () => {
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(6) }, ahora)).toBe("Sin avance desde hace 6 minutos; se retomará automáticamente.");
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(5) }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(4) }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote(base, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: "no es fecha" }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, porAsociar: 0, ultimoAvanceEn: hace(30) }, ahora)).toBeNull();
+  });
+});
+
+// MISMA tabla que la prueba de NumeroComparendo.DifiereALaVista en core-comparendos (services/core-comparendos): las dos copias
+// de la regla «el número difiere más allá de la letra o el formato» deben dar lo mismo. Si cambias una copia o esta tabla,
+// cambia también la otra; si una fila falla aquí, es una diferencia real entre front y back (no se ajusta la tabla).
+describe("numerosDifieren: tabla compartida con el backend (DifiereALaVista)", () => {
+  it.each<[string | null, string | null, boolean]>([
+    ["D-11001000000000012345", "11001000000000012345", false],
+    ["A-98765", "98765", false],
+    ["A98765", "98765", false],
+    ["11001 0000 0000 0012345", "11001000000000012345", false],
+    ["11001.000000000.012345", "11001000000000012345", false],
+    ["11001-000000000-012345", "11001000000000012345", false],
+    ["  d - 11001000000000012345", "11001000000000012345", false],
+    ["11001/000000000012345", "11001000000000012345", true],
+    ["11001_000000000012345", "11001000000000012345", true],
+    ["11001,000000000012345", "11001000000000012345", true],
+    ["11001:000000000012345", "11001000000000012345", true],
+    ["#11001000000000012345", "11001000000000012345", true],
+    ["11001/00000999/0308", "11001000009990308", true],
+    ["11001000000000012346", "11001000000000012345", true],
+    ["AB12C34", "AB12C35", true],
+    ["11001a00000000012345", "11001A00000000012345", false],
+    ["   ", "11001000000000012345", false],
+    [null, null, false],
+    [null, "11001000000000012345", false],
+    ["11001000000000012345", "", false],
+  ])("%j vs %j → %s", (leido, sistema, esperado) => {
+    expect(numerosDifieren(leido, sistema)).toBe(esperado);
   });
 });

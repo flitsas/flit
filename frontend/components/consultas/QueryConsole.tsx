@@ -57,6 +57,7 @@ import { decodeDefinition, encodeDefinition } from "./link-state";
 import { QueryFilterBar } from "./QueryFilterBar";
 import { SavedQueryList } from "./SavedQueryList";
 import { formatInt, plural } from "./format";
+import { maxActoresDeFirma, type FilaConFirma } from "./firmas";
 import {
   CSV_EXPORT_VISIBLE,
   Empty,
@@ -153,6 +154,8 @@ export function QueryConsole<TRow>({
   // vez que se refresca la cifra, que es todo el rato mientras alguien ajusta los filtros.
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Separado de `error`: las consultas lo limpian en cada ejecución, y el catálogo se carga una sola vez.
+  const [camposError, setCamposError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -208,7 +211,15 @@ export function QueryConsole<TRow>({
     void source
       .fetchFields(controller.signal)
       .then((data) => !controller.signal.aborted && setFields(data))
-      .catch(() => undefined);
+      .catch((e: unknown) => {
+        // Sin el catálogo no hay filtros que ofrecer: se dice por qué, en vez de mostrar un constructor vacío.
+        if (controller.signal.aborted) return;
+        setCamposError(
+          e instanceof Error
+            ? `No se pudieron cargar los campos de filtro: ${e.message}`
+            : "No se pudieron cargar los campos de filtro.",
+        );
+      });
 
     void source
       .fetchSaved(controller.signal)
@@ -265,12 +276,16 @@ export function QueryConsole<TRow>({
 
   const preguntaKey = huellaPregunta(definition);
 
+  // Las columnas viajan en la definición: el servidor calcula las de firma solo si se piden, así que
+  // sin esto la columna «Firmas» de la tabla quedaba vacía hasta que se activaba un filtro de firma.
+  const columnasKey = JSON.stringify(visibleColumns);
+
   const load = useCallback(
     async (signal?: AbortSignal, targetPage = 1) => {
       setBusy(true);
       setError(null);
       try {
-        const data = await source.run(definition, {
+        const data = await source.run({ ...definition, columnas: visibleColumns }, {
           page: targetPage,
           pageSize,
           signal,
@@ -286,7 +301,7 @@ export function QueryConsole<TRow>({
     },
     // La clave serializada evita relanzar por una identidad de objeto nueva con el mismo contenido.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [definitionKey, source, pageSize],
+    [definitionKey, columnasKey, source, pageSize],
   );
 
   // Un respiro antes de consultar: el contador se actualiza mientras se marcan casillas, y sin esto
@@ -420,9 +435,17 @@ export function QueryConsole<TRow>({
           total: result.total,
           maxActoresPorRol,
           pageSize: QUERY_MAX_PAGE_SIZE,
+          // Mismas columnas que la pantalla: sin ellas el servidor no calcula la firma y el Excel sale en «—».
           traerPagina: async (page, pageSize) =>
-            (await source.run(definition, { page, pageSize })).filas,
+            (await source.run({ ...definition, columnas: visibleColumns }, { page, pageSize })).filas,
           volcar: (lote, parte) => {
+            // El organismo no trae el máximo del servidor: sus columnas por persona toman el ancho del
+            // propio lote (mínimo 1). Las demás fuentes sin máximo no inventan ancho.
+            const maxLote: MaxActoresPorRol | undefined =
+              parte.maxActoresPorRol ??
+              (source.anchoPorActorDesdeFilas
+                ? maxActoresDeFirma(lote as unknown as FilaConFirma[])
+                : undefined);
             const fileName = queryFileName(
               source.exportPrefix,
               nombre,
@@ -440,13 +463,13 @@ export function QueryConsole<TRow>({
                   lote,
                   visibleColumns,
                   notas,
-                  parte.maxActoresPorRol,
+                  maxLote,
                 ),
                 fileName,
                 XLSX_MIME,
               );
             } else {
-              const csv = buildCsv(allColumns, lote, visibleColumns, parte.maxActoresPorRol);
+              const csv = buildCsv(allColumns, lote, visibleColumns, maxLote);
               const conNotas =
                 notas.length > 0
                   ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
@@ -593,6 +616,7 @@ export function QueryConsole<TRow>({
           />
         </Section>
 
+        {camposError && <ErrorNotice message={camposError} />}
         {error && <ErrorNotice message={error} />}
         {result && (
           <CoverageNotice
@@ -719,7 +743,8 @@ export function QueryConsole<TRow>({
                         {columns.map((column) => (
                           <td
                             key={column.id}
-                            className={`${CARDLIST_CELL} ${column.numeric ? "text-right tabular-nums" : ""}`}
+                            className={`${CARDLIST_CELL} ${column.numeric ? "text-right tabular-nums" : ""} ${column.wrap ? "min-w-[12rem] max-w-[22rem] whitespace-normal break-words" : ""}`}
+                            data-testid={column.wrap ? `${prefix}-celda-${column.id}` : undefined}
                           >
                             {renderCell?.(column.id, fila) ?? column.value(fila)}
                           </td>

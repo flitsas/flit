@@ -72,6 +72,26 @@ public sealed class OtClientProcedureFilter
     /// </summary>
     public IReadOnlyList<QueryCondition>? Condiciones { get; init; }
 
+    /// <summary>
+    /// HU #14700 — ids de los trámites que cumplen la condición «Firmado por todas las partes», ya
+    /// resueltos por el repositorio. La firma se calcula EN MEMORIA (ADR-0092) y no se puede expresar
+    /// como <c>WHERE</c>; por eso el repositorio la resuelve antes y la aplica como lista de ids.
+    /// <c>null</c> = la consulta no filtra por firma. No lo manda el cliente.
+    /// </summary>
+    /// <remarks>Campo y método (no propiedad): no es un criterio del cliente y no debe viajar por el cuerpo de la búsqueda.</remarks>
+    private IReadOnlyCollection<Guid>? _idsPorFirma;
+
+    /// <summary>Ids resueltos de la condición de firma, o <c>null</c> si la consulta no filtra por firma (HU #14700).</summary>
+    public IReadOnlyCollection<Guid>? IdsPorFirmaResueltos() => _idsPorFirma;
+
+    /// <summary>Copia del filtro con los ids resueltos de la condición de firma (HU #14700).</summary>
+    public OtClientProcedureFilter ConIdsPorFirma(IReadOnlyCollection<Guid>? ids)
+    {
+        var copia = (OtClientProcedureFilter)MemberwiseClone();
+        copia._idsPorFirma = ids;
+        return copia;
+    }
+
     /// <summary>Rango sobre la fecha de radicación (cuándo entró el trámite al organismo).</summary>
     public DateTimeOffset? CreatedFrom { get; init; }
 

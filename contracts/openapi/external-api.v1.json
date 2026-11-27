@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "FLIT — API externa de sincronización de trámites",
-    "version": "3.2.1",
+    "version": "3.4.0",
     "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épicas #12737 y #12741. Lectura por pull: el consumidor recorre el feed por cursor al recibir un aviso de FLIT 2 (webhook firmado, §8 de la guía y AsyncAPI flito-webhook/tramite.cambio), periódicamente como respaldo y a demanda. Escritura: el consumidor adjunta al trámite el comprobante de pago del impuesto departamental (v3.2). Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos, envío de adjuntos) está en docs/integraciones/external-api-tramites-sync.md §5 y §7.",
     "contact": {
       "name": "Equipo FLIT"
@@ -342,7 +342,9 @@
                             "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
                             "nit": "901000000",
                             "nombre": "TRAMITADORA EJEMPLO SAS"
-                          }
+                          },
+                          "nombreGestor": "GESTORA EJEMPLO",
+                          "correoGestor": "gestora@ejemplo.test"
                         },
                         {
                           "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e90",
@@ -368,7 +370,9 @@
                             "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
                             "nit": "901000000",
                             "nombre": "TRAMITADORA EJEMPLO SAS"
-                          }
+                          },
+                          "nombreGestor": "GESTORA EJEMPLO",
+                          "correoGestor": "gestora@ejemplo.test"
                         }
                       ],
                       "nextCursor": "eyJ2IjoxLCJ4IjoiOTAwIiwic3YiOjQ4MjE0fQ",
@@ -446,7 +450,9 @@
                             "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
                             "nit": "901000000",
                             "nombre": "TRAMITADORA EJEMPLO SAS"
-                          }
+                          },
+                          "nombreGestor": "GESTORA EJEMPLO",
+                          "correoGestor": "gestora@ejemplo.test"
                         }
                       ],
                       "nextCursor": "eyJ2IjoxLCJ4IjoiOTAwIiwic3YiOjQ4MjEzfQ",
@@ -1214,7 +1220,9 @@
           "organismo",
           "compradores",
           "factura",
-          "companiaGestora"
+          "companiaGestora",
+          "nombreGestor",
+          "correoGestor"
         ],
         "properties": {
           "id": {
@@ -1304,6 +1312,18 @@
           },
           "companiaGestora": {
             "$ref": "#/components/schemas/CompaniaGestora"
+          },
+          "nombreGestor": {
+            "type": "string",
+            "nullable": true,
+            "x-pii": "media",
+            "description": "v3.4. Nombre de la persona que gestiona el trámite hoy: a quien se reasignó, y si nunca se reasignó, quien lo radicó. null si no se puede resolver. Dato personal (media). Sin external.tramites.pii.read llega enmascarado: inicial de cada palabra (G*** E***)."
+          },
+          "correoGestor": {
+            "type": "string",
+            "nullable": true,
+            "x-pii": "alta",
+            "description": "v3.4. Correo de la persona que gestiona el trámite (misma persona que nombreGestor). null si no se puede resolver. Dato personal (alta). Sin external.tramites.pii.read llega enmascarado: primera letra y dominio (g***@ejemplo.test)."
           }
         }
       },

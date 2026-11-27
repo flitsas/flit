@@ -295,9 +295,13 @@ public sealed class PaqueteOcr
     public int CantidadCompletos { get; set; }
     public int CantidadIncompletos { get; set; }
     public int CantidadFallidos { get; set; }
+
+    /// <summary>GDC-EVID §10: documentos esperando al trabajador de «Asociar los N».</summary>
+    public int CantidadPorAsociar { get; set; }
     public int CantidadDuplicados { get; set; }
     public int CantidadRegistrados { get; set; }
     public int CantidadDescartados { get; set; }
+    public int CantidadAsociados { get; set; }
     public Guid PromptVersionId { get; set; }
     public Guid CreadoPor { get; set; }
     public string? CreadoPorNombre { get; set; }
@@ -394,4 +398,33 @@ public sealed class Exportacion
     public DateTimeOffset? ExpiraEn { get; set; }
     public DateTimeOffset CreadoEn { get; set; }
     public DateTimeOffset? TerminadoEn { get; set; }
+}
+
+/// <summary>GDC-EVID §10: una pulsación de «Asociar los N» en un paquete: quién y cuándo (el trabajador actúa como esa persona).</summary>
+public sealed class AsociacionLote
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid PaqueteId { get; set; }
+    public Guid? SolicitadoPor { get; set; }
+    public string SolicitadoPorNombre { get; set; } = string.Empty;
+    public DateTimeOffset SolicitadoEn { get; set; }
+    public DateTimeOffset? TerminadoEn { get; set; }
+}
+
+/// <summary>
+/// GDC-EVID §10: un documento dentro de un lote. Es la cola del trabajador (se reclama esta fila, no el documento: si el proceso
+/// cae tras confirmar la asociación, la fila sigue pendiente y el trabajador retoma el correo) y guarda el resultado del resumen.
+/// </summary>
+public sealed class AsociacionLoteDocumento
+{
+    public Guid LoteId { get; set; }
+    public Guid DocumentoId { get; set; }
+    public ResultadoAsociacionLote Resultado { get; set; } = ResultadoAsociacionLote.PorAsociar;
+    public string? Motivo { get; set; }
+    public string? CorreoEstado { get; set; }
+    public string? CorreoMotivo { get; set; }
+    public DateTimeOffset? ProximoIntentoEn { get; set; }
+    public short Intentos { get; set; }
+    public DateTimeOffset? ProcesadoEn { get; set; }
 }

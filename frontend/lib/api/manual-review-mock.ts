@@ -89,7 +89,7 @@ function buildRows(count: number, now: Date): ManualDetail[] {
           ? { name: 'Revisor demo', email: 'revisor@flit.local', role: 'Super Admin' }
           : null,
       rejectionReasonCode: status === 'rechazado' ? MOTIVOS_RECHAZO_MANUAL[i % 6].code : null,
-      // Como el backend: el enlace vigente solo existe esperando captura o tras un rechazo (enlace nuevo de 24 h).
+      // Como el backend: el enlace vigente solo existe esperando captura o tras un rechazo (enlace nuevo de 30 días).
       linkExpiresAt:
         status === 'manual_activo' || status === 'rechazado'
           ? new Date(now.getTime() + 20 * 3_600_000).toISOString()
@@ -189,7 +189,7 @@ export function createMockManualReviewClient(options: MockOptions = {}): ManualR
       row.reviewedAt = new Date().toISOString();
       row.reviewedBy = 'Revisor demo';
       row.reviewer = { name: 'Revisor demo', email: 'revisor@flit.local', role: 'Super Admin' };
-      row.linkExpiresAt = new Date(Date.now() + 24 * 3_600_000).toISOString();
+      row.linkExpiresAt = new Date(Date.now() + 30 * 24 * 3_600_000).toISOString();
       return {
         validationId: row.id,
         tenantId: 'mock-tenant',

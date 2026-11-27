@@ -1,8 +1,15 @@
-# API externa — Sincronización incremental de trámites (v3.3)
+# API externa — Sincronización incremental de trámites (v3.4)
 
 > Contrato para clientes de integración externos (primer consumidor: **Flito**).
 > Estado: **Acordado** (2026-09-29) · Épica ADO: [#12737](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/12737) · Sin implementar.
 > Todos los ejemplos usan datos ficticios. Este documento puede copiarse al repositorio del consumidor.
+>
+> **Cambios de v3.3 → v3.4** (2026-11-26, pedido de FLITO): cada ítem suma `nombreGestor` y `correoGestor`, la
+> **persona** que gestiona el trámite (hoy solo viajaba la compañía). Campos planos, siempre presentes y `null` si no se
+> puede resolver la persona. Son datos personales: sin `external.tramites.pii.read` llegan **enmascarados**, como los de
+> los compradores. Cambio aditivo; un consumidor que ignora claves desconocidas no se entera. Reasignar el gestor
+> mueve `syncVersion`; **renombrar o cambiar el correo de la persona** (su perfil de usuario) **no**: el dato nuevo
+> llega con el próximo cambio del trámite.
 >
 > **Cambios de v3.2 → v3.3** (2026-10-16, Épica [#13614](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13614),
 > contraparte de la Épica FLITO [#13576](https://dev.azure.com/FlitDevOps/FLIT%20-%20FLITO/_workitems/edit/13576)):
@@ -213,7 +220,10 @@ Devuelve una URL firmada de corta vida para descargar **la factura** del trámit
     "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
     "nit": "901000000",
     "nombre": "TRAMITADORA EJEMPLO SAS"
-  }
+  },
+
+  "nombreGestor": "GESTORA EJEMPLO",
+  "correoGestor": "gestora@ejemplo.test"
 }
 ```
 
@@ -254,12 +264,14 @@ Devuelve una URL firmada de corta vida para descargar **la factura** del trámit
 | `compradores[].correo` | string \| null | | alta |
 | `factura` | object \| null | Adjunto de tipo factura más reciente. Descarga vía §3. | |
 | `companiaGestora.{tenantId,nit,nombre}` | | Compañía que radicó el trámite. | |
+| `nombreGestor` | string \| null | Persona que gestiona el trámite hoy: a quien se reasignó y, si nunca se reasignó, quien lo radicó. `null` si no se puede resolver. Plano en el ítem. (v3.4) | media |
+| `correoGestor` | string \| null | Correo de esa misma persona. (v3.4) | alta |
 
 Sin el scope `external.tramites.pii.read`, los campos marcados PII llegan enmascarados, nunca
 ausentes; un `null` sigue siendo `null`. Reglas: `numeroDocumento` primer carácter y últimos 4
 (`"9****0000"`); `correo` primera letra y dominio (`"c***@ejemplo.test"`); `celular` últimos 4
 (`"******0000"`); `nombreCompleto` inicial de cada palabra (`"P*** E***"`); `direccion` oculta
-(`"***"`).
+(`"***"`); `nombreGestor` como `nombreCompleto` (`"G*** E***"`) y `correoGestor` como `correo`.
 
 **Bloques en `null`.** Todo trámite entregado ha superado el control de completitud de la radicación,
 así que los bloques principales vienen poblados. Aun así, un campo sin dato llega siempre como `null`

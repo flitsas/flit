@@ -63,12 +63,40 @@ internal sealed class KyverumVerifyPorConsultas(
             return r.Encontrada
                 ? new KyverumVerifyStatus(
                     r.Status, r.HasScore ? r.Score : null, r.RawPayloadSanitized,
-                    r.HasAttemptAt ? r.AttemptAt : null, r.HasMotivo ? r.Motivo : null, r.HasFirmaSerie ? r.FirmaSerie : null)
+                    r.HasAttemptAt ? r.AttemptAt : null, r.HasMotivo ? r.Motivo : null, r.HasFirmaSerie ? r.FirmaSerie : null,
+                    r.HasIntentos ? r.Intentos : null, r.HasMaxIntentos ? r.MaxIntentos : null)
                 : null;
         }
         catch (RpcException ex)
         {
             throw new KyverumVerifyException($"Consultas respondió {ex.StatusCode} al consultar el estado.", ConsultasRemotoMetadata.Transitorio(ex));
+        }
+    }
+
+    public async Task<KyverumReissueResult> ReissueAsync(string verificationId, CancellationToken ct = default)
+    {
+        var tenantId = await ConsultasRemotoMetadata.EmpresaDeLaVerificacionAsync(db, verificationId, ct).ConfigureAwait(false)
+            ?? throw new KyverumVerifyException("No hay validación con ese id de verificación.", transient: false);
+        try
+        {
+            var r = await client.ReemitirEnlaceAsync(
+                new ReemitirEnlaceRequest { VerificationId = verificationId }, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
+            return r.Resultado switch
+            {
+                KyverumReissueOutcome.Reemitido => KyverumReissueResult.Reemitido(r.CaptureUrl, r.Enviado),
+                KyverumReissueOutcome.Aprobada => KyverumReissueResult.Aprobada(),
+                KyverumReissueOutcome.NoExiste => KyverumReissueResult.NoExiste(),
+                _ => throw new KyverumVerifyException($"Consultas devolvió un resultado de reenvío desconocido: {r.Resultado}.", transient: false),
+            };
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+        {
+            // Consultas aún sin el RPC de reenvío (despliegue desfasado): el llamador usa el camino de creación.
+            return KyverumReissueResult.NoSoportado();
+        }
+        catch (RpcException ex)
+        {
+            throw new KyverumVerifyException($"Consultas respondió {ex.StatusCode} al reenviar la validación.", ConsultasRemotoMetadata.Transitorio(ex));
         }
     }
 }

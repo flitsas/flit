@@ -76,6 +76,9 @@ internal static class CompanyQueryReportColumns
         ["tipo_traspaso"] = new("Tipo de traspaso", 22, r => TextOrEmpty(string.IsNullOrEmpty(r.TipoTraspaso)
             ? null
             : Label(TraspasoLabel, r.TipoTraspaso))),
+        // «2 de 3 · Faltan firmas» / «3 de 3 · Firmas completas» (texto del evaluador único).
+        ["firmado_por_todas"] = new("Firmas", 26, r => TextOrEmpty(r.FirmasResumen)),
+        ["falta_firmar"] = new("Falta firmar", 40, r => TextOrEmpty(r.FaltaFirmar)),
         ["creado_en"] = new("Creado", 12, r => DateCell(r.CreadoEn)),
         ["enviado_en"] = new("Enviado al organismo", 18, r => DateTimeCellOrEmpty(r.EnviadoEn)),
         ["cerrado_en"] = new("Cerrado", 18, r => DateTimeCellOrEmpty(r.CerradoEn)),
@@ -165,6 +168,8 @@ internal static class CompanyQueryReportColumns
     internal const string ColumnaValidacionComprador = "validacion_comprador";
     internal const string ColumnaIntentosComprador = "intentos_comprador";
     internal const string ColumnaMotivoComprador = "motivo_comprador";
+    internal const string ColumnaFirmaComprador = "firma_comprador";
+    internal const string ColumnaFirmaVendedor = "firma_vendedor";
     internal const string ColumnaVendedor = "vendedor";
     internal const string ColumnaValidacionVendedor = "validacion_vendedor";
     internal const string ColumnaIntentosVendedor = "intentos_vendedor";
@@ -173,8 +178,10 @@ internal static class CompanyQueryReportColumns
     private static ActoresExcelColumns.Grupo? RolDeId(string id) => id switch
     {
         ColumnaComprador or ColumnaValidacionComprador or ColumnaIntentosComprador or ColumnaMotivoComprador
+            or ColumnaFirmaComprador
             => ActoresExcelColumns.Grupo.Comprador,
         ColumnaVendedor or ColumnaValidacionVendedor or ColumnaIntentosVendedor or ColumnaMotivoVendedor
+            or ColumnaFirmaVendedor
             => ActoresExcelColumns.Grupo.Vendedor,
         _ => null,
     };
@@ -186,6 +193,8 @@ internal static class CompanyQueryReportColumns
         if (ids.Contains(comprador ? ColumnaComprador : ColumnaVendedor)) campos |= ActoresExcelColumns.Campos.Nombre;
         if (ids.Contains(comprador ? ColumnaValidacionComprador : ColumnaValidacionVendedor))
             campos |= ActoresExcelColumns.Campos.Validacion;
+        if (ids.Contains(comprador ? ColumnaFirmaComprador : ColumnaFirmaVendedor))
+            campos |= ActoresExcelColumns.Campos.Firma;
         if (ids.Contains(comprador ? ColumnaIntentosComprador : ColumnaIntentosVendedor))
             campos |= ActoresExcelColumns.Campos.Intentos;
         if (ids.Contains(comprador ? ColumnaMotivoComprador : ColumnaMotivoVendedor))

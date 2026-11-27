@@ -70,12 +70,13 @@ internal sealed class IdentityValidationSendRetryProcessor(
         var resolver = scope.ServiceProvider.GetRequiredService<IIdentityValidationProviderResolver>();
         var secretProtector = scope.ServiceProvider.GetRequiredService<IWebhookSecretProtector>();
         var events = scope.ServiceProvider.GetRequiredService<IIdentityValidationEventPublisher>();
+        var audit = scope.ServiceProvider.GetRequiredService<IIdentityValidationAuditLog>();
 
         // El DbContext usa EnableRetryOnFailure → las transacciones manuales deben ejecutarse dentro de la
         // execution strategy (que reintenta el bloque completo ante fallos transitorios de BD).
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
-            await ProcessOneAsync(db, resolver, secretProtector, events, ct));
+            await ProcessOneAsync(db, resolver, secretProtector, events, audit, ct));
     }
 
     private async Task<bool> ProcessOneAsync(
@@ -83,6 +84,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
         IIdentityValidationProviderResolver resolver,
         IWebhookSecretProtector secretProtector,
         IIdentityValidationEventPublisher events,
+        IIdentityValidationAuditLog audit,
         CancellationToken ct)
     {
         db.ChangeTracker.Clear(); // estado limpio en cada (re)intento de la strategy
@@ -117,6 +119,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
                     v.ProcedureInstanceId, v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email, v.TenantId),
                 ct);
 
+            var intentosDeEnvio = v.Attempts;
             // Envío logrado → en_proceso con los datos del proveedor.
             v.Status = BiometricEstados.EnProceso;
             v.KyverumVerificationId = result.VerificationId;
@@ -128,6 +131,14 @@ internal sealed class IdentityValidationSendRetryProcessor(
             v.ProviderPayload = result.RawPayloadSanitized;
             v.UpdatedAt = now;
 
+            // Un reenvío encolado cuenta su ronda SOLO cuando el enlace nuevo se crea (un envío fallido no consume cupo).
+            if (v.LastResentAt is not null)
+                v.ResendCount += 1;
+
+            // Los intentos de ENVÍO (FLIT → Kyverum) no son intentos de VERIFICACIÓN: al lograr el envío el contador de
+            // verificación empieza en 0 (lo sube solo el webhook de intento fallido).
+            v.Attempts = 0;
+
             await events.PublishAsync(new IdentityValidationRequested
             {
                 TenantId = v.TenantId,
@@ -138,7 +149,13 @@ internal sealed class IdentityValidationSendRetryProcessor(
                 ProviderVerificationId = result.VerificationId,
             }, ct);
 
-            SendRetryLog.Sent(logger, v.Id, v.Provider, v.Attempts);
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Send, IdentityValidationAuditOutcomes.Ok,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: result.VerificationId, PartyRole: v.PartyRole,
+                Message: "Enlace de captura creado en Kyverum tras la cola de envío."), ct);
+
+            SendRetryLog.Sent(logger, v.Id, v.Provider, intentosDeEnvio);
         }
         catch (IdentityProviderException ex)
         {

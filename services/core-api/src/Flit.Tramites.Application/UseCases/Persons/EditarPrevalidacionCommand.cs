@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -49,12 +50,19 @@ public sealed record ReenviarPrevalidacionResult(
 /// <c>Attempts</c>/<c>ReconcilePollCount</c> a 0. NO toca <c>ValidUntil</c> (se estampa solo al aprobar).
 /// Sin límite de reenvíos ni cooldown entre ellos (el guard D10 de HU #10943 se eliminó a pedido del
 /// producto).
+/// <para>
+/// Tope de rondas (configurador GLOBAL, <see cref="IIdentityRoundsPolicy"/>): un reenvío abre la siguiente RONDA de la misma fila, y el
+/// conteo es POR FILA (<c>1 + ResendCount</c>), no por persona ni documento. Con las rondas permitidas agotadas responde
+/// <see cref="IdentityRoundsErrors.LimiteRondasAlcanzado"/> ANTES de tocar la fila o el proveedor; la regla vale para los cuatro
+/// llamadores (reenvío standalone, edición de correo, reenvío admin y portal). Sin política (tests antiguos) no hay tope.
+/// </para>
 /// </summary>
 internal sealed class PrevalidacionResendService(
     IKyverumVerifyClient kyverum,
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
-    IIdentityValidationEventPublisher events)
+    IIdentityValidationEventPublisher events,
+    IIdentityRoundsPolicy? rounds = null)
 {
     /// <summary>HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum (409).</summary>
     internal const string IdentidadManualError = "identidad_manual";
@@ -73,6 +81,14 @@ internal sealed class PrevalidacionResendService(
         if (string.Equals(validation.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
             return (IdentidadManualError, false, null, string.Empty);
 
+        // Un envío pendiente ya tiene su reenvío en cola: otro encima duplicaría el enlace y el cupo.
+        if (validation.Status == BiometricEstados.PendienteEnvio)
+            return ("validacion_en_curso", false, null, string.Empty);
+
+        // Tope global de rondas: sin cupo no se crea ni se reemite nada (la fila queda intacta).
+        if (rounds is not null && await rounds.IsResendBlockedAsync(validation, ct))
+            return (IdentityRoundsErrors.LimiteRondasAlcanzado, false, null, string.Empty);
+
         return providerOptions.IsKyverum
             ? await ResendKyverumAsync(tenantId, validation, subject, now, ct)
             : ResendMock(tenantId, validation, subject, now);
@@ -85,6 +101,63 @@ internal sealed class PrevalidacionResendService(
         DateTimeOffset now,
         CancellationToken ct)
     {
+        // Reenvío sobre la MISMA validación de Kyverum (contrato: POST .../subjects/{subjectId}/reissue): el enlace
+        // anterior deja de funcionar en el proveedor, no se crea otra validación y el secreto del aviso no cambia.
+        // Si el correo cambió, el reissue mandaría el enlace al correo viejo registrado en Kyverum, así que en ese caso
+        // se crea una validación nueva. `validation.Email` aún trae el correo anterior: los llamadores lo actualizan después.
+        var correoAnterior = validation.Email?.Trim() ?? string.Empty;
+        var correoCambio = !string.Equals(correoAnterior, subject.Email.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(validation.KyverumVerificationId) && !correoCambio)
+        {
+            KyverumReissueResult reissue;
+            try
+            {
+                reissue = await kyverum.ReissueAsync(validation.KyverumVerificationId, ct);
+            }
+            catch (KyverumVerifyException ex)
+            {
+                if (!ex.Transient)
+                    return ("proveedor_error", false, null, string.Empty);
+                return await EncolarReenvioTransitorioAsync(tenantId, validation, now, ct);
+            }
+
+            switch (reissue.Outcome)
+            {
+                case KyverumReissueOutcome.Reemitido:
+                    // Mismo registro y misma verificación: solo cambian el enlace, los intentos y el vencimiento (D8).
+                    validation.CaptureUrl = reissue.CaptureUrl;
+                    validation.Status = BiometricEstados.EnProceso;
+                    validation.Attempts = 0;
+                    validation.ReconcilePollCount = 0;
+                    validation.ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+                    // La ronda cuenta solo si Kyverum confirmó el envío del correo (enviado: true). Si no salió, el enlace
+                    // queda vigente para compartirlo por otro canal, pero la ronda no se consume.
+                    if (reissue.Enviado)
+                        validation.ResendCount += 1;
+                    validation.LastResentAt = now;
+                    validation.UpdatedAt = now;
+
+                    await events.PublishAsync(new IdentityValidationRequested
+                    {
+                        TenantId = tenantId,
+                        ProcedureInstanceId = null,
+                        ValidationId = validation.Id,
+                        Provider = BiometricProviders.Kyverum,
+                        Parte = null,
+                        ProviderVerificationId = validation.KyverumVerificationId,
+                    }, ct);
+
+                    return (null, false, null, reissue.CaptureUrl ?? string.Empty);
+
+                case KyverumReissueOutcome.Aprobada:
+                    // Kyverum ya la tiene aprobada: no se reenvía. La reconciliación aplica el aprobado a la fila.
+                    return (IdentidadAprobadaEnProveedor, false, null, string.Empty);
+
+                // NoExiste: el proveedor ya no conoce la validación (no hay enlace que invalidar).
+                // NoSoportado: Consultas aún sin el RPC de reenvío. Ambos caen a la creación de abajo.
+            }
+        }
+
         KyverumVerifyStartResult provider;
         try
         {
@@ -105,25 +178,7 @@ internal sealed class PrevalidacionResendService(
             if (!ex.Transient)
                 return ("proveedor_error", false, null, string.Empty);
 
-            // Falla transitoria (AC11 — HU #10943): encola en pendiente_envio; el worker de envío
-            // reintenta. El reenvío YA consumió cupo del tope (D10), aunque el envío no se completó.
-            validation.Status = BiometricEstados.PendienteEnvio;
-            validation.Attempts = 0;
-            validation.ReconcilePollCount = 0;
-            validation.ResendCount += 1;
-            validation.LastResentAt = now;
-            validation.UpdatedAt = now;
-
-            await events.PublishAsync(new IdentityValidationRequested
-            {
-                TenantId = tenantId,
-                ProcedureInstanceId = null,
-                ValidationId = validation.Id,
-                Provider = BiometricProviders.Kyverum,
-                Parte = null,
-            }, ct);
-
-            return (null, true, null, string.Empty);
+            return await EncolarReenvioTransitorioAsync(tenantId, validation, now, ct);
         }
 
         // Idempotencia con Kyverum (defensa en profundidad, HU #10943): al sobrescribir el secreto del
@@ -140,8 +195,8 @@ internal sealed class PrevalidacionResendService(
         validation.Status = BiometricEstados.EnProceso;
         validation.Attempts = 0;
         validation.ReconcilePollCount = 0;
-        // D8: TTL fijo de 24h en el reenvío (no el expiresAt reportado por el proveedor).
-        validation.ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        // D8: TTL fijo (BiometricRules.KyverumTokenTtlHoras, 30 días) en el reenvío (no el expiresAt reportado por el proveedor).
+        validation.ExpiresAt = now.AddHours(BiometricRules.KyverumTokenTtlHoras);
         validation.ResendCount += 1;
         validation.LastResentAt = now;
         validation.UpdatedAt = now;
@@ -157,6 +212,38 @@ internal sealed class PrevalidacionResendService(
         }, ct);
 
         return (null, false, null, provider.CaptureUrl);
+    }
+
+    /// <summary>Mismo código que <c>AdminReenviarValidacionIdentidadHandler.IdentidadAprobada</c> (responde 409).</summary>
+    private const string IdentidadAprobadaEnProveedor = "identidad_aprobada";
+
+    /// <summary>
+    /// Falla transitoria (AC11 — HU #10943): encola en pendiente_envio; el worker de envío reintenta. La ronda NO se
+    /// cuenta aquí: solo cuenta cuando el worker logra crear el enlace (<c>IdentityValidationSendRetryProcessor</c>), así un
+    /// envío que falla no consume cupo. Mientras el envío está pendiente, un nuevo reenvío se rechaza (<c>validacion_en_curso</c>).
+    /// </summary>
+    private async Task<(string? Error, bool Queued, int? CooldownMinutos, string CaptureUrl)> EncolarReenvioTransitorioAsync(
+        Guid tenantId,
+        ProcedureInstanceBiometricValidation validation,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        validation.Status = BiometricEstados.PendienteEnvio;
+        validation.Attempts = 0;
+        validation.ReconcilePollCount = 0;
+        validation.LastResentAt = now;
+        validation.UpdatedAt = now;
+
+        await events.PublishAsync(new IdentityValidationRequested
+        {
+            TenantId = tenantId,
+            ProcedureInstanceId = null,
+            ValidationId = validation.Id,
+            Provider = BiometricProviders.Kyverum,
+            Parte = null,
+        }, ct);
+
+        return (null, true, null, string.Empty);
     }
 
     private (string? Error, bool Queued, int? CooldownMinutos, string CaptureUrl) ResendMock(
@@ -206,9 +293,10 @@ public sealed class EditarPrevalidacionHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    IIdentityRoundsPolicy? rounds = null)
 {
-    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
+    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
 
     public async Task<(EditarPrevalidacionResult? Result, string? Error, int? CooldownMinutos)> HandleAsync(
         Guid tenantId,
@@ -363,9 +451,10 @@ public sealed class ReenviarPrevalidacionHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    IIdentityRoundsPolicy? rounds = null)
 {
-    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events);
+    private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
 
     public async Task<(ReenviarPrevalidacionResult? Result, string? Error, int? CooldownMinutos)> HandleAsync(
         Guid tenantId,

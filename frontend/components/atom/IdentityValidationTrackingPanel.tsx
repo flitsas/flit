@@ -22,6 +22,9 @@ const STAGE_LABEL: Record<string, string> = {
   send_error: 'Error de envío',
   webhook_received: 'Notificación recibida',
   webhook_not_verifiable: 'Notificación no verificable',
+  ronda_rechazada: 'Ronda cerrada en rechazo (intentos agotados)',
+  ronda_reemitida: 'Ronda nueva: enlace reemitido',
+  ronda_agotada: 'Rechazo final: sin rondas disponibles',
   webhook_signature_invalid: 'Firma de notificación inválida',
   webhook_applied: 'Resultado de la notificación aplicado',
   reconcile: 'Consulta de estado (reconciliación)',
@@ -52,6 +55,9 @@ const OUTCOME_LABEL: Record<string, string> = {
 const STAGE_LABEL_DETAIL: Record<string, string> = {
   send_response: 'Respuesta proveedor',
   reconcile: 'Consulta de estado',
+  ronda_rechazada: 'Ronda cerrada en rechazo',
+  ronda_reemitida: 'Ronda nueva: enlace reemitido',
+  ronda_agotada: 'Rechazo final: sin rondas disponibles',
   expired: 'Cierre por vencimiento',
 };
 
@@ -120,6 +126,10 @@ function auditDetailText(e: IdentityAuditEvent): string {
     const quien = descripcionRevisor(e.revisor);
     const verbo = e.stage === 'manual_aprobado' ? 'Aprobada' : 'Rechazada';
     return quien ? `${verbo} por ${quien}` : `${verbo} en revisión manual`;
+  }
+  if (e.stage === 'manual_activado') {
+    const quien = descripcionRevisor(e.revisor);
+    return quien ? `Flujo manual activado por ${quien}` : 'Flujo manual activado';
   }
   if (e.message) {
     // Otros eventos manuales (p. ej. consulta de imágenes) citan «usuario <id>»: nunca se muestra el id.

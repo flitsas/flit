@@ -382,6 +382,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Las tarjetas por estado sobre la tabla filtran con un clic y cuentan el universo completo, no la página. Solo aparecen los estados de la pestaña activa: en Traspaso y Otros trámites no hay Preasignación ni Asignado.",
           "«Búsqueda rápida», debajo de las tarjetas, trae consultas frecuentes con un clic: en subsanación, rechazados desde preasignación, más de 5 o 10 días en gestión, sin firmas, mis trámites (los que tienes a tu cargo hoy), faltantes por aprobar, sin documento y pausados. No cambia lo que tengas en «+ Filtro».",
           "Los números de las tarjetas se actualizan solos cada minuto; la tabla no se mueve. Si cambió la tarjeta que estás viendo, aparece «Hay cambios — Actualizar».",
+          "Columna «Marcas»: si el organismo recibe el trámite por Quipux, verás una etiqueta pequeña que dice en qué va: «QX · En cola» (se radica solo, espera la confirmación de Quipux), «QX · Radicado» (ya está en Quipux, esperando la decisión del organismo) o «QX · Falló», en rojo (Quipux no respondió y el trámite sigue en Preparado). Cuando el trámite ya está Aprobado o Rechazado no lleva etiqueta: su estado lo dice. Pasa el ratón sobre la etiqueta para ver qué significa; si tienes acceso a Log QX, un clic te lleva a la trazabilidad del envío.",
           "La estrella marca un trámite como prioritario; el filtro «solo prioritarios» los aísla y, sin orden explícito, van primero.",
           "«Exportar» genera un Excel con TODAS las filas que cumplen los filtros actuales, no solo las de pantalla.",
           "El selector de columnas te deja elegir qué ver; la elección se guarda por usuario.",
@@ -829,6 +830,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "kpi",
       "productividad",
       "consultas personalizadas",
+      "firmado por todas las partes",
+      "falta firmar",
       "exportar excel",
       "tiempos",
       "organismo",
@@ -895,6 +898,27 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Los reportes miran tu compañía. Si eres Administrador de una cabeza de red (concesión o marca blanca) y eliges «Toda la red» o un cliente en el selector de alcance, la analítica cambia con él; algunas exportaciones están disponibles solo para la compañía propia.",
           "Toda exportación a Excel usa el mismo formato de fecha de la interfaz (DD/MM/YYYY HH:mm, hora de Colombia).",
+        ],
+      },
+      {
+        id: "consultas-firma",
+        title: "5. Consultas personalizadas: saber quién falta por firmar",
+        paragraphs: [
+          "En la pestaña «Consultas personalizadas» ves, trámite por trámite, quién ya firmó y quién falta. La columna «Firmas» muestra el resumen «N de M»: cuántas partes que deben firmar ya firmaron, de cuántas en total.",
+        ],
+        bullets: [
+          "Paso 1. Pulsa «+ Filtro», busca el grupo «Personas» y elige «Firmas».",
+          "Paso 2. Elige «Completas» para ver los trámites en los que todas las partes ya firmaron, «Faltan firmas» para ver los que tienen al menos una parte pendiente, o «Sin partes que firmen» para los que no tienen a nadie que deba firmar. Pulsa «Aplicar»; la tabla y el contador cambian.",
+          "Paso 3. Sin filtro, la columna «Firmas» muestra el resumen del trámite («2 de 3 · Faltan firmas») y, debajo, una línea por persona con su estado: Firmó, Pendiente, Rechazada, Expirada o Sin validar. Si el trámite no tiene partes que deban firmar, dice «Sin partes que firmen».",
+          "Paso 4. Para ver cada parte en su propia columna, abre el selector de columnas y activa «Firma comprador» y «Firma vendedor».",
+          "Paso 5. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro y las columnas que dejaste visibles.",
+          "Paso 6. Pulsa «Exportar a Excel»: el archivo trae las mismas columnas y los mismos valores que ves en la tabla.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Las columnas de firma se calculan al ejecutar la consulta. Si una consulta no las trae, la celda muestra «—». Las consultas guardadas antes de este cambio funcionan igual que siempre; puedes agregarles la columna «Firmas» después.",
+          },
         ],
       },
     ],

@@ -466,7 +466,10 @@ public sealed class OtQueryRepositoryTests
         };
 
         esperado.Keys.Should().BeEquivalentTo(
-            OtQueryFieldCatalog.Fields.Select(f => f.Id),
+            // HU #14700: los campos de firma se prueban en OtQueryFirmaTests (necesitan evaluador y actores).
+            OtQueryFieldCatalog.Fields.Select(f => f.Id)
+                .Where(id => id is not (OtQueryFieldCatalog.FirmadoPorTodas or OtQueryFieldCatalog.FaltaFirmar
+                    or OtQueryFieldCatalog.FirmaVendedor or OtQueryFieldCatalog.FirmaComprador)),
             "cada campo del catálogo necesita su traducción y su caso aquí");
 
         foreach (var (fieldId, valor) in esperado)

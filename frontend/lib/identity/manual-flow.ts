@@ -11,8 +11,8 @@ export const MANUAL_ESTADO_META: Record<
   'manual_activo' | 'pendiente_revision_manual',
   { label: string; /** Etiqueta corta para las celdas angostas de las tablas; el detalle usa `label`. */ shortLabel: string; tone: StatusTone }
 > = {
-  manual_activo: { label: 'Esperando captura del cliente', shortLabel: 'Esperando captura', tone: 'info' },
-  pendiente_revision_manual: { label: 'Pendiente de revisión', shortLabel: 'Pendiente de revisión', tone: 'info' },
+  manual_activo: { label: 'Esperando captura del cliente', shortLabel: 'Por capturar', tone: 'info' },
+  pendiente_revision_manual: { label: 'Pendiente de revisión', shortLabel: 'Por revisar', tone: 'info' },
 };
 
 /** Vigencia de una identidad aprobada (espejo de `BiometricRules.VigenciaDias`). */
@@ -43,7 +43,7 @@ export function esFlujoManualActivo(v: Pick<BiometricValidation, 'provider' | 's
   return v.provider === 'manual' && v.status === 'manual_activo';
 }
 
-/** Validación manual RECHAZADA por el Super Admin: el cliente recibió un enlace nuevo de 24 h para repetir la captura. */
+/** Validación manual RECHAZADA por el Super Admin: el cliente recibió un enlace nuevo de 30 días para repetir la captura. */
 export function esRechazadoManual(v: Pick<BiometricValidation, 'provider' | 'status'>): boolean {
   return v.provider === 'manual' && v.status === 'rechazado';
 }

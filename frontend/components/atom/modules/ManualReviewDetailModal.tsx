@@ -284,6 +284,9 @@ function DetalleCuerpo({
                 <Dato label="Compañía">{detail.tenantName}</Dato>
                 <Dato label="Origen">{manualOriginLabel(detail.origin)}</Dato>
                 <Dato label="Fecha de activación">{formatFechaHora(detail.activatedAt)}</Dato>
+                {descripcionRevisor(detail.activator) && (
+                  <Dato label="Activado por">{descripcionRevisor(detail.activator)}</Dato>
+                )}
                 {detail.waitingMinutes != null && (
                   <Dato label="Tiempo en espera">{formatEspera(detail.waitingMinutes)}</Dato>
                 )}

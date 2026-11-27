@@ -156,6 +156,21 @@ public enum EstadoDocumentoOcr
     Duplicado,
     Registrado,
     Descartado,
+    /// <summary>El documento escaneado se asoció a un comparendo que ya existía (estado final).</summary>
+    Asociado,
+
+    /// <summary>
+    /// GDC-EVID §10: en un lote de «Asociar los N», esperando al trabajador de fondo. No es final, ni editable, ni asociable a mano.
+    /// </summary>
+    PorAsociar,
+}
+
+/// <summary>GDC-EVID §10: cómo terminó un documento de un lote de «Asociar los N».</summary>
+public enum ResultadoAsociacionLote
+{
+    PorAsociar,
+    Asociado,
+    NoAsociado,
 }
 
 /// <summary>Los cuatro primeros se reintentan (hasta 3 veces); ilegible y archivo inválido no.</summary>
@@ -187,6 +202,12 @@ public enum TipoComunicacion
     /// <summary>Epic #14606, HU #14610: resumen diario de lo que el envío automático de DP omitió (una vez al día por empresa).</summary>
     ResumenEnvioAutomaticoDp,
     ConsultaProgramada,
+
+    /// <summary>
+    /// GDC-EVID: el documento escaneado que se asocia a un comparendo existente, al conductor, de inmediato. Es un correo por
+    /// evento, NO un <see cref="TipoAviso"/>: no entra en la secuencia 1-2-3 ni cambia <see cref="EstadoNotificacionConductor"/>.
+    /// </summary>
+    Evidencia,
 }
 
 /// <summary>Solo correo en la primera entrega; WhatsApp y SMS quedan en el backlog [Excel C11].</summary>
@@ -232,6 +253,9 @@ public enum TipoPlantilla
 
     /// <summary>HU #13884: la autorización de cambio de infractor (PDF) que firma el representante y va en los avisos.</summary>
     AutorizacionCambioInfractor,
+
+    /// <summary>GDC-EVID: el correo con el documento del comparendo al asociar un escaneado (no es un aviso).</summary>
+    CorreoEvidencia,
 }
 
 /// <summary>Dos conjuntos: el de FLIT (cualquier cliente) y el de Renting [Excel J2].</summary>
@@ -381,6 +405,13 @@ public enum TipoEventoTimeline
     PagoRegistrado,
     CobroCoactivoDetectado,
     NotaManual,
+    DocumentoAsociadoOcr,
+
+    /// <summary>GDC-EVID: el correo con el documento del comparendo salió al conductor al asociarlo.</summary>
+    EvidenciaEnviada,
+
+    /// <summary>GDC-EVID: se asoció el documento pero no se envió el correo al conductor; el motivo queda en la nota.</summary>
+    EvidenciaOmitida,
 }
 
 public enum ActorTipo

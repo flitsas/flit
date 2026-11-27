@@ -61,7 +61,11 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
             role: u.roleCode,
             roleCode: u.roleCode,
             roleId: u.roleId,
-            status: u.status === "inactive" ? "inactive" : "active",
+            // Bug #14714: las invitaciones (pending/cancelled) llegan con su estado real.
+            status:
+              u.status === "inactive" || u.status === "pending" || u.status === "cancelled"
+                ? u.status
+                : "active",
             createdAt: null,
             isSuspended: false,
             tenantId,

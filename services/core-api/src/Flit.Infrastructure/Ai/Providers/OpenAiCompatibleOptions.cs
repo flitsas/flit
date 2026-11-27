@@ -21,6 +21,22 @@ internal class OpenAiCompatibleOptions
 
     public int DrFlitTimeoutSeconds { get; set; } = 20;
 
+    /// <summary>
+    /// Tope de salida de la sonda de orientación (<see cref="Routing.AiVisionPerfil.Sonda"/>). La respuesta
+    /// es <c>{"derecha":true}</c>; un modelo que razona (kimi-k3) necesita bastante más para llegar a ella.
+    /// </summary>
+    public int OrientacionMaxTokens { get; set; } = 100;
+
+    /// <summary>Deadline de cada sonda de orientación: va en el camino crítico de cada carga.</summary>
+    public int OrientacionTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Resuelve tope y deadline según el perfil; lo explícito del llamador siempre gana.</summary>
+    public (int? MaxTokens, int? TimeoutSeconds) Limites(
+        Routing.AiVisionPerfil perfil, int? maxTokens, int? timeoutSeconds) =>
+        perfil == Routing.AiVisionPerfil.Sonda
+            ? (maxTokens ?? OrientacionMaxTokens, timeoutSeconds ?? OrientacionTimeoutSeconds)
+            : (maxTokens, timeoutSeconds);
+
     /// <summary>Código del proveedor para el registro de consumo de IA (ADR-0090).</summary>
     public virtual string CodigoProveedor => Flit.Platform.Sdk.IaConsumo.IaProveedores.OpenAi;
 

@@ -85,6 +85,37 @@ public sealed class NetworkChildrenTests(PostgresDatabaseFixture fixture) : Post
         despues.Should().NotContain(c => c.Id == HierarchyScenario.C1);
     }
 
+    // ── Bug #14714 — vincular/desvincular con el contexto de producto (reintento automático) ──
+
+    /// <summary>
+    /// El DbContext de producto usa EnableRetryOnFailure, que NO admite una transacción abierta a mano
+    /// fuera de su estrategia de ejecución: <c>SetParentAsync</c> lanzaba InvalidOperationException y
+    /// «Asociar a una concesión» respondía 500. El resto de pruebas usa un contexto sin reintento y no lo veía.
+    /// </summary>
+    [PostgresFact]
+    public async Task Bug14714_SetParent_con_contexto_con_reintento_desvincula_y_vuelve_a_vincular()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+
+        await using (var ctx = NewRetryingContext())
+        {
+            var repo = new CompanyHierarchyRepository(ctx);
+            var suelto = await repo.SetParentAsync(
+                HierarchyScenario.C1, parentTenantId: null, changedBy: null, TestContext.Current.CancellationToken);
+            suelto.Should().NotBeNull();
+            suelto!.ParentTenantId.Should().BeNull();
+        }
+
+        await using (var ctx = NewRetryingContext())
+        {
+            var repo = new CompanyHierarchyRepository(ctx);
+            var vinculado = await repo.SetParentAsync(
+                HierarchyScenario.C1, HierarchyScenario.P, changedBy: null, TestContext.Current.CancellationToken);
+            vinculado.Should().NotBeNull();
+            vinculado!.ParentTenantId.Should().Be(HierarchyScenario.P);
+        }
+    }
+
     // ── AC1 — red sin hijos ⇒ lista vacía (S es Single, sin jerarquía) ────────────────────────
 
     [PostgresFact]

@@ -46,6 +46,11 @@
     <None Include="..\..\..\..\contracts\proto\flit\platform\v1\testdata\configuracion_ia_vector.json" Link="Fixtures\ia\configuracion_ia_vector.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Centros reales de las casillas del FUR medidos en la plantilla PDF (referencia no circular). -->
+  <ItemGroup>
+    <None Update="Documents/fur-casillas-centros.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />

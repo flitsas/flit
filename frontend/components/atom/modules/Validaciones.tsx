@@ -139,8 +139,8 @@ const ESTADO_META: Record<BiometricEstado, { label: string; shortLabel?: string;
   aprobado: { label: 'Aprobado', tone: 'success' },
   rechazado: { label: 'Rechazado', tone: 'danger' },
   expirado: { label: 'Expirado', tone: 'neutral' },
-  pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
-  error_envio: { label: 'Error de envío', tone: 'danger' },
+  pendiente_envio: { label: 'Pendiente de envío', shortLabel: 'Por enviar', tone: 'info' },
+  error_envio: { label: 'Error de envío', shortLabel: 'Falló el envío', tone: 'danger' },
   ...MANUAL_ESTADO_META,
 };
 
@@ -215,7 +215,8 @@ const IDENTIDAD_COLUMNS = [
   { key: 'persona', label: 'Persona', width: 'minmax(0,1.25fr)' },
   { key: 'documento', label: 'Documento', width: 'minmax(0,1.1fr)' },
   { key: 'correo', label: 'Correo', width: 'minmax(0,1.2fr)' },
-  { key: 'estado', label: 'Estado', width: 'minmax(0,1.6fr)' },
+  // Peso 1.7 + chip compacto (text-xs): con `table-fixed` los estados largos van en una sola línea y caben sin montarse sobre Score.
+  { key: 'estado', label: 'Estado', width: 'minmax(0,1.7fr)' },
   { key: 'score', label: 'Score', width: 'minmax(0,0.6fr)' },
   { key: 'registro', label: 'Registro', width: 'minmax(0,1.1fr)' },
   { key: 'aprobacion', label: 'Aprobación', width: 'minmax(0,1fr)' },
@@ -2412,23 +2413,16 @@ function ValidacionRow({
   // Un rechazo con intentos AGOTADOS (intentos >= maxIntentos) es legítimo; uno con intentos DISPONIBLES
   // es el rechazo prematuro del Bug #11503 (congelaba en `rechazado` al primer intento fallido). La
   // distinción tiene que leerse por TEXTO (WCAG 2.1 AA), no solo por color: cambia label + tone.
-  const intentosAgotados = intentosInfo != null && intentosInfo.intentos >= intentosInfo.maxIntentos;
-  const esRechazoPrematuro = estado === 'rechazado' && intentosInfo != null && !intentosAgotados;
   let badgeLabel: string = meta.label;
   // Etiqueta de la CELDA: corta para los estados largos (el texto completo queda en title/aria-label y en
-  // el detalle «Ver proceso»). El badge además se parte en líneas si aun así no cupiera en la columna.
+  // el detalle «Ver proceso»). El chip va siempre en una sola línea: un texto partido lo empujaba hacia abajo.
   let badgeCelda: string = meta.shortLabel ?? meta.label;
   let badgeTone: StatusTone = meta.tone;
+  // Un rechazo que llega a la lista es final: se rotula solo «Rechazado». Las columnas muestran rondas, no intentos del enlace.
   if (estado === 'rechazado' && intentosInfo != null) {
-    if (intentosAgotados) {
-      badgeLabel = 'Rechazado (intentos agotados)';
-      badgeCelda = badgeLabel;
-      badgeTone = 'danger';
-    } else {
-      badgeLabel = 'Rechazado (intentos disponibles)';
-      badgeCelda = badgeLabel;
-      badgeTone = 'warning';
-    }
+    badgeLabel = meta.label;
+    badgeCelda = meta.shortLabel ?? meta.label;
+    badgeTone = 'danger';
   }
   // Validación PROPIA del mandatario: se lista aparte y solo se consulta (se gestiona desde su ficha).
   const esMandatario = r.esMandatario === true;
@@ -2449,7 +2443,6 @@ function ValidacionRow({
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
     `proveedor ${provider}, correo ${emailLabel}, estado ${badgeLabel}` +
     (intentosInfo ? `, intentos ${intentosInfo.intentos} de ${intentosInfo.maxIntentos}` : '') +
-    (esRechazoPrematuro ? ', rechazo con intentos disponibles' : '') +
     (r.score != null ? `, score ${r.score}` : '') +
     (r.status === 'rechazado' && r.rejectionReason ? `, motivo: ${r.rejectionReason}` : '') +
     `, registrada ${formatFecha(r.createdAt)}` +
@@ -2617,7 +2610,7 @@ function ValidacionRow({
     ),
     estado: (
       <div className="min-w-0">
-        <StatusBadge label={badgeCelda} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} title={badgeLabel} wrap />
+        <StatusBadge label={badgeCelda} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} title={badgeLabel} className="gap-[5px] pl-2 pr-[18px] text-xs" />
         {/* HU #11505 (AC1) — contador de intentos, mismo criterio que el drawer. AC4: si falta
             `intentos` o `maxIntentos`, no se pinta nada (nunca NaN/undefined/"0 / 0"). */}
         {intentosInfo && (

@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -80,7 +81,8 @@ public sealed class IniciarPrevalidacionHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog? audit = null)
+    IIdentityValidationAuditLog? audit = null,
+    IIdentityRoundsPolicy? rondas = null)
 {
     public async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid tenantId,
@@ -128,6 +130,8 @@ public sealed class IniciarPrevalidacionHandler(
         var now = DateTimeOffset.UtcNow;
         var tipoDoc = input.DocumentType.Trim();
         var numeroDoc = input.DocumentNumber.Trim();
+        if (rondas is not null && await rondas.IsPersonBlockedAsync(tenantId, tipoDoc, numeroDoc, ct))
+            return (null, IdentityRoundsErrors.LimiteRondasAlcanzado, null);
         var candidates = new List<ProcedureInstanceBiometricValidation>();
         var existingActive = await personRepo.FindActiveStandaloneValidationAsync(person.Id, ct);
         if (existingActive is not null)
@@ -382,6 +386,15 @@ public sealed class IniciarPrevalidacionHandler(
         validation.ProviderPayload = provider.RawPayloadSanitized;
 
         procedureRepo.Add(validation);
+
+        if (audit is not null)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.Send, IdentityValidationAuditOutcomes.Ok,
+                TenantId: tenantId, ValidationId: validation.Id, KyverumVerificationId: provider.VerificationId,
+                PartyRole: ParteDe(mandateSignerId, portal),
+                Message: "Enlace de captura creado en Kyverum."), ct);
+        }
 
         await events.PublishAsync(new IdentityValidationRequested
         {

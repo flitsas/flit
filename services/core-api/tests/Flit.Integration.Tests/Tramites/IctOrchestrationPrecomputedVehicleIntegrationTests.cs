@@ -29,8 +29,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// <para>Uso de ejemplo: el servicio se activa del contenedor real (<see cref="MarcaBlancaApiFactory"/>)
 /// con un <see cref="RunPreflightHandler"/> cuya cadena de vehículo es un contador.</para>
 /// </summary>
-public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresDatabaseFixture fixture)
-    : PostgresTestBase(fixture)
+public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private static readonly Guid UserId = new("b13304c3-0000-4000-8000-0000000000aa");
     private static readonly Guid SeededInstanceId = new("b13304c3-0000-4000-8000-000000000001");
@@ -197,7 +197,7 @@ public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresD
 
     private async Task<DraftReply> InvokeCreateAsync(CreateDraftFromIctRequest request, CountingChain chain)
     {
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var preflight = ActivatorUtilities.CreateInstance<RunPreflightHandler>(
             scope.ServiceProvider, (IConsultationProviderChainResolver)chain);

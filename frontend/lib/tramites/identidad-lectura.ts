@@ -42,6 +42,10 @@ export interface HitoIdentidad {
   tono: TonoIdentidad;
   /** «Revisado por …»: texto aparte del detalle. Solo en aprobación/rechazo manual y solo para el Super Admin. */
   revisadoPor?: string | null;
+  /** «Activado por …»: quién activó el flujo manual. Solo en `manual_activado` y solo para el Super Admin. */
+  activadoPor?: string | null;
+  /** Primer envío del enlace de una captura (`send` / `manual_activado`): abre un intento nuevo en la línea de tiempo. */
+  inicioCiclo?: boolean;
 }
 
 /**
@@ -60,6 +64,10 @@ const ETAPAS_VISIBLES = new Set([
   'expired',
   'webhook_received',
   'webhook_applied',
+  // Rondas de identidad: cierre de una ronda por rechazo, reemisión y agotamiento.
+  'ronda_rechazada',
+  'ronda_reemitida',
+  'ronda_agotada',
   // Flujo manual (Épica #13202). Se omiten consentimiento, enlace copiado e imágenes consultadas:
   // son actos internos de soporte que no le dicen nada al gestor.
   'manual_activado',
@@ -199,7 +207,15 @@ export function hitosDeIdentidad(
   v: BiometricValidation,
   eventos: readonly IdentityAuditEvent[],
 ): HitoIdentidad[] {
-  const visibles = colapsarRepetidos(eventos.filter((e) => ETAPAS_VISIBLES.has(e.stage)));
+  // Una consulta de respaldo a Kyverum solo se muestra cuando cierra la validación (aprobada o rechazada);
+  // los sondeos que siguen pendientes no le dicen nada a la persona ni al gestor.
+  const visibles = colapsarRepetidos(
+    eventos.filter(
+      (e) =>
+        ETAPAS_VISIBLES.has(e.stage) ||
+        (e.stage === 'reconcile' && (e.outcome === 'aprobado' || e.outcome === 'rechazado')),
+    ),
+  );
   const envio = [...visibles]
     .reverse()
     .find((e) => ['send', 'resend', 'manual_activado', 'manual_enlace_regenerado'].includes(e.stage))
@@ -214,7 +230,9 @@ export function hitosDeIdentidad(
       case 'send':
       case 'resend':
       case 'manual_activado':
-      case 'manual_enlace_regenerado':
+      case 'manual_enlace_regenerado': {
+        // Quién activó el flujo manual: el backend solo lo manda al Super Admin; sin él no se muestra nada.
+        const activador = e.stage === 'manual_activado' ? descripcionRevisor(e.revisor) : null;
         return {
           ...base,
           titulo: e.stage === 'resend' || e.stage === 'manual_enlace_regenerado' ? 'Se reenvió el enlace' : 'Se envió el enlace',
@@ -222,7 +240,10 @@ export function hitosDeIdentidad(
           // «no le llega» que en realidad es una dirección mal escrita.
           detalle: v.email?.trim() ? `A ${v.email.trim()}` : null,
           tono: 'neutro',
+          ...(activador ? { activadoPor: `Flujo manual activado por ${activador}` } : {}),
+          ...(e.stage === 'send' || e.stage === 'manual_activado' ? { inicioCiclo: true } : {}),
         };
+      }
 
       case 'send_error':
       case 'manual_correo_fallido':
@@ -239,6 +260,30 @@ export function hitosDeIdentidad(
           titulo: 'Se corrigieron sus datos de contacto',
           detalle: null,
           tono: 'neutro',
+        };
+
+      case 'ronda_rechazada':
+        return {
+          ...base,
+          titulo: 'Ronda cerrada en rechazo',
+          detalle: e.message?.trim() || null,
+          tono: 'alerta',
+        };
+
+      case 'ronda_reemitida':
+        return {
+          ...base,
+          titulo: 'Se abrió una ronda nueva con enlace nuevo',
+          detalle: e.message?.trim() || null,
+          tono: 'neutro',
+        };
+
+      case 'ronda_agotada':
+        return {
+          ...base,
+          titulo: 'Se agotaron las rondas de la persona',
+          detalle: e.message?.trim() || null,
+          tono: 'alerta',
         };
 
       case 'expired':

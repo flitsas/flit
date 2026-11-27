@@ -1,3 +1,4 @@
+using Flit.Comparendos.Api.Modulos.Avisos;
 using Flit.Comparendos.Api.Modulos.Comparendos;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
@@ -15,6 +16,8 @@ public static class OcrEndpoints
 
     public sealed record PedidoDescarte(string? Motivo);
 
+    public sealed record PedidoAsociar(bool Reemplazar, Guid? EvidenciaActualId);
+
     public static void Map(RouteGroupBuilder api)
     {
         var g = api.MapGroup("/ocr");
@@ -23,11 +26,14 @@ public static class OcrEndpoints
         g.MapGet("/paquetes/{id:guid}", Paquete).RequirePermiso(Permisos.OcrVer);
         g.MapPost("/paquetes/{id:guid}/iniciar", Iniciar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/paquetes/{id:guid}/registrar-completos", RegistrarCompletos).RequirePermiso(Permisos.OcrGestionar);
+        g.MapGet("/paquetes/{id:guid}/asociacion-lote", AsociacionLote).RequirePermiso(Permisos.OcrVer);
+        g.MapPost("/paquetes/{id:guid}/asociar-lote", AsociarLote).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/paquetes/{id:guid}/descartar-fallidos", DescartarFallidos).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/paquetes/{id:guid}/reprocesar-incompletos", ReprocesarIncompletos).RequirePermiso(Permisos.OcrGestionar);
         g.MapGet("/documentos/{id:guid}", Documento).RequirePermiso(Permisos.OcrVer);
         g.MapPut("/documentos/{id:guid}/campos", Corregir).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/registrar", Registrar).RequirePermiso(Permisos.OcrGestionar);
+        g.MapPost("/documentos/{id:guid}/asociar", Asociar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/descartar", Descartar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/reintentar", Reintentar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/reprocesar", Reprocesar).RequirePermiso(Permisos.OcrGestionar);
@@ -71,8 +77,8 @@ public static class OcrEndpoints
         var globales = await q.GroupBy(_ => 1).Select(g => new
         {
             paquetes = g.Count(), documentos = g.Sum(p => p.CantidadDocumentos), pendientes = g.Sum(p => p.CantidadPendientes), completos = g.Sum(p => p.CantidadCompletos),
-            incompletos = g.Sum(p => p.CantidadIncompletos), fallidos = g.Sum(p => p.CantidadFallidos), duplicados = g.Sum(p => p.CantidadDuplicados),
-            registrados = g.Sum(p => p.CantidadRegistrados), descartados = g.Sum(p => p.CantidadDescartados),
+            incompletos = g.Sum(p => p.CantidadIncompletos), fallidos = g.Sum(p => p.CantidadFallidos), duplicados = g.Sum(p => p.CantidadDuplicados + p.CantidadPorAsociar),
+            registrados = g.Sum(p => p.CantidadRegistrados), descartados = g.Sum(p => p.CantidadDescartados), asociados = g.Sum(p => p.CantidadAsociados),
         }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (Enum.TryParse<EstadoPaqueteOcr>(estado, true, out var e))
             q = q.Where(p => p.Estado == e);
@@ -91,7 +97,7 @@ public static class OcrEndpoints
     private static object Resumen(PaqueteOcr p) => new
     {
         p.Id, p.TenantId, p.Nombre, estado = p.Estado.ToString(), p.CantidadDocumentos, p.CantidadPendientes, p.CantidadCompletos, p.CantidadIncompletos, p.CantidadFallidos,
-        p.CantidadDuplicados, p.CantidadRegistrados, p.CantidadDescartados, procesados = p.CantidadDocumentos - p.CantidadPendientes, p.CreadoPor, p.CreadoPorNombre, p.CreadoEn,
+        p.CantidadDuplicados, p.CantidadRegistrados, p.CantidadDescartados, p.CantidadAsociados, p.CantidadPorAsociar, procesados = p.CantidadDocumentos - p.CantidadPendientes, p.CreadoPor, p.CreadoPorNombre, p.CreadoEn,
         p.ProcesamientoIniciadoEn, p.CerradoEn, p.PromptVersionId,
     };
 
@@ -104,9 +110,11 @@ public static class OcrEndpoints
         return Results.Created($"{Program.Prefijo}/ocr/paquetes/{paquete.Id}", Resumen(paquete));
     }
 
-    private static async Task<IResult> Paquete(Guid id, string? estado, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
+    private static async Task<IResult> Paquete(Guid id, string? estado, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, ServicioOcr servicio, CancellationToken ct)
     {
         var p = await PaqueteAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
+        // GDC-EVID §9: la misma preselección del lote marca la cola de revisión (reemplazos y números distintos).
+        var revisiones = (await servicio.ClasificarLoteAsync(p, ct).ConfigureAwait(false)).Where(x => x.Revision is not null).ToDictionary(x => x.DocumentoId, x => x.Revision);
         var q = db.DocumentosOcr.AsNoTracking().Where(d => d.PaqueteId == id);
         if (Enum.TryParse<EstadoDocumentoOcr>(estado, true, out var e))
             q = q.Where(d => d.Estado == e);
@@ -128,6 +136,7 @@ public static class OcrEndpoints
             d.Id, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, d.estado, d.Intentos, d.NumeroComparendoExtraido, d.CamposFaltantes, d.tipoFallo, d.mensajeError,
             d.FuenteDuplicado, d.ComparendoId, d.ProcesadoEn, d.MotivoDescarte, d.Reprocesos, d.avisoNumero, d.reprocesable,
             numeroPorConfirmar = d.avisoNumero is not null && !numerosRevisados.Contains(d.Id),
+            revision = revisiones.GetValueOrDefault(d.Id),
         }).ToList();
         // Los completos que «Registrar los completos» sí registraría: sin número por confirmar (el filtro de estado no los cuenta todos).
         var completosPorConfirmar = await db.DocumentosOcr.AsNoTracking().Where(d => d.PaqueteId == id && d.Estado == EstadoDocumentoOcr.Completo)
@@ -167,6 +176,55 @@ public static class OcrEndpoints
         return Results.Ok(new { registrados, omitidos, placasPorMonitorear = registrados.Where(r => r.Placa is not null && !r.PlacaYaMonitoreada).Select(r => r.Placa).Distinct() });
     }
 
+    /// <summary>
+    /// GDC-EVID §9: vista previa de «Asociar los N»: cuántos entran, cuántos correos saldrían (a cuántos conductores) y, de
+    /// los que no saldrían, el motivo; y cuántos quedan para revisar uno por uno. Misma regla que el envío.
+    /// </summary>
+    private static async Task<IResult> AsociacionLote(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, ServicioEvidencia evidencia, AsociacionEnSegundoPlano lotes,
+        Capacidades capacidades, CancellationToken ct)
+    {
+        var p = await PaqueteAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
+        var lote = await servicio.ClasificarLoteAsync(p, ct).ConfigureAwait(false);
+        var asociables = lote.Where(x => x.Revision is null).ToList();
+        var previstas = await evidencia.PrevistasAsync(p.TenantId, asociables.Select(x => (x.ComparendoId, x.ArchivoId)).ToList(), ct).ConfigureAwait(false);
+        var saldran = previstas.Where(x => x.Decision.SeEnviara).ToList();
+        var enCurso = await lotes.EnCursoAsync(p, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            asociables = asociables.Count,
+            correos = new
+            {
+                saldran = saldran.Count,
+                conductores = saldran.Select(x => x.Conductor).Where(x => x is not null).Distinct(StringComparer.Ordinal).Count(),
+                omitidos = previstas.Where(x => !x.Decision.SeEnviara).GroupBy(x => x.Decision.Motivo ?? string.Empty)
+                    .Select(g => new { motivo = g.Key, cantidad = g.Count() }).OrderByDescending(x => x.cantidad).ThenBy(x => x.motivo, StringComparer.Ordinal).ToList(),
+            },
+            porRevisar = new
+            {
+                reemplazos = lote.Count(x => x.Revision == DocumentoEnLote.Reemplazo),
+                numeroDistinto = lote.Count(x => x.Revision == DocumentoEnLote.NumeroDistinto),
+            },
+            enCurso = enCurso is null ? null : new
+            {
+                loteId = enCurso.LoteId, porAsociar = enCurso.PorAsociar, total = enCurso.Total, asociados = enCurso.Asociados,
+                noAsociados = enCurso.NoAsociados.Select(n => new { documentoId = n.DocumentoId, nombreArchivo = n.NombreArchivo, motivo = n.Motivo }),
+                correosEnCamino = enCurso.CorreosEnCamino, sinCorreo = enCurso.SinCorreo.Select(x => new { motivo = x.Motivo, cantidad = x.Cantidad }),
+                solicitadoPor = enCurso.SolicitadoPor, solicitadoEn = enCurso.SolicitadoEn, terminadoEn = enCurso.TerminadoEn, ultimoAvanceEn = enCurso.UltimoAvanceEn,
+            },
+        });
+    }
+
+    /// <summary>
+    /// GDC-EVID §10: «Asociar los N» encola en el servidor (marca PorAsociar los elegibles en una operación atómica) y un
+    /// trabajador de fondo asocia y deja los correos en cola. Un doble clic encola 0 (loteId null); el avance sale en enCurso.
+    /// </summary>
+    private static async Task<IResult> AsociarLote(Guid id, UsuarioActual usuario, ComparendosDb db, AsociacionEnSegundoPlano lote, Capacidades capacidades, CancellationToken ct)
+    {
+        var p = await PaqueteAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
+        var (encolados, loteId) = await lote.EncolarAsync(p, Actor.De(usuario), ct).ConfigureAwait(false);
+        return Results.Ok(new { encolados, loteId });
+    }
+
     private static async Task<IResult> DescartarFallidos(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
     {
         var p = await PaqueteAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
@@ -191,7 +249,7 @@ public static class OcrEndpoints
         return Results.Ok(new { encolados, omitidos = docs.Count - encolados });
     }
 
-    private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
+    private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, ServicioEvidencia evidencia, CancellationToken ct)
     {
         var d = await DocumentoAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
         var campos = await db.DocumentoOcrCampos.AsNoTracking().Where(c => c.DocumentoOcrId == id).ToListAsync(ct).ConfigureAwait(false);
@@ -215,17 +273,32 @@ public static class OcrEndpoints
         object? duplicado = null;
         if (d.DuplicadoDeComparendoId is { } cid)
         {
-            duplicado = await db.Comparendos.AsNoTracking().Where(c => c.Id == cid).Select(c => new
+            var existente = await db.Comparendos.AsNoTracking().Where(c => c.Id == cid && c.TenantId == d.TenantId).Select(c => new
             {
-                tipo = "comparendo", c.Id, c.Numero, fuente = d.FuenteDuplicado, registradoEn = c.CreadoEn, estadoGestion = c.EstadoGestion.ToString(), c.Activo, c.Pagado,
+                tipo = "comparendo", c.Id, c.Numero, fuente = d.FuenteDuplicado, registradoEn = c.CreadoEn, estadoGestion = c.EstadoGestion.ToString(), c.Activo, c.Pagado, c.ArchivoEvidenciaId,
             }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            // GDC-ASOC: el documento que el comparendo ya tiene (para compararlo) y si este se puede asociar.
+            var actual = existente?.ArchivoEvidenciaId is { } eid
+                ? await db.Archivos.AsNoTracking().Where(a => a.Id == eid && a.TenantId == d.TenantId)
+                    .Select(a => new { archivoId = a.Id, nombre = a.NombreOriginal, contentType = a.ContentType, tamanoBytes = a.TamanoBytes, cargadaEn = a.CreadoEn }).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+                : null;
+            var noAsociable = ServicioOcr.MotivoNoAsociable(d);
+            // GDC-EVID: lo que pasará con el correo al conductor, con el documento que se va a asociar (el de este escaneado).
+            var correoAlAsociar = existente is null ? null : await evidencia.PrevistaAsync(existente.Id, d.TenantId, d.ArchivoId, ct).ConfigureAwait(false);
+            duplicado = existente is null ? null : new
+            {
+                existente.tipo, existente.Id, existente.Numero, existente.fuente, existente.registradoEn, existente.estadoGestion, existente.Activo, existente.Pagado,
+                evidenciaActual = actual, asociable = noAsociable is null, motivoNoAsociable = noAsociable,
+                correoAlAsociar = new { seEnviara = correoAlAsociar!.SeEnviara, motivoNo = correoAlAsociar.Motivo },
+            };
         }
         else if (d.DuplicadoDeDocumentoId is { } did)
         {
+            var motivoDocumento = ServicioOcr.MotivoNoAsociable(d);
             duplicado = await (from o in db.DocumentosOcr.AsNoTracking()
                                join p in db.PaquetesOcr.AsNoTracking() on o.PaqueteId equals p.Id
                                where o.Id == did
-                               select new { tipo = "documento", o.Id, numero = o.NumeroComparendoExtraido, fuente = d.FuenteDuplicado, paqueteId = p.Id, paquete = p.Nombre, registradoEn = p.CreadoEn, estado = o.Estado.ToString(), o.ComparendoId })
+                               select new { tipo = "documento", o.Id, numero = o.NumeroComparendoExtraido, fuente = d.FuenteDuplicado, paqueteId = p.Id, paquete = p.Nombre, registradoEn = p.CreadoEn, estado = o.Estado.ToString(), o.ComparendoId, asociable = false, motivoNoAsociable = motivoDocumento })
                 .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         }
 
@@ -237,6 +310,7 @@ public static class OcrEndpoints
             d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), mensajeError = usuario.EsSuperAdmin ? d.MensajeError : null, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
             avisoNumero = NumeroComparendo.AvisoDeLectura(d.NumeroComparendoExtraido),
             numeroPorConfirmar = ServicioOcr.NumeroPorConfirmar(campos),
+            numeroAGuardar = NumeroComparendo.ParaGuardar(campos.FirstOrDefault(c => c.NombreCampo == CamposOcr.Numero)?.ValorFinal),
             d.Reprocesos, maximoReprocesos = ServicioOcr.MaximoReprocesos, motivoNoReprocesable = ServicioOcr.MotivoNoReprocesable(d), versionPrompt,
             d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, d.FuenteDuplicado, duplicado,
             campos = campos.OrderBy(c => orden.GetValueOrDefault(c.NombreCampo, 99)).Select(c => new
@@ -258,6 +332,16 @@ public static class OcrEndpoints
     {
         var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         return Results.Ok(await servicio.RegistrarAsync(d, Actor.De(usuario), ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> Asociar(Guid id, PedidoAsociar pedido, UsuarioActual usuario, ComparendosDb db, AsociacionDocumentos asociacion, Capacidades capacidades,
+        CancellationToken ct)
+    {
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
+        // GDC-EVID: asociar y, ya confirmado, el correo con el documento, con plazo propio (cerrar la pestaña no los separa).
+        // Un fallo del correo NUNCA deshace la asociación; un documento ya asociado no reenvía.
+        var (r, correo) = await asociacion.UnoAsync(d, pedido.Reemplazar, pedido.EvidenciaActualId, Actor.De(usuario), despachar: true, ct).ConfigureAwait(false);
+        return Results.Ok(new { r.ComparendoId, r.Numero, estado = EstadoDocumentoOcr.Asociado.ToString(), reemplazo = r.Reemplazo, correo = new { estado = correo.Estado, motivo = correo.Motivo } });
     }
 
     private static async Task<IResult> Descartar(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
@@ -304,8 +388,10 @@ public static class OcrEndpoints
                 completos = g.Count(f => f.Estado == EstadoDocumentoOcr.Completo || (f.Estado == EstadoDocumentoOcr.Registrado && !comp.Contains(f.ComparendoId ?? Guid.Empty))),
                 incompletos = g.Count(f => f.Estado == EstadoDocumentoOcr.Incompleto || (f.Estado == EstadoDocumentoOcr.Registrado && comp.Contains(f.ComparendoId ?? Guid.Empty))),
                 fallidos = g.Count(f => f.Estado == EstadoDocumentoOcr.Fallido),
-                duplicados = g.Count(f => f.Estado == EstadoDocumentoOcr.Duplicado),
+                // Un PorAsociar sigue siendo un duplicado hasta que el trabajador lo asocie (§10).
+                duplicados = g.Count(f => f.Estado == EstadoDocumentoOcr.Duplicado || f.Estado == EstadoDocumentoOcr.PorAsociar),
                 descartados = g.Count(f => f.Estado == EstadoDocumentoOcr.Descartado),
+                asociados = g.Count(f => f.Estado == EstadoDocumentoOcr.Asociado),
             });
         return Results.Ok(periodos);
     }

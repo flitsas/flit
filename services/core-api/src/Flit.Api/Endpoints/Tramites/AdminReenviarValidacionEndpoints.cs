@@ -1,4 +1,5 @@
 using Flit.Api.Authorization;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.Builder;
@@ -159,6 +160,8 @@ internal static class AdminReenviarValidacionEndpoints
             "La identidad ya está aprobada. Para revalidar, inicia una validación nueva."),
         // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
         "identidad_manual" => (409, error, "La validación está en el flujo manual: no se reenvía a Kyverum."),
+        // Configurador global de rondas: la fila ya usó todas las rondas permitidas.
+        IdentityRoundsErrors.LimiteRondasAlcanzado => (409, error, IdentityRoundsErrors.LimiteRondasAlcanzadoMensaje),
         "validacion_en_curso" => (409, error,
             "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
         "proveedor_error" => (502, "Bad Gateway", "El proveedor de validación de identidad rechazó la solicitud."),

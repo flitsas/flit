@@ -18,6 +18,16 @@ public sealed class AnthropicOptions
     public int TimeoutSeconds { get; set; } = 60;
     public int MaxTokens { get; set; } = 2000;
 
+    // ── Sonda de orientación (HU #12036) ─────────────────────────────────────
+    // La respuesta es {"derecha":true}: no hace falta más techo. Va en el camino crítico de cada
+    // carga, así que si tarda no vale la pena esperarla.
+
+    /// <summary>Tope de salida de la sonda de orientación.</summary>
+    public int OrientacionMaxTokens { get; set; } = 100;
+
+    /// <summary>Deadline de cada sonda de orientación.</summary>
+    public int OrientacionTimeoutSeconds { get; set; } = 30;
+
     // ── Clasificación del cargue masivo ──────────────────────────────────────
     // Decidir QUÉ documento hay en cada página de un expediente escaneado es bastante más difícil que
     // verificar un tipo ya conocido, así que ese paso corre en el modelo fuerte. Se paga una vez por

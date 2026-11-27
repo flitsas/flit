@@ -348,7 +348,7 @@ public sealed class EditarPrevalidacionHandlerTests
     // ── Kyverum — falla transitoria al reenviar por cambio de correo ─────────────
 
     [Fact]
-    public async Task Kyverum_TransientFailureOnEmailChange_QueuesAsPendienteEnvio_AndStillConsumesQuota()
+    public async Task Kyverum_TransientFailureOnEmailChange_QueuesAsPendienteEnvio_SinConsumirRonda()
     {
         var ct = TestContext.Current.CancellationToken;
         var (_, validation) = SeedStandaloneNatural(status: BiometricEstados.Expirado);
@@ -364,7 +364,29 @@ public sealed class EditarPrevalidacionHandlerTests
         result!.Resent.Should().BeTrue();
         result.CaptureUrl.Should().BeNull();
         validation.Status.Should().Be(BiometricEstados.PendienteEnvio);
-        validation.ResendCount.Should().Be(1);
+        validation.ResendCount.Should().Be(0, "la ronda cuenta solo cuando el enlace se crea");
+    }
+
+    [Fact]
+    public async Task Kyverum_CambioDeCorreo_CreaValidacionNueva_NoReemiteAlCorreoViejo()
+    {
+        // Con reissue, Kyverum enviaría el enlace al correo que ya tiene registrado: si el correo cambió, debe
+        // crearse una validación nueva con el correo corregido en vez de reemitir la existente.
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandaloneNatural(status: BiometricEstados.Expirado);
+        validation.Provider = BiometricProviders.Kyverum;
+        validation.KyverumVerificationId = "kyv_old";
+        _kyverum.StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStartResult("kyv_new", "https://capture.example.com/new", "whsec_new", "pending", "{}", null));
+        var handler = BuildHandler(isKyverum: true);
+
+        var (result, error, _) = await handler.HandleAsync(
+            _tenantId, validation.Id, new EditarPrevalidacionRequest(Email: "ana.rios@new.com"), ct);
+
+        error.Should().BeNull();
+        result!.CaptureUrl.Should().Be("https://capture.example.com/new");
+        await _kyverum.DidNotReceive().ReissueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        validation.KyverumVerificationId.Should().Be("kyv_new");
     }
 
     [Fact]
