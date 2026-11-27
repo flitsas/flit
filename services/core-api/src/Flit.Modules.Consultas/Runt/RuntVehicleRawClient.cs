@@ -46,7 +46,7 @@ internal sealed class RuntVehicleRawClient(
                 Vin: null,
                 Placa: query.Plate,
                 Documento: query.Document!.Number,
-                TipoDocumento: KyverumRuntDocType.Normalize(query.Document.Type));
+                TipoDocumento: KyverumRuntDocType.NormalizeForVehicle(query.Document.Type));
 
         try
         {

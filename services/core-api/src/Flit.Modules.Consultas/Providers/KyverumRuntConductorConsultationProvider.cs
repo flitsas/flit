@@ -27,7 +27,7 @@ internal sealed class KyverumRuntConductorConsultationProvider(KyverumRuntApiCli
         try
         {
             var (response, raw) = await client.ConsultarPersonaConCrudoAsync(
-                new KyverumRuntPersonaQuery(documentNumber, KyverumRuntDocType.Normalize(documentType)), ct);
+                new KyverumRuntPersonaQuery(documentNumber, KyverumRuntDocType.NormalizeForPersona(documentType)), ct);
 
             // HU #14153 AC1 — el cuerpo HTTP tal cual, para que el Diagnóstico muestre la respuesta íntegra del proveedor. Trámites
             // no lo persiste: el mapper de conductor no produce Certifications y la ingesta canónica solo corre con ellas.
