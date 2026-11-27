@@ -6,6 +6,7 @@ import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
   marcasLabel,
+  digitoPlacaLabelDeFila,
   runtConfirmadoLabel,
   stepLabel,
   tramiteLabel,
@@ -59,6 +60,12 @@ export interface TramitesColumnDef {
    * cliente sin jerarquía el catálogo efectivo es el mismo de siempre (AC1).
    */
   networkOnly?: boolean;
+  /**
+   * HU #14744 — columna que SOLO existe en las pestañas «Todos» y «Matrículas». Fuera de ellas
+   * (Traspaso, Otros trámites) no se pinta ni se ofrece en «Columnas», pero la preferencia guardada NO
+   * se toca: al volver reaparece según lo que el usuario dejó. Nunca va en el default.
+   */
+  soloTodosYMatriculas?: boolean;
 }
 
 const GRUPO_BASE = 'Listado';
@@ -129,6 +136,8 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // "Marca / modelo" es además lo que de verdad pinta: marca + línea.
   { key: 'vin', label: COPY.A02Vin, minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
   { key: 'vehiculo', label: 'Marca / modelo', minPx: 140, group: GRUPO_DESGLOSE },
+  // HU #14744 — preferencia de dígito de la placa; solo matrícula inicial y no visible por defecto.
+  { key: 'digitoPlaca', label: 'Dígito de placa', minPx: 140, fixed: true, group: GRUPO_DESGLOSE, soloTodosYMatriculas: true },
   { key: 'estado', label: 'Estado', minPx: 150, group: GRUPO_DESGLOSE },
   // Fijas: "3/5" con el nombre del paso, y dos fechas de formato constante.
   { key: 'paso', label: 'Paso', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
@@ -152,6 +161,23 @@ export const TRAMITES_NETWORK_ONLY_KEYS: readonly string[] = TRAMITES_COLUMNS.fi
 export const TRAMITES_SELECTABLE_COLUMNS: readonly TramitesColumnDef[] = TRAMITES_COLUMNS.filter(
   (c) => !c.networkOnly,
 );
+
+/** HU #14744 — claves que solo existen en «Todos» y «Matrículas». */
+export const TRAMITES_TODOS_Y_MATRICULAS_KEYS: readonly string[] = TRAMITES_COLUMNS.filter(
+  (c) => c.soloTodosYMatriculas,
+).map((c) => c.key);
+
+/** HU #14744 — quita (sin tocar la preferencia) esas columnas fuera de «Todos» y «Matrículas». */
+export function applyTodosYMatriculasColumns(visible: readonly string[], enAlcance: boolean): string[] {
+  return enAlcance ? [...visible] : visible.filter((k) => !TRAMITES_TODOS_Y_MATRICULAS_KEYS.includes(k));
+}
+
+/** HU #14744 — catálogo del selector «Columnas» según la vista. */
+export function selectableColumnsFor(enAlcance: boolean): readonly TramitesColumnDef[] {
+  return enAlcance
+    ? TRAMITES_SELECTABLE_COLUMNS
+    : TRAMITES_SELECTABLE_COLUMNS.filter((c) => !c.soloTodosYMatriculas);
+}
 
 /**
  * HU #12363 — columnas efectivas según el alcance: con la red activa se añade `cliente` (en su
@@ -245,6 +271,21 @@ export interface BuildTramitesGridLayoutOptions {
    * menos un borrador ICT en el listado; si no, deja un hueco vacío al inicio de cada fila.
    */
   includeSelectColumn?: boolean;
+  /**
+   * HU #14741 — anchos (px) que el usuario fijó arrastrando el borde de la cabecera. Una columna con
+   * ancho propio pasa a ser de ancho exacto (sale del reparto flexible); el resto se reparte lo que
+   * queda, así la tabla sigue cubriendo el ancho del contenedor. Claves que ya no existen se ignoran.
+   */
+  widths?: Readonly<Record<string, number>>;
+}
+
+/** Ancho propio válido de una columna (nunca por debajo del piso `minPx`), o `undefined`. */
+export function anchoPropio(
+  c: TramitesColumnDef,
+  widths: Readonly<Record<string, number>> | undefined,
+): number | undefined {
+  const w = widths?.[c.key];
+  return typeof w === 'number' && Number.isFinite(w) && w > 0 ? Math.max(w, c.minPx) : undefined;
 }
 
 /**
@@ -252,7 +293,11 @@ export interface BuildTramitesGridLayoutOptions {
  * conocida (preferencia corrupta o vacía), cae a TODAS: nunca se construye una tabla sin columnas.
  */
 function resolveColumns(visibleKeys: readonly string[]): readonly TramitesColumnDef[] {
-  const matched = TRAMITES_COLUMNS.filter((c) => visibleKeys.includes(c.key));
+  // Respeta el orden de `visibleKeys` (orden elegido por el usuario), sin duplicados ni claves ajenas.
+  const matched = visibleKeys
+    .filter((k, i) => visibleKeys.indexOf(k) === i)
+    .map((k) => TRAMITES_COLUMNS.find((c) => c.key === k))
+    .filter((c): c is TramitesColumnDef => c !== undefined);
   return matched.length > 0 ? matched : TRAMITES_COLUMNS;
 }
 
@@ -271,8 +316,11 @@ export function buildTramitesGridLayout(
 ): TramitesGridLayout {
   const includeSelectColumn = options.includeSelectColumn === true;
   const columns = resolveColumns(visibleKeys);
-  const track = (c: TramitesColumnDef): string =>
-    c.fixed ? `${c.minPx}px` : `${(c.minPx / PX_POR_FR).toFixed(2)}fr`;
+  const track = (c: TramitesColumnDef): string => {
+    const propio = anchoPropio(c, options.widths);
+    if (propio !== undefined) return `${propio}px`;
+    return c.fixed ? `${c.minPx}px` : `${(c.minPx / PX_POR_FR).toFixed(2)}fr`;
+  };
   return {
     includeSelectColumn,
     gridTemplateColumns: [
@@ -284,7 +332,7 @@ export function buildTramitesGridLayout(
     // caen exactamente en su mínimo a la vez. Por debajo, scroll horizontal.
     minWidthPx:
       (includeSelectColumn ? SELECT_COL_MIN_PX : 0) +
-      columns.reduce((sum, c) => sum + c.minPx, 0) +
+      columns.reduce((sum, c) => sum + (anchoPropio(c, options.widths) ?? c.minPx), 0) +
       ACTIONS_COL_PX,
   };
 }
@@ -314,10 +362,19 @@ export function buildTramitesColWidths(
 
   // Si el usuario dejó visibles SOLO columnas fijas, no hay ninguna que absorba el sobrante: se
   // tratan todas como flexibles antes que devolver un reparto que no cubre el ancho de la tabla.
-  const hayFlexibles = columns.some((c) => !c.fixed);
-  const esFija = (c: TramitesColumnDef): boolean => c.fixed === true && hayFlexibles;
+  const propios = new Map<string, number>();
+  for (const c of columns) {
+    const w = anchoPropio(c, options.widths);
+    if (w !== undefined) propios.set(c.key, w);
+  }
+  // Una columna con ancho propio es SIEMPRE de ancho exacto. Las `fixed` sin ancho propio solo lo
+  // son si queda alguna flexible que absorba el sobrante; si no, pasan a flexibles (como antes).
+  const hayFlexibles = columns.some((c) => !c.fixed && !propios.has(c.key));
+  const esFija = (c: TramitesColumnDef): boolean =>
+    propios.has(c.key) || (c.fixed === true && hayFlexibles);
+  const anchoFijo = (c: TramitesColumnDef): number => propios.get(c.key) ?? c.minPx;
 
-  const pxFijos = columns.reduce((sum, c) => sum + (esFija(c) ? c.minPx : 0), 0) + ACTIONS_COL_PX;
+  const pxFijos = columns.reduce((sum, c) => sum + (esFija(c) ? anchoFijo(c) : 0), 0) + ACTIONS_COL_PX;
   const remFijos = includeSelectColumn ? SELECT_COL_REM : 0;
   const pesoFlexible = columns.reduce((sum, c) => sum + (esFija(c) ? 0 : c.minPx), 0);
 
@@ -331,7 +388,7 @@ export function buildTramitesColWidths(
 
   return [
     ...(includeSelectColumn ? [SELECT_COL_WIDTH] : []),
-    ...columns.map((c) => (esFija(c) ? `${c.minPx}px` : anchoFlexible(c.minPx))),
+    ...columns.map((c) => (esFija(c) ? `${anchoFijo(c)}px` : anchoFlexible(c.minPx))),
     `${ACTIONS_COL_PX}px`,
   ];
 }
@@ -547,6 +604,16 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   ],
   vin: [CAMPO_VIN],
   vehiculo: [CAMPO_VEHICULO],
+  // Las filas que no son matrícula (pestaña «Todos») salen con la celda VACÍA, no «—» (que es ruta corta).
+  digitoPlaca: [
+    {
+      id: 'digitoPlaca',
+      label: 'Dígito de placa',
+      value: (row) => digitoPlacaLabelDeFila(row),
+      raw: (row) => texto(digitoPlacaLabelDeFila(row)),
+      width: 18,
+    },
+  ],
   estado: [CAMPO_ESTADO],
   paso: [CAMPO_PASO, CAMPO_PASO_NOMBRE],
   fechaCreacion: [CAMPO_FECHA_CREACION],

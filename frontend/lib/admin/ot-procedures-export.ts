@@ -16,6 +16,7 @@ import { formatFechaHora } from '@/lib/format/date';
 import { COPY } from '@/lib/copy/copy-catalog';
 import type { OtClientProcedure } from '@/lib/api/types-ot';
 import { OT_PROCEDURES_COLUMNS } from './ot-procedures-columns';
+import { digitoPlacaLabel } from '@/lib/tramites/tramites-row-labels';
 import { formatOtProcedureStatus } from '@/components/admin/transit-offices/ot-utils';
 
 export interface OtProcedureExportField {
@@ -29,6 +30,18 @@ export interface OtProcedureExportField {
 }
 
 const texto = (v: string | null | undefined): string => (v ?? '').trim();
+
+/** HU #14744 — mismo texto que la celda de la bandeja (ver `digitoPlacaLabel`). */
+export function digitoPlacaOt(r: OtClientProcedure): string {
+  // Solo las matrículas tienen dato; en «Todos» el resto queda vacío (no «—»).
+  if (r.familia !== 'MATRICULAS') return '';
+  return digitoPlacaLabel({
+    digito: r.platePreferredLastDigit,
+    declarado: r.platePreferredLastDigitDeclared,
+    clase: r.clase,
+    rutaCorta: r.placaRutaCorta,
+  });
+}
 
 /**
  * Los campos que aporta cada columna de la tabla. Una columna puede aportar VARIOS —ahí está el
@@ -126,6 +139,15 @@ const EXPORT_FIELDS: Record<string, OtProcedureExportField[]> = {
       value: (r) => formatOtProcedureStatus(r.status),
       raw: (r) => formatOtProcedureStatus(r.status),
       width: 16,
+    },
+  ],
+  digitoPlaca: [
+    {
+      id: 'digitoPlaca',
+      label: 'Dígito de placa',
+      value: (r) => digitoPlacaOt(r),
+      raw: (r) => digitoPlacaOt(r),
+      width: 18,
     },
   ],
   fechaRadicacion: [

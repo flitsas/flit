@@ -31,6 +31,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 {
     // HU #10805 — field_value donde el gestor guarda el dígito de preferencia de placa (0-9).
     private const string PlatePreferredLastDigitFieldKey = "plate_preferred_last_digit";
+    private const string PlatePreferredLastDigitDeclaredFieldKey = "plate_preferred_last_digit_declared";
+    private const string PlateFieldKey = "plate";
+    private const string PlateSourceConsultation = "consultation";
 
     private readonly FlitDbContext _context;
     private readonly ITramiteTransitionPublisher _transitionPublisher;
@@ -135,6 +138,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                         && f.FieldKey == PlatePreferredLastDigitFieldKey)
                                     .Select(f => f.ValueText)
                                     .FirstOrDefault(),
+                                // HU #14743 — marca «declarado» y Ruta Corta en la MISMA consulta (subconsultas
+                                // correlacionadas por el índice de field_values por instancia; sin N+1 ni RUNT).
+                                PlatePreferredLastDigitDeclared = _context.ProcedureInstanceFieldValues
+                                    .Any(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == PlatePreferredLastDigitDeclaredFieldKey
+                                        && f.ValueText == "true"),
+                                PlacaRutaCorta = _context.ProcedureInstanceFieldValues
+                                    .Any(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == PlateFieldKey
+                                        && f.Source == PlateSourceConsultation
+                                        && f.ValueText != null && f.ValueText != ""),
                                 // Caso C 2026-11-09 — clase cruda del vehículo: el modal «Asignar placa» decide
                                 // si exige el formato de carro ABC123. Mismo patrón de subconsulta correlacionada.
                                 Clase = _context.ProcedureInstanceFieldValues
@@ -1571,6 +1585,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
                     // HU #10805 — dígito de preferencia también en el detalle.
                     PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
+                    PlatePreferredLastDigitDeclared = IsTrue(fields, PlatePreferredLastDigitDeclaredFieldKey),
+                    PlacaRutaCorta = await IsPlateFromConsultationAsync(mapped.Id, cancellationToken).ConfigureAwait(false),
                     SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado),
                     ImpuestoDepartamentalPagado = IsTrue(
                         fields,
@@ -1963,6 +1979,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         public ConsolidadoVigenciaDto Maestro() =>
             ConsolidadoVigencia.Derivar(MaestroSource, MaestroVigente, MaestroGeneradoEn, TramiteEstado.EsFinal(Status), IsMigrated);
     }
+
+    /// <summary>HU #14743 — Ruta Corta: la placa del trámite vino de la consulta al RUNT.</summary>
+    private Task<bool> IsPlateFromConsultationAsync(Guid procedureInstanceId, CancellationToken cancellationToken) =>
+        _context.ProcedureInstanceFieldValues
+            .AsNoTracking()
+            .AnyAsync(f => f.ProcedureInstanceId == procedureInstanceId
+                && f.FieldKey == PlateFieldKey
+                && f.Source == PlateSourceConsultation
+                && f.ValueText != null && f.ValueText != "", cancellationToken);
 
     /// <summary>
     /// Todos los <c>field_values</c> de la instancia en una sola lectura. La última repetición de una
@@ -2707,6 +2732,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         {
             SoatEstado = Field(fields, Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey),
             PlatePreferredLastDigit = Field(fields, PlatePreferredLastDigitFieldKey),
+            PlatePreferredLastDigitDeclared = IsTrue(fields, PlatePreferredLastDigitDeclaredFieldKey),
+            PlacaRutaCorta = await IsPlateFromConsultationAsync(entity.Id, cancellationToken).ConfigureAwait(false),
             SoatPagado = IsTrue(fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado),
             ImpuestoDepartamentalPagado = IsTrue(
                 fields, Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.ImpuestoDepartamentalPagado),

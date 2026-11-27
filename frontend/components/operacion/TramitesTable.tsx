@@ -76,9 +76,11 @@ import {
 } from './dialogo-propio';
 import {
   TRAMITES_COLUMNS,
-  TRAMITES_SELECTABLE_COLUMNS,
   applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
+  applyTodosYMatriculasColumns,
+  selectableColumnsFor,
+  TRAMITES_TODOS_Y_MATRICULAS_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
   TRAMITES_COLUMNS_RESHOWN_ONCE,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
@@ -96,6 +98,7 @@ import { nombreArchivoTramites, selloDeArchivo } from './tramites-export';
 import { tramitesExportFields } from '@/lib/tramites/tramites-table-columns';
 import {
   FIRMA_TEXTO,
+  digitoPlacaLabelDeFila,
   FUENTE_LABEL,
   marcasDe,
   quipuxMarca,
@@ -122,6 +125,7 @@ import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePagin
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { COLUMN_RESIZE_MIN_PX, ColumnResizeHandle, useColumnWidths, type ColumnWidthsState } from '@/components/atom/ColumnResizeHandle';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
@@ -437,6 +441,12 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     visible: visibleColumns,
     saving: savingColumns,
     setVisible: setVisibleColumns,
+    order: columnOrder,
+    setOrder: setColumnOrder,
+    reset: resetColumns,
+    widths: savedWidths,
+    setWidth: setSavedWidth,
+    resetWidth: resetSavedWidth,
   } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
     catalog: TRAMITES_COLUMN_KEYS,
     addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
@@ -467,13 +477,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const red = useNetworkScope();
   const { networkActive, ready: alcanceListo } = red;
   const childTenantId = networkActive ? red.scope.childTenantId : undefined;
+  // HU #14744 — «Dígito de placa» se ofrece en «Todos» (modalidad vacía) y «Matrículas».
+  const digitoPlacaEnAlcance = modalidad === '' || modalidad === 'MATRICULAS';
   const effectiveColumns = useMemo(() => {
     // HU #12363 — «Cliente» entra SOLO con el alcance de red y sale con cualquier otro (aunque una
     // preferencia guardada la trajera): la manda el alcance, no el selector de columnas.
-    const conAlcance = applyNetworkScopeColumns(visibleColumns, networkActive);
+    const conAlcance = applyTodosYMatriculasColumns(
+      applyNetworkScopeColumns(visibleColumns, networkActive),
+      digitoPlacaEnAlcance,
+    );
     // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
     return modalidad === 'MATRICULAS' ? conAlcance.filter((k) => k !== 'propietario') : conAlcance;
-  }, [visibleColumns, modalidad, networkActive]);
+  }, [visibleColumns, modalidad, networkActive, digitoPlacaEnAlcance]);
   /**
    * ¿El gestor cambió las columnas respecto al default? Es lo que marca "Columnas" en azul, con el
    * mismo criterio que "Periodo" y "+ Filtro": el azul dice "aquí hay algo aplicado". Antes el
@@ -487,9 +502,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     );
   }, [visibleColumns]);
 
+  // HU #14741 — anchos que el usuario fijó arrastrando el borde de la cabecera (solo de columnas que existen).
+  const columnWidths = useColumnWidths(savedWidths, TRAMITES_COLUMN_KEYS, setSavedWidth, resetSavedWidth);
   const gridLayout = useMemo(
-    () => buildTramitesGridLayout(effectiveColumns, { includeSelectColumn }),
-    [effectiveColumns, includeSelectColumn],
+    () => buildTramitesGridLayout(effectiveColumns, { includeSelectColumn, widths: columnWidths.widths }),
+    [effectiveColumns, includeSelectColumn, columnWidths.widths],
   );
 
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
@@ -1545,9 +1562,22 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               columnSelector={
                 <ColumnSelector
                   // HU #12363 — sin «Cliente»: esa la enciende el alcance de red, no el usuario.
-                  columns={TRAMITES_SELECTABLE_COLUMNS}
-                  visible={visibleColumns}
-                  onChange={setVisibleColumns}
+                  columns={selectableColumnsFor(digitoPlacaEnAlcance)}
+                  visible={applyTodosYMatriculasColumns(visibleColumns, digitoPlacaEnAlcance)}
+                  onChange={(next) => {
+                    // HU #14744 — fuera de «Todos» y «Matrículas» la columna no se ofrece, pero la preferencia
+                    // guardada la conserva: así reaparece al volver a la pestaña.
+                    const guardadas =
+                      digitoPlacaEnAlcance
+                        ? []
+                        : visibleColumns.filter((k) => TRAMITES_TODOS_Y_MATRICULAS_KEYS.includes(k));
+                    setVisibleColumns(
+                      TRAMITES_COLUMN_KEYS.filter((k) => next.includes(k) || guardadas.includes(k)),
+                    );
+                  }}
+                  order={columnOrder}
+                  onReorder={setColumnOrder}
+                  onReset={resetColumns}
                   label="Columnas"
                   disabled={savingColumns}
                   buttonClassName={controlCls(columnasPersonalizadas)}
@@ -1733,6 +1763,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onPageSizeChange={handlePageSizeChange}
           visibleColumns={effectiveColumns}
           gridLayout={gridLayout}
+          columnWidths={columnWidths}
           page={safePage}
           totalPages={totalPages}
           onPageChange={setPage}
@@ -2331,6 +2362,7 @@ function TableBody({
   onPageSizeChange,
   visibleColumns,
   gridLayout,
+  columnWidths,
   page,
   totalPages,
   onPageChange,
@@ -2372,6 +2404,8 @@ function TableBody({
   /** `gridTemplateColumns` + ancho mínimo, calculados UNA vez a partir de `visibleColumns` — la
    *  cabecera y cada fila lo reciben ya resuelto, así quedan alineados por construcción. */
   gridLayout: TramitesGridLayout;
+  /** HU #14741 — anchos por columna ajustables arrastrando el borde de la cabecera. */
+  columnWidths: ColumnWidthsState;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -2490,12 +2524,16 @@ function TableBody({
   // llegó `visibleColumns`, que podría venir desordenado de una preferencia guardada). Header y
   // filas reciben esta MISMA lista `visibleKeysOrdered`, calculada una sola vez aquí: es lo que
   // garantiza la alineación por construcción, sin importar cuántas columnas se oculten.
-  const visibleDefs = TRAMITES_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+  // Orden del usuario: el de `visibleColumns` (ya viene en el orden guardado).
+  const visibleDefs = visibleColumns
+    .map((k) => TRAMITES_COLUMNS.find((c) => c.key === k))
+    .filter((c): c is (typeof TRAMITES_COLUMNS)[number] => c !== undefined);
   const visibleKeysOrdered = visibleDefs.map((c) => c.key);
   // `<colgroup>` no admite `fr` (lo que usa `gridLayout`): los anchos en % se calculan aparte,
   // con el MISMO `visibleColumns` — así quedan alineados con `visibleDefs` por construcción.
   const colWidths = buildTramitesColWidths(visibleColumns, {
     includeSelectColumn: gridLayout.includeSelectColumn,
+    widths: columnWidths.widths,
   });
 
   return (
@@ -2562,6 +2600,14 @@ function TableBody({
                     sortBy={sortBy}
                     sortDir={sortDir}
                     onSortChange={onSortChange}
+                  />
+                  <ColumnResizeHandle
+                    label={col.label}
+                    width={columnWidths.widths[col.key] ?? col.minPx}
+                    min={Math.max(col.minPx, COLUMN_RESIZE_MIN_PX)}
+                    onPreview={(px) => columnWidths.preview(col.key, px)}
+                    onCommit={(px) => columnWidths.commit(col.key, px)}
+                    onReset={() => columnWidths.reset(col.key)}
                   />
                 </th>
               ))}
@@ -3580,6 +3626,8 @@ function TramiteRow({
     // Feature #12276 (HU #12312) — «Confirmado en RUNT»: SÍ, NO o «—». Sin tooltip, sin contador,
     // sin marca: al cliente no se le explica el porqué (decisión de producto); eso vive en el
     // Historial de plataforma. El guion cubre el «no consultado» y los trámites no aprobados.
+    // HU #14744 — «Dígito de placa»: «Todos» y «Matrículas» (ver `applyTodosYMatriculasColumns`); vacía en filas que no son matrícula.
+    digitoPlaca: <span data-testid="tramite-digito-placa">{digitoPlacaLabelDeFila(item)}</span>,
     confirmadoRunt: (
       <span className="flex items-center">
         {item.runtConfirmed === 'yes' || item.runtConfirmed === 'no' ? (
