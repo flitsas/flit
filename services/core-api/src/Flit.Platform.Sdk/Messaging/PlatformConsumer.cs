@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -21,7 +22,7 @@ public interface IEventConsumer<TData>
 public class SinReintentoAutomaticoException(string message) : Exception(message);
 
 /// <summary>Una suscripción: la cola del consumidor y los eventos que recibe.</summary>
-public sealed class PlatformConsumerOptions
+public sealed partial class PlatformConsumerOptions
 {
     /// <summary><c>&lt;consumidor&gt;.&lt;propósito&gt;</c> (contrato §7), p. ej. <c>notificaciones.correo</c>.</summary>
     public string Queue { get; set; } = string.Empty;
@@ -34,6 +35,22 @@ public sealed class PlatformConsumerOptions
 
     /// <summary>Espera antes de cada reintento (ADR-0064: 10 s, 1 min y 10 min). Después, a <c>&lt;cola&gt;.dlq</c>.</summary>
     public IList<TimeSpan> RetryDelays { get; } = [TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)];
+
+    /// <summary>
+    /// Sufijo de las colas de espera: <c>&lt;cola&gt;.&lt;sufijo&gt;.&lt;n&gt;</c>. Por defecto <c>retry</c> (las colas de
+    /// siempre). HU #14752: un consumidor que cambia sus esperas usa un sufijo propio para no redeclarar una cola existente con
+    /// otro TTL (RabbitMQ lo rechaza con <c>PRECONDITION_FAILED</c>). Solo minúsculas, dígitos y guiones; si no, el consumidor
+    /// no se registra (<see cref="InvalidOperationException"/>).
+    /// </summary>
+    public string RetryQueueSuffix
+    {
+        get => _retryQueueSuffix;
+        set => _retryQueueSuffix = SufijoValido().IsMatch(value ?? string.Empty)
+            ? value!
+            : throw new InvalidOperationException("RetryQueueSuffix solo admite minúsculas, dígitos y guiones (^[a-z0-9-]+$).");
+    }
+
+    private string _retryQueueSuffix = "retry";
 
     /// <summary>Mensajes en vuelo por consumidor.</summary>
     public ushort Prefetch { get; set; } = 10;
@@ -53,6 +70,9 @@ public sealed class PlatformConsumerOptions
     /// llamar al efecto.
     /// </summary>
     public IList<string> ProductoresPermitidos { get; } = [];
+
+    [GeneratedRegex("^[a-z0-9-]+$", RegexOptions.CultureInvariant)]
+    private static partial Regex SufijoValido();
 }
 
 /// <summary>Métricas del bus (OpenTelemetry las exporta si está encendido): la de mensajes muertos es la de alertar.</summary>
@@ -71,7 +91,8 @@ public static class PlatformMessagingMetrics
 /// Consumidor base del SDK (HU #13339, ADR-0064). Solo hay que escribir el efecto (<see cref="IEventConsumer{TData}"/>):
 /// <list type="bullet">
 ///   <item>Topología declarada al arrancar, idempotente: cola durable <c>&lt;cola&gt;</c> atada al exchange del productor,
-///   una cola de espera por reintento (<c>&lt;cola&gt;.retry.&lt;n&gt;</c>, con TTL que la devuelve a la cola principal) y
+///   una cola de espera por reintento (<c>&lt;cola&gt;.retry.&lt;n&gt;</c>, o el <see cref="PlatformConsumerOptions.RetryQueueSuffix"/>
+///   propio, con TTL que la devuelve a la cola principal) y
 ///   <c>&lt;cola&gt;.dlq</c>, todas detrás del exchange directo <c>&lt;cola&gt;.reintentos</c>. Sin plugins del broker.</item>
 ///   <item>Bandeja de entrada: un <c>eventId</c> ya procesado por esta cola se confirma sin repetir el efecto (AC1).</item>
 ///   <item>Si el efecto falla, el mensaje va a la siguiente cola de espera; agotadas las esperas, a la DLQ y suma la
@@ -97,7 +118,7 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
     /// <summary>Usuario del broker de este consumidor: el <c>user_id</c> con que republica a reintento o DLQ.</summary>
     private string UsuarioPropio => _usuarioPropio ??= Fabrica().UserName;
 
-    internal string RetryQueue(int index) => $"{consumer.Queue}.retry.{index + 1}";
+    internal string RetryQueue(int index) => $"{consumer.Queue}.{consumer.RetryQueueSuffix}.{index + 1}";
 
     internal string DeadLetterQueue => $"{consumer.Queue}.dlq";
 
