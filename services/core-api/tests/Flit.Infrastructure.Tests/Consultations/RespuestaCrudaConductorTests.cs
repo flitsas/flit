@@ -130,6 +130,67 @@ public sealed class RespuestaCrudaConductorTests
         result.Overall.Should().Be("green");
     }
 
+    /// <summary>
+    /// kyverum-runt #113: cuando el actor tiene PPT, el proveedor de conductor debe enviar
+    /// <c>tipoDocumento: "Y"</c> a <c>/v1/personas:consultar</c> (no omitirlo, pues omitirlo hace
+    /// que Kyverum busque identidad como cédula <c>C</c>) e hidratar el nombre y estado igual que CC.
+    /// </summary>
+    [Fact]
+    public async Task Kyverum_conductor_con_ppt_envia_tipo_Y_e_hidrata_identidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string CuerpoPpt = """
+            {"ok":true,"identidad":{"primerNombre":"PERSONA","segundoNombre":"","primerApellido":"FICTICIA","segundoApellido":"PPT","nombreCompleto":"PERSONA FICTICIA PPT"},"persona":{"nombres":"P****A","apellidos":"F****A","tipoDocumento":"Y","documento":"9999901","estadoPersona":"ACTIVA","estadoConductor":"ACTIVO","tieneLicencias":true},"licencias":[{"numeroLicencia":"9999901","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"C1"}]}],"multas":{"tieneMultas":"NO","nroPazYSalvo":"PZ-PPT-FICTICIO"},"fromCache":false}
+            """;
+        var responder = Responde(HttpStatusCode.OK, CuerpoPpt);
+        var ctx = new ConsultationContext(Guid.Empty, Guid.Empty, "prueba",
+            new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["document_type"] = "PPT",
+                ["document_number"] = "9999901",
+            });
+
+        var result = await Kyverum(responder).ConsultAsync(ctx, ct);
+
+        responder.LastBody.Should().Contain("\"documento\":\"9999901\"");
+        responder.LastBody.Should().Contain("\"tipoDocumento\":\"Y\"");
+        result.Overall.Should().Be("green");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "person_full_name" && f.ValueText == "PERSONA FICTICIA PPT");
+        result.RawPayload!.PayloadJson.Should().Be(CuerpoPpt);
+    }
+
+    /// <summary>
+    /// En <c>/v1/vehiculos:consultar</c>, Kyverum RUNT solo admite <c>C, E, T, P, N, D, R, PT</c>;
+    /// un propietario PPT debe omitir <c>tipoDocumento</c> para evitar 400 <c>VALIDATION_ERROR</c>.
+    /// </summary>
+    [Fact]
+    public async Task Kyverum_vehiculo_con_propietario_ppt_omite_tipoDocumento()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string CuerpoVehiculo = """
+            {"ok":true,"data":{"vehiculo":{"placa":"FCT001","estadoAutomotor":"ACTIVO","gravamenes":"NO","prendas":"NO"},"tipoDocPropietario":"Y","soat":[],"rtm":[]},"fromCache":false}
+            """;
+        var responder = Responde(HttpStatusCode.OK, CuerpoVehiculo);
+        var provider = new KyverumRuntVehicleConsultationProvider(new KyverumRuntApiClient(
+            new HttpClient(responder) { BaseAddress = new Uri("https://runt.kyverum.test") },
+            Options.Create(new ImprontaRuntOptions { BaseUrl = "https://runt.kyverum.test", ApiKey = "llave-ficticia" }),
+            NullLogger<KyverumRuntApiClient>.Instance));
+        var ctx = new ConsultationContext(Guid.Empty, Guid.Empty, "vehiculo",
+            new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["plate"] = "FCT001",
+                ["owner_document_type"] = "PPT",
+                ["owner_document_number"] = "9999901",
+            });
+
+        var result = await provider.ConsultAsync(ctx, ct);
+
+        responder.LastBody.Should().Contain("\"placa\":\"FCT001\"");
+        responder.LastBody.Should().Contain("\"documento\":\"9999901\"");
+        responder.LastBody.Should().NotContain("tipoDocumento");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "owner_document_type" && f.ValueText == "PPT");
+    }
+
     private static KyverumRuntConductorConsultationProvider Kyverum(HttpMessageHandler handler) =>
         new(new KyverumRuntApiClient(
             new HttpClient(handler) { BaseAddress = new Uri("https://runt.kyverum.test") },
@@ -151,7 +212,12 @@ public sealed class RespuestaCrudaConductorTests
 
     private sealed class Responder(HttpStatusCode estado, string cuerpo) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(estado) { Content = new StringContent(cuerpo, Encoding.UTF8, "application/json") });
+        public string? LastBody { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastBody = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
+            return Task.FromResult(new HttpResponseMessage(estado) { Content = new StringContent(cuerpo, Encoding.UTF8, "application/json") });
+        }
     }
 }
