@@ -329,6 +329,11 @@ public sealed class ListProcedureInstancesFilteredHandler(
         IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
+        // Marca «Quipux»: misma consulta en lote que el listado sin filtros.
+        IReadOnlyDictionary<Guid, QuipuxMarcaListado> quipuxEstados = await repo.GetQuipuxEstadosAsync(
+            instances.Select(i => i.Id).ToList(), ct)
+            ?? new Dictionary<Guid, QuipuxMarcaListado>();
+
         var exentas = await ListProcedureInstancesHandler
             .ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
 
@@ -353,7 +358,8 @@ public sealed class ListProcedureInstancesFilteredHandler(
                     // ADR-0053 — igual que el listado sin filtros: sin este set el desplegable de copropietarios
                     // pintaba «Sin firma» aunque la identidad estuviera aprobada (Bug #14603).
                     IdentityApprovalResolver.ApprovedActorsFromKeys(
-                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null));
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null),
+                    quipuxEstados.GetValueOrDefault(e.Id));
             })
             .ToList();
 
