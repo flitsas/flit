@@ -375,8 +375,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "buscar",
         title: "1. Buscar en el listado",
         paragraphs: [
-          "En Trámites, la barra «Buscar radicado (FT1-0000012), placa, VIN...» busca en el servidor sobre todo el universo de tu compañía, no solo sobre la página visible. El radicado casa exacto (con o sin prefijo: FT1-0000012 o solo 12); placa, VIN, nombre o documento de las partes, organismo y compañía casan por texto parcial.",
-          "«Periodo» acota por fecha de radicación (Hoy, Últimos 7/30/90 días, Mes actual, Mes anterior o Rango propio). «+ Filtro» abre las Consultas: eliges un campo del catálogo, un operador («es», «no es», «contiene», «está vacío», «tiene dato») y los valores. Puedes pegar una columna de Excel con varias placas o radicados: un valor por línea.",
+          "En Trámites, la barra «Radicado, placa o VIN · varios con coma» busca en el servidor sobre todo el universo de tu compañía, no solo sobre la página visible. El radicado casa exacto (con o sin prefijo: FT1-0000012 o solo 12); placa, VIN, nombre o documento de las partes, organismo y compañía casan por texto parcial. Para buscar varios a la vez, sepáralos con coma (por ejemplo «AAA111, BBB222» o «FT1-0000012, FT1-0000013»): la lista trae los trámites que coincidan con cualquiera de ellos. Sin coma, la búsqueda funciona como siempre.",
+          "«Periodo» acota por fecha de radicación (Hoy, Últimos 7/30/90 días, Mes actual, Mes anterior o Rango propio). «+ Filtro» abre las Consultas: eliges un campo del catálogo, un operador («es», «no es», «contiene», «está vacío», «tiene dato») y los valores. En Placa, VIN e ID/Radicado puedes poner varios valores separados por coma (por ejemplo «AAA111, BBB222») o uno por línea, o pegar una columna de Excel. Lo mismo vale para el filtro de cada columna (el embudo de la cabecera): varios valores separados por coma.",
         ],
         bullets: [
           "Las tarjetas por estado sobre la tabla filtran con un clic y cuentan el universo completo, no la página. Solo aparecen los estados de la pestaña activa: en Traspaso y Otros trámites no hay Preasignación ni Asignado.",

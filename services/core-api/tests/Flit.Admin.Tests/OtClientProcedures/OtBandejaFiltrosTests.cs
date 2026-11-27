@@ -377,6 +377,99 @@ public sealed class OtBandejaFiltrosTests
         bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000003"]);
     }
 
+    // ── Búsqueda de varios valores separados por coma (HU #14747) ───────────────────────────
+
+    /// <summary>
+    /// A los tres trámites del escenario se les da una placa y un VIN conocidos (el 1 ya tiene la
+    /// placa ABC123) para poder pegar listas mixtas de ID / placa / VIN.
+    /// </summary>
+    private static async Task<string> SembrarMultivalorAsync()
+    {
+        var db = await SembrarEscenarioAsync();
+        await using var ctx = NewContext(db);
+        var filas = await ctx.ProcedureInstances.ToListAsync(TestContext.Current.CancellationToken);
+        filas.Single(f => f.Consecutivo == 1).Vin = "VIN0000001";
+        var dos = filas.Single(f => f.Consecutivo == 2);
+        dos.Plate = "XYZ789";
+        dos.Vin = "VIN0000002";
+        filas.Single(f => f.Consecutivo == 3).Plate = "QQQ333";
+        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return db;
+    }
+
+    private static async Task<IReadOnlyList<string>> BuscarTextoAsync(string db, string texto)
+    {
+        var r = await ListarAsync(db, new ListOtClientProceduresQuery { OtTenantId = OtTenant, Busqueda = texto });
+        r.Data.Select(p => p.ReferenceNumber).Should().OnlyHaveUniqueItems();
+        r.TotalCount.Should().Be(r.Data.Count);
+        return r.Data.Select(p => p.ReferenceNumber).ToList();
+    }
+
+    [Fact]
+    public async Task AC1_Multivalor_VariasPlacas_TraeLosTramitesDeCada()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "abc123, xyz789")).Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002"]);
+    }
+
+    [Theory]
+    [InlineData("abc123, FT2-0000002")]
+    [InlineData("abc123, 2")]
+    [InlineData("abc123, 0000002")]
+    [InlineData("abc123,ft2 2")]
+    public async Task AC2_Multivalor_PlacaMasId_EnCualquierForma(string texto)
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, texto)).Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002"]);
+    }
+
+    [Fact]
+    public async Task AC3_Multivalor_VinMasPlaca()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "vin0000002 , QQQ333")).Should().BeEquivalentTo(["FT2-0000002", "FT1-0000003"]);
+    }
+
+    [Fact]
+    public async Task AC4_SinComa_ConservaElComportamientoDeSiempre()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "xyz789")).Should().BeEquivalentTo(["FT2-0000002"]);
+        (await BuscarTextoAsync(db, "vin0000001")).Should().BeEquivalentTo(["FT1-0000001"]);
+        (await BuscarTextoAsync(db, "FT1-0000003")).Should().BeEquivalentTo(["FT1-0000003"]);
+        // Empresa cliente: solo sin coma.
+        (await BuscarTextoAsync(db, "Zulia")).Should().BeEquivalentTo(["FT1-0000003"]);
+    }
+
+    [Fact]
+    public async Task AC5_Multivalor_ComasDoblesYFinales_SeIgnoran()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "aaa111 ,, QQQ333,")).Should().BeEquivalentTo(["FT1-0000003"]);
+        (await BuscarTextoAsync(db, ",, ,")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AC6_Multivalor_UnTramoInexistente_NoEscondeALosDemas()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "ZZZ999, XYZ789, 999")).Should().BeEquivalentTo(["FT2-0000002"]);
+    }
+
+    [Fact]
+    public async Task AC7_Multivalor_UnTramiteQueCasaPorVariosTramos_SaleUnaVez()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "XYZ789, VIN0000002, 0000002, FT2-0000002")).Should().BeEquivalentTo(["FT2-0000002"]);
+    }
+
+    [Fact]
+    public async Task AC8_Multivalor_NoBuscaPorEmpresaNiNombre()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "Zulia, Flota")).Should().BeEmpty();
+    }
+
     // ── El rango de fechas (AC6) ──────────────────────────────────────────────────────────────
 
     [Fact]
@@ -607,6 +700,93 @@ public sealed class OtBandejaFiltrosTests
 
         await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
         return db;
+    }
+
+    // -- «Contiene» con varios valores separados por coma (HU #14747) --------------------------
+
+    /// <summary>Completa el escenario: FT1 y FT2 con VIN, comprador y gestor propios; FT3 sin nada.</summary>
+    private static async Task<string> SembrarContieneVariosAsync()
+    {
+        var db = await SembrarEscenarioAsync();
+        await using var ctx = NewContext(db);
+        var (ana, beto) = (Guid.NewGuid(), Guid.NewGuid());
+        ctx.Users.AddRange(
+            new User { Id = ana, Email = "ana@flit.io", DisplayName = "Ana Gestora" },
+            new User { Id = beto, Email = "beto@flit.io", DisplayName = "Beto Gestor" });
+        var uno = await ctx.ProcedureInstances.SingleAsync(p => p.ReferenceNumber == "FT1-0000001", TestContext.Current.CancellationToken);
+        var dos = await ctx.ProcedureInstances.SingleAsync(p => p.ReferenceNumber == "FT2-0000002", TestContext.Current.CancellationToken);
+        uno.Vin = "9BWZZZ111AA000001"; uno.CompradorNombre = "Carlos Perez"; uno.CreatedByUserId = ana;
+        dos.Plate = "XYZ789"; dos.Vin = "8AAZZZ222BB000002"; dos.CompradorNombre = "Maria Lopez"; dos.CreatedByUserId = beto;
+        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return db;
+    }
+
+    private static async Task<List<string>> ContieneAsync(string db, string campo, params string[] valores)
+    {
+        // Lo que valida el endpoint antes del handler: «contiene» con varios valores no es un 400.
+        OtBandejaQueryConditions.Validate([new QueryCondition(campo, QueryOperator.Contiene, valores)])
+            .Should().BeNull();
+        var r = await BuscarAsync(db, [new QueryCondition(campo, QueryOperator.Contiene, valores)]);
+        return [.. r.Data.Select(p => p.ReferenceNumber).OrderBy(x => x)];
+    }
+
+    [Fact]
+    public async Task ContieneVarios_PlacaDos_TraeAmbos()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Placa, "ABC", "xyz-7")).Should().Equal("FT1-0000001", "FT2-0000002");
+    }
+
+    [Fact]
+    public async Task ContieneVarios_PlacaUnValor_IgualQueAntes()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Placa, "ABC")).Should().Equal("FT1-0000001");
+    }
+
+    [Fact]
+    public async Task ContieneVarios_ValorInexistenteYRepetidos_NoEscondenAlOtro()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Placa, "QQQ", "XYZ", " ", "xyz")).Should().Equal("FT2-0000002");
+    }
+
+    [Fact]
+    public async Task ContieneVarios_VinParcialesDos_TraeAmbos()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Vin, "BWZZZ", "8AAZ")).Should().Equal("FT1-0000001", "FT2-0000002");
+    }
+
+    [Fact]
+    public async Task ContieneVarios_RadicadoDos_TraeAmbos()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Radicado, "0000001", "FT2-0000002")).Should().Equal("FT1-0000001", "FT2-0000002");
+    }
+
+    [Fact]
+    public async Task ContieneVarios_CompradorDos_TraeAmbos()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Comprador, "carlos", "LOPEZ")).Should().Equal("FT1-0000001", "FT2-0000002");
+    }
+
+    [Fact]
+    public async Task ContieneVarios_GestorDos_TraeAmbos()
+    {
+        var db = await SembrarContieneVariosAsync();
+        (await ContieneAsync(db, OtBandejaQueryFieldCatalog.Gestor, "Ana", "Beto")).Should().Equal("FT1-0000001", "FT2-0000002");
+    }
+
+    [Fact]
+    public async Task EsAlgunoYNoEsNinguno_ConVariosComprador()
+    {
+        var db = await SembrarContieneVariosAsync();
+        var es = await BuscarAsync(db, [new QueryCondition(OtBandejaQueryFieldCatalog.Comprador, QueryOperator.EsAlguno, ["Carlos Perez", "Maria Lopez"])]);
+        es.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002"]);
+        var no = await BuscarAsync(db, [new QueryCondition(OtBandejaQueryFieldCatalog.Comprador, QueryOperator.NoEsNinguno, ["Carlos Perez", "Maria Lopez"])]);
+        no.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000003"]);
     }
 
     private static Task<ListOtClientProceduresResult> BuscarAsync(

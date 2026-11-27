@@ -49,6 +49,13 @@ public interface IQueryFieldCatalog
     /// </summary>
     bool IsIdentifier(string fieldId);
 
+    /// <summary>
+    /// ¿«Contiene» acepta varios valores (OR de un «contiene» por valor)? Por defecto no: Consultas y
+    /// reportes comparan UN texto y el validador rechaza / el normalizador recorta. Solo las bandejas
+    /// de trámites (gestor y organismo) lo activan, porque su filtro sabe resolver el OR.
+    /// </summary>
+    bool ContieneAdmiteVarios => false;
+
     QueryFieldDto? Find(string? fieldId) =>
         fieldId is null ? null : Fields.FirstOrDefault(f => f.Id == fieldId);
 

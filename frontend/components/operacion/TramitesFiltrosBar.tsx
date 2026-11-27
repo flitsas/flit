@@ -12,6 +12,10 @@ import {
 import type { QueryCondition, QueryField } from '@/lib/api/queries';
 import { COPY } from '@/lib/copy/copy-catalog';
 
+/** Ayuda de la búsqueda múltiple: tooltip (pantallas angostas) y descripción para lector de pantalla. */
+const BUSQUEDA_AYUDA =
+  'Puedes buscar varios radicados, placas o VIN a la vez separándolos con coma. Ejemplo: AAA111, BBB222';
+
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
  * filtros SIEMPRE visible (~185px de alto, casi muda en reposo): ahora vive DENTRO de la fila de
@@ -406,6 +410,7 @@ function FiltroEspecificoPopover({
                 onRemove={() => quitar(campoEditado.id)}
                 testIdPrefix={testIdPrefix}
                 anchored={false}
+                contieneAdmiteVarios
               />
             </>
           ) : (
@@ -566,7 +571,8 @@ export function TramitesFiltrosBar({
   onSearchChange,
   // HU #12372 — el ejemplo enseña el formato del radicado (FT1-0000012) sin decir que sea lo
   // único que acepta: el número solo (12) y el prefijo a medias (ft1 12) también encuentran.
-  searchPlaceholder = 'Buscar radicado (FT1-0000012), placa, VIN...',
+  // Búsqueda múltiple: radicado, placa o VIN separados por coma traen los que coincidan con cualquiera.
+  searchPlaceholder = 'Radicado, placa o VIN · varios con coma',
   searchAriaLabel = 'Buscar trámites',
   onAplicar,
   onEmpezarDeCero,
@@ -576,10 +582,11 @@ export function TramitesFiltrosBar({
   bulkUploadAction,
   revocationRequestsLink,
 }: TramitesFiltrosBarProps) {
+  const ayudaId = useId();
   return (
     <>
-      {/* Búsqueda: ancho fijo w-64, icono marca — spec flit-tramites-chrome. */}
-      <div className="relative w-64 shrink-0">
+      {/* Búsqueda: w-64 en móvil, w-80 desde sm y w-96 desde xl para que el ejemplo se lea completo; icono marca — spec flit-tramites-chrome. */}
+      <div className="relative w-64 shrink-0 sm:w-80 xl:w-96">
         <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
         <input
           type="search"
@@ -587,8 +594,13 @@ export function TramitesFiltrosBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}
+          title={BUSQUEDA_AYUDA}
+          aria-describedby={ayudaId}
           className={`${INPUT_CLS} w-full pl-9`}
         />
+        <span id={ayudaId} className="sr-only">
+          {BUSQUEDA_AYUDA}
+        </span>
       </div>
 
       <PeriodoPopover

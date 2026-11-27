@@ -99,9 +99,9 @@ internal static class ProcedureInstanceFiltroSql
                         && !textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
                 }
             case QueryOperator.Contiene:
-                return query.Where(x => x.ReferenceNumber
+                return ContieneAlguno(query, valores, v => x => x.ReferenceNumber
                     .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                    .Contains(valores[0]));
+                    .Contains(v));
             case QueryOperator.EstaVacio:
                 return query.Where(x => x.ReferenceNumber == "");
             case QueryOperator.NoEstaVacio:
@@ -153,6 +153,125 @@ internal static class ProcedureInstanceFiltroSql
             : (lectura.Value.Consecutivo, null);
     }
 
+    // ── Búsqueda de varios valores separados por coma (HU #14747) ─────────────────────────────
+
+    /// <summary>Tope de tramos que se leen de la barra: acota el tamaño del <c>OR</c> del SQL.</summary>
+    public const int MaxTramosBusqueda = 50;
+
+    /// <summary>
+    /// Un tramo de la búsqueda multivalor: el radicado leído (consecutivo O canónico, uno solo o
+    /// ninguno) y el texto en mayúsculas con el que se compara placa y VIN por subcadena.
+    /// </summary>
+    internal readonly record struct TramoBusqueda(long? Consecutivo, string? Canonico, string Mayusculas);
+
+    /// <summary>
+    /// HU #14747 — lee el término de la barra «Buscar trámites» como lista de valores. Devuelve
+    /// <c>null</c> si NO hay coma (el que llama conserva el comportamiento de siempre: un solo término
+    /// contra radicado, placa, VIN, nombres, documento, organismo y razón social).
+    ///
+    /// <para>Con coma SIEMPRE es modo multivalor, aunque tras limpiar quede un solo tramo («FT1-12,»):
+    /// la coma es la señal explícita del usuario de que está pegando identificadores. Cada tramo se
+    /// recorta, los vacíos se descartan (coma final o doble) y se repiten sin duplicar; se leen a lo
+    /// sumo <see cref="MaxTramosBusqueda"/>. Si no queda ningún tramo la lista sale vacía y no casa
+    /// nada.</para>
+    ///
+    /// <para>Cada tramo se busca SOLO por ID de trámite (misma lectura que un solo valor), placa y VIN
+    /// (subcadena en mayúsculas, como hoy). Nombres, documentos, organismo y compañía no participan.</para>
+    /// </summary>
+    public static IReadOnlyList<TramoBusqueda>? LeerBusquedaMultivalor(string? termino)
+    {
+        if (string.IsNullOrWhiteSpace(termino) || !termino.Contains(','))
+            return null;
+
+        var tramos = new List<TramoBusqueda>();
+        var vistos = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var crudo in termino.Split(','))
+        {
+            var texto = crudo.Trim();
+            if (texto.Length == 0)
+                continue;
+
+            var mayusculas = texto.ToUpperInvariant();
+            if (!vistos.Add(mayusculas))
+                continue;
+
+            var (consecutivo, canonico) = LeerBusquedaRadicado(texto);
+            tramos.Add(new TramoBusqueda(consecutivo, canonico, mayusculas));
+            if (tramos.Count == MaxTramosBusqueda)
+                break;
+        }
+        return tramos;
+    }
+
+    /// <summary>
+    /// HU #14747 — aplica los tramos como un <c>OR</c> sobre el mismo <c>IQueryable</c>: es un único
+    /// <c>Where</c>, así que un trámite que casa por varios tramos (placa y VIN) sale una vez y el total
+    /// lo cuenta una vez.
+    ///
+    /// <para>El <c>OR</c> se arma con expresiones (un bloque por tramo, con variables propias que EF
+    /// parametriza) porque <c>lista.Any(t =&gt; x.Plate.Contains(t))</c> no tiene traducción fiable a SQL
+    /// ni en Npgsql ni en InMemory. Es el mismo predicado de un solo valor, sin las ramas de nombre,
+    /// documento, organismo ni compañía.</para>
+    /// </summary>
+    public static IQueryable<ProcedureInstance> AplicarBusquedaMultivalor(
+        IQueryable<ProcedureInstance> query, IReadOnlyList<TramoBusqueda> tramos)
+    {
+        if (tramos.Count == 0)
+            return query.Where(_ => false);
+
+        var x = Expression.Parameter(typeof(ProcedureInstance), "x");
+        Expression? cuerpo = null;
+        foreach (var tramo in tramos)
+        {
+            // Variables locales por iteración: cada closure es un parámetro distinto en el SQL.
+            long? consecutivoBuscado = tramo.Consecutivo;
+            string? radicadoCanonico = tramo.Canonico;
+            var enMayusculas = tramo.Mayusculas;
+
+            Expression<Func<ProcedureInstance, bool>> predicado = p =>
+                (consecutivoBuscado != null && p.Consecutivo == consecutivoBuscado)
+                || (radicadoCanonico != null && p.ReferenceNumber.ToUpper().Replace("-", "") == radicadoCanonico)
+                || (p.Plate != null && p.Plate.ToUpper().Contains(enMayusculas))
+                || (p.Vin != null && p.Vin.ToUpper().Contains(enMayusculas));
+
+            var enX = new ReemplazaParametro(predicado.Parameters[0], x).Visit(predicado.Body)!;
+            cuerpo = cuerpo is null ? enX : Expression.OrElse(cuerpo, enX);
+        }
+
+        return query.Where(Expression.Lambda<Func<ProcedureInstance, bool>>(cuerpo!, x));
+    }
+
+    private sealed class ReemplazaParametro(ParameterExpression origen, ParameterExpression destino) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) =>
+            node == origen ? destino : base.VisitParameter(node);
+    }
+
+    /// <summary>
+    /// «Contiene» con varios valores (placa, VIN, radicado): <c>OR</c> de un «contiene» por valor, en un
+    /// único <c>Where</c>. Con un solo valor el predicado es el de siempre. Los valores llegan ya
+    /// normalizados, sin vacíos ni repetidos; se leen a lo sumo <see cref="MaxTramosBusqueda"/>.
+    /// </summary>
+    internal static IQueryable<T> ContieneAlguno<T>(
+        IQueryable<T> query, List<string> valores,
+        Func<string, Expression<Func<T, bool>>> predicadoPorValor)
+    {
+        if (valores.Count == 0)
+            return query;
+
+        var x = Expression.Parameter(typeof(T), "x");
+        Expression? cuerpo = null;
+        foreach (var valor in valores.Take(MaxTramosBusqueda))
+        {
+            // Variable local por iteración: cada closure es un parámetro distinto en el SQL.
+            var buscado = valor;
+            var predicado = predicadoPorValor(buscado);
+            var enX = new ReemplazaParametro(predicado.Parameters[0], x).Visit(predicado.Body)!;
+            cuerpo = cuerpo is null ? enX : Expression.OrElse(cuerpo, enX);
+        }
+        return query.Where(Expression.Lambda<Func<T, bool>>(cuerpo!, x));
+    }
+
     public static IQueryable<ProcedureInstance> PorPlaca(
         IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch
         {
@@ -160,9 +279,9 @@ internal static class ProcedureInstanceFiltroSql
                 x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
             QueryOperator.NoEsNinguno => query.Where(x => x.Plate == null || !valores.Contains(
                 x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-            QueryOperator.Contiene => query.Where(x => x.Plate != null && x.Plate
+            QueryOperator.Contiene => ContieneAlguno(query, valores, v => x => x.Plate != null && x.Plate
                 .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                .Contains(valores[0])),
+                .Contains(v)),
             QueryOperator.EstaVacio => query.Where(x => x.Plate == null || x.Plate == ""),
             QueryOperator.NoEstaVacio => query.Where(x => x.Plate != null && x.Plate != ""),
             _ => query,
@@ -175,9 +294,9 @@ internal static class ProcedureInstanceFiltroSql
                 x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
             QueryOperator.NoEsNinguno => query.Where(x => x.Vin == null || !valores.Contains(
                 x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-            QueryOperator.Contiene => query.Where(x => x.Vin != null && x.Vin
+            QueryOperator.Contiene => ContieneAlguno(query, valores, v => x => x.Vin != null && x.Vin
                 .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                .Contains(valores[0])),
+                .Contains(v)),
             QueryOperator.EstaVacio => query.Where(x => x.Vin == null || x.Vin == ""),
             QueryOperator.NoEstaVacio => query.Where(x => x.Vin != null && x.Vin != ""),
             _ => query,
@@ -218,14 +337,14 @@ internal static class ProcedureInstanceFiltroSql
                         && valores.Contains(a.DocumentNumber.ToUpper()))),
 
             QueryOperator.Contiene => esComprador
-                ? query.Where(x =>
-                    (x.CompradorNombre != null && x.CompradorNombre.ToUpper().Contains(valores[0]))
+                ? ContieneAlguno(query, valores, v => x =>
+                    (x.CompradorNombre != null && x.CompradorNombre.ToUpper().Contains(v))
                     || x.Actors.Any(a => a.ActorType == ActorTipoComprador
-                        && a.DocumentNumber.ToUpper().Contains(valores[0])))
-                : query.Where(x =>
-                    (x.VendedorNombre != null && x.VendedorNombre.ToUpper().Contains(valores[0]))
+                        && a.DocumentNumber.ToUpper().Contains(v)))
+                : ContieneAlguno(query, valores, v => x =>
+                    (x.VendedorNombre != null && x.VendedorNombre.ToUpper().Contains(v))
                     || x.Actors.Any(a => a.ActorType == ActorTipoVendedor
-                        && a.DocumentNumber.ToUpper().Contains(valores[0]))),
+                        && a.DocumentNumber.ToUpper().Contains(v))),
 
             QueryOperator.EstaVacio => esComprador
                 ? query.Where(x => x.CompradorNombre == null || x.CompradorNombre == "")
