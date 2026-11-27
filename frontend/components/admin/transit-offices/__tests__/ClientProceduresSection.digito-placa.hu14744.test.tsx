@@ -125,17 +125,16 @@ beforeEach(() => {
     revocados: 0,
     solicitudesRevocatoria: 0,
   });
-  vi.mocked(searchOtClientProcedures).mockResolvedValue(
-    pagina(
-      [
-        tramite(1, { platePreferredLastDigit: "7", platePreferredLastDigitDeclared: true, clase: "MOTOCICLETA", placaRutaCorta: false }),
-        tramite(2, { platePreferredLastDigit: "3", platePreferredLastDigitDeclared: true, clase: null, placaRutaCorta: false }),
-        tramite(3, { platePreferredLastDigit: "", platePreferredLastDigitDeclared: true, placaRutaCorta: false }),
-        tramite(4, { platePreferredLastDigit: "3", platePreferredLastDigitDeclared: true, placaRutaCorta: true }),
-      ],
-      4,
-    ),
-  );
+  vi.mocked(searchOtClientProcedures).mockImplementation(async (params) => {
+    const filas = [
+      tramite(1, { familia: "MATRICULAS", platePreferredLastDigit: "7", platePreferredLastDigitDeclared: true, clase: "MOTOCICLETA", placaRutaCorta: false }),
+      tramite(2, { familia: "MATRICULAS", platePreferredLastDigit: "3", platePreferredLastDigitDeclared: true, clase: null, placaRutaCorta: false }),
+      tramite(3, { familia: "MATRICULAS", platePreferredLastDigit: "", platePreferredLastDigitDeclared: true, placaRutaCorta: false }),
+      tramite(4, { familia: "MATRICULAS", platePreferredLastDigit: "3", platePreferredLastDigitDeclared: true, placaRutaCorta: true }),
+      tramite(5, { familia: "TRASPASO", platePreferredLastDigit: "9", platePreferredLastDigitDeclared: true }),
+    ].filter((f) => !params?.familia || f.familia === params.familia);
+    return pagina(filas, filas.length);
+  });
 });
 
 
@@ -150,10 +149,11 @@ const conColumna = () =>
 const cabecera = () => screen.queryByRole("columnheader", { name: /Dígito de placa/ });
 
 describe("Bandeja OT — columna «Dígito de placa» (HU #14744)", () => {
-  it("AC6: no viene por defecto, ni siquiera en la pestaña Matrículas", async () => {
+  it("AC6: no viene por defecto, ni en Todos ni en Matrículas", async () => {
     vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: "ot.procedures.columns", value: {} } as never);
     renderSection();
     await screen.findByText("RAD-0001");
+    expect(cabecera()).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Matrículas" }));
     await screen.findByText("RAD-0001");
     expect(cabecera()).not.toBeInTheDocument();
@@ -173,17 +173,32 @@ describe("Bandeja OT — columna «Dígito de placa» (HU #14744)", () => {
     ]);
   });
 
-  it("AC5: desaparece fuera de Matrículas (tabla y panel Columnas) y reaparece al volver", async () => {
+  it("Todos: la columna se ofrece y, marcada, muestra el valor en matrículas y vacío en un traspaso", async () => {
     conColumna();
     renderSection();
     await screen.findByText("RAD-0001");
-    expect(cabecera()).not.toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: /Dígito de placa/ })).toBeInTheDocument();
+    expect(screen.getAllByTestId("ot-digito-placa").map((c) => c.textContent)).toEqual([
+      "Inicia en 7",
+      "Termina en 3",
+      "Sin preferencia",
+      "—",
+      "",
+    ]);
+    await userEvent.click(screen.getByRole("button", { name: /Columnas/ }));
+    expect(await screen.findByRole("checkbox", { name: /Dígito de placa/ })).toBeChecked();
+  });
+
+  it("AC5: desaparece en Traspaso (tabla y panel Columnas) y reaparece al volver", async () => {
+    conColumna();
+    renderSection();
+    await screen.findByText("RAD-0001");
 
     await userEvent.click(screen.getByRole("tab", { name: "Matrículas" }));
     expect(await screen.findByRole("columnheader", { name: /Dígito de placa/ })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("tab", { name: "Traspaso" }));
-    await screen.findByText("RAD-0001");
+    await screen.findByText("RAD-0005");
     expect(cabecera()).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Columnas/ }));
     expect(await screen.findAllByRole("checkbox")).not.toHaveLength(0);
@@ -194,10 +209,13 @@ describe("Bandeja OT — columna «Dígito de placa» (HU #14744)", () => {
     expect(await screen.findByRole("columnheader", { name: /Dígito de placa/ })).toBeInTheDocument();
   });
 
-  it("AC5/AC6: en Matrículas el panel Columnas la ofrece sin marcar", async () => {
+  it("AC5/AC6: en Todos y en Matrículas el panel Columnas la ofrece sin marcar", async () => {
     vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: "ot.procedures.columns", value: {} } as never);
     renderSection();
     await screen.findByText("RAD-0001");
+    await userEvent.click(screen.getByRole("button", { name: /Columnas/ }));
+    expect(await screen.findByRole("checkbox", { name: /Dígito de placa/ })).not.toBeChecked();
+    await userEvent.keyboard("{Escape}");
     await userEvent.click(screen.getByRole("tab", { name: "Matrículas" }));
     await userEvent.click(screen.getByRole("button", { name: /Columnas/ }));
     expect(await screen.findByRole("checkbox", { name: /Dígito de placa/ })).not.toBeChecked();

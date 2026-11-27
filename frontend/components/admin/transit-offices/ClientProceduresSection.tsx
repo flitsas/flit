@@ -105,8 +105,8 @@ import type { QueryCondition, QueryField } from "@/lib/api/queries";
 import {
   OT_PROCEDURES_COLUMNS,
   DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS,
-  OT_MATRICULA_ONLY_KEYS,
-  applyOtMatriculaColumns,
+  OT_TODOS_Y_MATRICULAS_KEYS,
+  applyOtTodosYMatriculasColumns,
   otSelectableColumns,
 } from "@/lib/admin/ot-procedures-columns";
 import {
@@ -511,11 +511,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // HU #14741 — anchos que el usuario fijó arrastrando el borde de la cabecera.
   const columnWidths = useColumnWidths(savedWidths, OT_COLUMN_KEYS, setSavedWidth, resetSavedWidth);
 
-  // HU #14744 — «Dígito de placa» solo en la pestaña de matrícula inicial; derivado, la preferencia
+  // HU #14744 — «Dígito de placa» solo en «Todos» y «Matrículas»; derivado, la preferencia
   // guardada no se toca (al volver a la pestaña reaparece).
-  const esMatriculaTab = familia === "MATRICULAS";
+  const esMatriculaTab = familia === "" || familia === "MATRICULAS";
   const columnasEfectivas = useMemo(
-    () => applyOtMatriculaColumns(visibleColumns, esMatriculaTab),
+    () => applyOtTodosYMatriculasColumns(visibleColumns, esMatriculaTab),
     [visibleColumns, esMatriculaTab],
   );
 
@@ -1729,10 +1729,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   columns={otSelectableColumns(esMatriculaTab).map((c) => ({ key: c.key, label: c.label }))}
                   visible={columnasEfectivas}
                   onChange={(next) => {
-                    // Fuera de matrícula la columna no se ofrece, pero la preferencia la conserva.
+                    // Fuera de «Todos» y «Matrículas» la columna no se ofrece, pero la preferencia la conserva.
                     const guardadas = esMatriculaTab
                       ? []
-                      : visibleColumns.filter((k) => OT_MATRICULA_ONLY_KEYS.includes(k));
+                      : visibleColumns.filter((k) => OT_TODOS_Y_MATRICULAS_KEYS.includes(k));
                     setVisibleColumns(
                       OT_PROCEDURES_COLUMNS.map((c) => c.key).filter(
                         (k) => next.includes(k) || guardadas.includes(k),
