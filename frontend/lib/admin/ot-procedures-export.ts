@@ -33,6 +33,8 @@ const texto = (v: string | null | undefined): string => (v ?? '').trim();
 
 /** HU #14744 — mismo texto que la celda de la bandeja (ver `digitoPlacaLabel`). */
 export function digitoPlacaOt(r: OtClientProcedure): string {
+  // Solo las matrículas tienen dato; en «Todos» el resto queda vacío (no «—»).
+  if (r.familia !== 'MATRICULAS') return '';
   return digitoPlacaLabel({
     digito: r.platePreferredLastDigit,
     declarado: r.platePreferredLastDigitDeclared,

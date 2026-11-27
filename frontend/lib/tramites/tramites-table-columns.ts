@@ -61,11 +61,11 @@ export interface TramitesColumnDef {
    */
   networkOnly?: boolean;
   /**
-   * HU #14744 — columna que SOLO existe en la vista de matrícula inicial (familia MATRICULAS). Fuera
-   * de ella no se pinta ni se ofrece en «Columnas», pero la preferencia guardada NO se toca: al volver
-   * a la pestaña reaparece según lo que el usuario dejó. Nunca va en el default.
+   * HU #14744 — columna que SOLO existe en las pestañas «Todos» y «Matrículas». Fuera de ellas
+   * (Traspaso, Otros trámites) no se pinta ni se ofrece en «Columnas», pero la preferencia guardada NO
+   * se toca: al volver reaparece según lo que el usuario dejó. Nunca va en el default.
    */
-  matriculaOnly?: boolean;
+  soloTodosYMatriculas?: boolean;
 }
 
 const GRUPO_BASE = 'Listado';
@@ -137,7 +137,7 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   { key: 'vin', label: COPY.A02Vin, minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
   { key: 'vehiculo', label: 'Marca / modelo', minPx: 140, group: GRUPO_DESGLOSE },
   // HU #14744 — preferencia de dígito de la placa; solo matrícula inicial y no visible por defecto.
-  { key: 'digitoPlaca', label: 'Dígito de placa', minPx: 140, fixed: true, group: GRUPO_DESGLOSE, matriculaOnly: true },
+  { key: 'digitoPlaca', label: 'Dígito de placa', minPx: 140, fixed: true, group: GRUPO_DESGLOSE, soloTodosYMatriculas: true },
   { key: 'estado', label: 'Estado', minPx: 150, group: GRUPO_DESGLOSE },
   // Fijas: "3/5" con el nombre del paso, y dos fechas de formato constante.
   { key: 'paso', label: 'Paso', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
@@ -162,21 +162,21 @@ export const TRAMITES_SELECTABLE_COLUMNS: readonly TramitesColumnDef[] = TRAMITE
   (c) => !c.networkOnly,
 );
 
-/** HU #14744 — claves que solo existen en la vista de matrícula inicial. */
-export const TRAMITES_MATRICULA_ONLY_KEYS: readonly string[] = TRAMITES_COLUMNS.filter(
-  (c) => c.matriculaOnly,
+/** HU #14744 — claves que solo existen en «Todos» y «Matrículas». */
+export const TRAMITES_TODOS_Y_MATRICULAS_KEYS: readonly string[] = TRAMITES_COLUMNS.filter(
+  (c) => c.soloTodosYMatriculas,
 ).map((c) => c.key);
 
-/** HU #14744 — quita (sin tocar la preferencia) las columnas de matrícula fuera de esa vista. */
-export function applyMatriculaColumns(visible: readonly string[], esMatricula: boolean): string[] {
-  return esMatricula ? [...visible] : visible.filter((k) => !TRAMITES_MATRICULA_ONLY_KEYS.includes(k));
+/** HU #14744 — quita (sin tocar la preferencia) esas columnas fuera de «Todos» y «Matrículas». */
+export function applyTodosYMatriculasColumns(visible: readonly string[], enAlcance: boolean): string[] {
+  return enAlcance ? [...visible] : visible.filter((k) => !TRAMITES_TODOS_Y_MATRICULAS_KEYS.includes(k));
 }
 
 /** HU #14744 — catálogo del selector «Columnas» según la vista. */
-export function selectableColumnsFor(esMatricula: boolean): readonly TramitesColumnDef[] {
-  return esMatricula
+export function selectableColumnsFor(enAlcance: boolean): readonly TramitesColumnDef[] {
+  return enAlcance
     ? TRAMITES_SELECTABLE_COLUMNS
-    : TRAMITES_SELECTABLE_COLUMNS.filter((c) => !c.matriculaOnly);
+    : TRAMITES_SELECTABLE_COLUMNS.filter((c) => !c.soloTodosYMatriculas);
 }
 
 /**
@@ -604,7 +604,16 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   ],
   vin: [CAMPO_VIN],
   vehiculo: [CAMPO_VEHICULO],
-  digitoPlaca: [campoTexto('digitoPlaca', 'Dígito de placa', (row) => digitoPlacaLabelDeFila(row), 18)],
+  // Las filas que no son matrícula (pestaña «Todos») salen con la celda VACÍA, no «—» (que es ruta corta).
+  digitoPlaca: [
+    {
+      id: 'digitoPlaca',
+      label: 'Dígito de placa',
+      value: (row) => digitoPlacaLabelDeFila(row),
+      raw: (row) => texto(digitoPlacaLabelDeFila(row)),
+      width: 18,
+    },
+  ],
   estado: [CAMPO_ESTADO],
   paso: [CAMPO_PASO, CAMPO_PASO_NOMBRE],
   fechaCreacion: [CAMPO_FECHA_CREACION],

@@ -5,7 +5,7 @@ import {
   TRAMITES_COLUMNS,
   TRAMITES_COLUMN_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
-  applyMatriculaColumns,
+  applyTodosYMatriculasColumns,
   selectableColumnsFor,
   tramitesExportFields,
 } from '@/lib/tramites/tramites-table-columns';
@@ -13,7 +13,7 @@ import { digitoPlacaLabel, digitoPlacaLabelDeFila } from '@/lib/tramites/tramite
 import {
   DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS,
   OT_PROCEDURES_COLUMNS,
-  applyOtMatriculaColumns,
+  applyOtTodosYMatriculasColumns,
   otSelectableColumns,
 } from '@/lib/admin/ot-procedures-columns';
 import { digitoPlacaOt, otProceduresExportFields } from '@/lib/admin/ot-procedures-export';
@@ -40,25 +40,28 @@ describe('HU #14744 — texto de la celda', () => {
   it('AC4: ruta corta (placa del RUNT) → «—», aunque traiga dígito', () => {
     expect(digitoPlacaLabel({ digito: '3', declarado: true, rutaCorta: true })).toBe('—');
   });
-  it('no decidido o trámite que no es matrícula (todo null) → «—»', () => {
+  it('matrícula no decidida → «—»; trámite que no es matrícula → celda vacía', () => {
     expect(digitoPlacaLabel({ digito: null, declarado: null })).toBe('—');
     expect(digitoPlacaLabel({ digito: null, declarado: false })).toBe('—');
-    expect(digitoPlacaLabelDeFila(fila({}))).toBe('—');
+    expect(digitoPlacaLabelDeFila(fila({ modalidad: 'MATRICULAS' }))).toBe('—');
+    expect(digitoPlacaLabelDeFila(fila({ modalidad: 'TRASPASO' }))).toBe('');
+    expect(digitoPlacaOt(ot({ familia: 'OTROS' }))).toBe('');
+    expect(digitoPlacaOt(ot({ familia: 'MATRICULAS' }))).toBe('—');
   });
   it('lee los campos del listado del gestor', () => {
     expect(
       digitoPlacaLabelDeFila(
-        fila({ plateDigitoPreferido: '7', plateDigitoDeclarado: true, clase: 'MOTOCICLETA', placaRutaCorta: false }),
+        fila({ modalidad: 'MATRICULAS', plateDigitoPreferido: '7', plateDigitoDeclarado: true, clase: 'MOTOCICLETA', placaRutaCorta: false }),
       ),
     ).toBe('Inicia en 7');
   });
   it('lee los campos de la bandeja del OT', () => {
-    expect(digitoPlacaOt(ot({ platePreferredLastDigit: '7', platePreferredLastDigitDeclared: true, clase: 'MOTOCICLETA' }))).toBe(
+    expect(digitoPlacaOt(ot({ familia: 'MATRICULAS', platePreferredLastDigit: '7', platePreferredLastDigitDeclared: true, clase: 'MOTOCICLETA' }))).toBe(
       'Inicia en 7',
     );
-    expect(digitoPlacaOt(ot({ platePreferredLastDigit: '', platePreferredLastDigitDeclared: true }))).toBe('Sin preferencia');
+    expect(digitoPlacaOt(ot({ familia: 'MATRICULAS', platePreferredLastDigit: '', platePreferredLastDigitDeclared: true }))).toBe('Sin preferencia');
     expect(
-      digitoPlacaOt(ot({ platePreferredLastDigit: '3', platePreferredLastDigitDeclared: true, placaRutaCorta: true })),
+      digitoPlacaOt(ot({ familia: 'MATRICULAS', platePreferredLastDigit: '3', platePreferredLastDigitDeclared: true, placaRutaCorta: true })),
     ).toBe('—');
   });
 });
@@ -70,10 +73,10 @@ describe('HU #14744 — columna del gestor: default, vista y export', () => {
     expect(TRAMITES_COLUMN_KEYS).toContain('digitoPlaca');
     expect(TRAMITES_COLUMNS.find((c) => c.key === 'digitoPlaca')?.label).toBe('Dígito de placa');
   });
-  it('AC5: solo aparece en matrícula inicial; la preferencia no se pierde al ocultarla', () => {
+  it('AC5: solo aparece en Todos y Matrículas (flag true); la preferencia no se pierde al ocultarla', () => {
     const pref = ['radicado', 'placa', 'digitoPlaca'];
-    expect(applyMatriculaColumns(pref, false)).toEqual(['radicado', 'placa']);
-    expect(applyMatriculaColumns(pref, true)).toEqual(pref);
+    expect(applyTodosYMatriculasColumns(pref, false)).toEqual(['radicado', 'placa']);
+    expect(applyTodosYMatriculasColumns(pref, true)).toEqual(pref);
     expect(pref).toContain('digitoPlaca');
     expect(selectableColumnsFor(false).map((c) => c.key)).not.toContain('digitoPlaca');
     expect(selectableColumnsFor(true).map((c) => c.key)).toContain('digitoPlaca');
@@ -81,8 +84,9 @@ describe('HU #14744 — columna del gestor: default, vista y export', () => {
   it('Excel: exporta la columna con el mismo texto que la celda', () => {
     const campo = tramitesExportFields(['radicado', 'digitoPlaca']).find((c) => c.id === 'digitoPlaca');
     expect(campo?.label).toBe('Dígito de placa');
-    expect(campo?.value(fila({ plateDigitoPreferido: '3', plateDigitoDeclarado: true }))).toBe('Termina en 3');
-    expect(campo?.raw(fila({ placaRutaCorta: true }))).toBeNull();
+    expect(campo?.value(fila({ modalidad: 'MATRICULAS', plateDigitoPreferido: '3', plateDigitoDeclarado: true }))).toBe('Termina en 3');
+    expect(campo?.value(fila({ modalidad: 'TRASPASO', plateDigitoPreferido: '3', plateDigitoDeclarado: true }))).toBe('');
+    expect(campo?.raw(fila({ modalidad: 'MATRICULAS', placaRutaCorta: true }))).toBeNull();
     expect(tramitesExportFields(['radicado']).map((c) => c.id)).not.toContain('digitoPlaca');
   });
 });
@@ -92,16 +96,17 @@ describe('HU #14744 — columna de la bandeja del OT: default, vista y export', 
     expect(DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS).not.toContain('digitoPlaca');
     expect(OT_PROCEDURES_COLUMNS.find((c) => c.key === 'digitoPlaca')?.label).toBe('Dígito de placa');
   });
-  it('AC5: solo en la pestaña de matrícula inicial, sin tocar la preferencia', () => {
+  it('AC5: solo en Todos y Matrículas (flag true), sin tocar la preferencia', () => {
     const pref = ['radicado', 'digitoPlaca'];
-    expect(applyOtMatriculaColumns(pref, false)).toEqual(['radicado']);
-    expect(applyOtMatriculaColumns(pref, true)).toEqual(pref);
+    expect(applyOtTodosYMatriculasColumns(pref, false)).toEqual(['radicado']);
+    expect(applyOtTodosYMatriculasColumns(pref, true)).toEqual(pref);
     expect(otSelectableColumns(false).map((c) => c.key)).not.toContain('digitoPlaca');
     expect(otSelectableColumns(true).map((c) => c.key)).toContain('digitoPlaca');
   });
   it('Excel: incluye la columna con el texto de la celda', () => {
     const campo = otProceduresExportFields(['digitoPlaca'])[0];
     expect(campo.label).toBe('Dígito de placa');
-    expect(campo.value(ot({ platePreferredLastDigit: '3', platePreferredLastDigitDeclared: true }))).toBe('Termina en 3');
+    expect(campo.value(ot({ familia: 'MATRICULAS', platePreferredLastDigit: '3', platePreferredLastDigitDeclared: true }))).toBe('Termina en 3');
+    expect(campo.value(ot({ familia: 'TRASPASO', platePreferredLastDigit: '3', platePreferredLastDigitDeclared: true }))).toBe('');
   });
 });

@@ -501,7 +501,7 @@ export function ClientProceduresTable({
       ? visibleColumns
           .map((k) => OT_PROCEDURES_COLUMNS.find((c) => c.key === k))
           .filter((c): c is (typeof OT_PROCEDURES_COLUMNS)[number] => c !== undefined)
-      : OT_PROCEDURES_COLUMNS.filter((c) => !c.matriculaOnly);
+      : OT_PROCEDURES_COLUMNS.filter((c) => !c.soloTodosYMatriculas);
 
   /**
    * Acciones disponibles para una fila, en el orden en que el operador las necesita: primero

@@ -6,7 +6,7 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 import { TOKEN_STORAGE_KEY } from '@/lib/auth/jwt';
 import { DEFAULT_TRAMITES_VISIBLE_COLUMNS, TRAMITES_COLUMN_KEYS } from '@/lib/tramites/tramites-table-columns';
 
-// HU #14744 — columna «Dígito de placa» del listado del gestor: solo en matrícula inicial.
+// HU #14744 — columna «Dígito de placa» del listado del gestor: «Todos» y «Matrículas».
 
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
@@ -112,7 +112,10 @@ describe('TramitesTable — columna «Dígito de placa» (HU #14744)', { timeout
       }),
     );
     mocks.searchInstances.mockImplementation(async (params?: unknown) => {
-      const todos: InstanceSummary[] = (await mocks.listInstances(params)) ?? [];
+      const q = params as { modalidad?: string } | undefined;
+      const todos: InstanceSummary[] = ((await mocks.listInstances(params)) ?? []).filter(
+        (f: InstanceSummary) => !q?.modalidad || f.modalidad === q.modalidad,
+      );
       return { items: todos, total: todos.length };
     });
     mocks.searchEstadoCounts.mockResolvedValue({});
@@ -128,6 +131,7 @@ describe('TramitesTable — columna «Dígito de placa» (HU #14744)', { timeout
       fila('0002', { plateDigitoPreferido: '3', plateDigitoDeclarado: true, clase: null, placaRutaCorta: false }),
       fila('0003', { plateDigitoPreferido: null, plateDigitoDeclarado: true, clase: 'AUTOMOVIL', placaRutaCorta: false }),
       fila('0004', { plateDigitoPreferido: null, plateDigitoDeclarado: null, clase: 'AUTOMOVIL', placaRutaCorta: true }),
+      fila('0005', { modalidad: 'TRASPASO', plateDigitoPreferido: '9', plateDigitoDeclarado: true, clase: 'AUTOMOVIL' }),
     ]);
   });
 
@@ -135,10 +139,11 @@ describe('TramitesTable — columna «Dígito de placa» (HU #14744)', { timeout
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it('AC6: con la preferencia por defecto la columna no se ve, ni siquiera en Matrículas', async () => {
+  it('AC6: con la preferencia por defecto la columna no se ve, ni en Todos ni en Matrículas', async () => {
     prefs.get.mockResolvedValue({ scope: 'tramites.columns', value: {} });
     montar();
     await screen.findByText('P0001');
+    expect(cabecera()).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
     await screen.findByText('P0001');
     expect(cabecera()).not.toBeInTheDocument();
@@ -154,18 +159,27 @@ describe('TramitesTable — columna «Dígito de placa» (HU #14744)', { timeout
     expect(celdas).toEqual(['Inicia en 7', 'Termina en 3', 'Sin preferencia', '—']);
   });
 
+  it('Todos: la columna se ofrece y, marcada, muestra el valor en matrículas y vacío en un traspaso', async () => {
+    conColumna();
+    montar();
+    await screen.findByText('P0001');
+    expect(await screen.findByRole('columnheader', { name: /Dígito de placa/ })).toBeInTheDocument();
+    const celdas = screen.getAllByTestId('tramite-digito-placa').map((c) => c.textContent);
+    expect(celdas).toEqual(['Inicia en 7', 'Termina en 3', 'Sin preferencia', '—', '']);
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/ }));
+    expect(await screen.findByRole('checkbox', { name: /Dígito de placa/ })).toBeChecked();
+  });
+
   it('AC5: desaparece en Traspaso (tabla y panel Columnas) y reaparece al volver a Matrículas', async () => {
     conColumna();
     montar();
     await screen.findByText('P0001');
-    // «Todos» mezcla familias: tampoco aparece.
-    expect(cabecera()).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
     expect(await screen.findByRole('columnheader', { name: /Dígito de placa/ })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Traspaso' }));
-    await screen.findByText('P0001');
+    await screen.findByText('P0005');
     expect(cabecera()).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Columnas/ }));
     expect(await screen.findAllByRole('checkbox')).not.toHaveLength(0);
@@ -176,10 +190,13 @@ describe('TramitesTable — columna «Dígito de placa» (HU #14744)', { timeout
     expect(await screen.findByRole('columnheader', { name: /Dígito de placa/ })).toBeInTheDocument();
   });
 
-  it('AC5/AC6: en Matrículas el panel Columnas la ofrece sin marcar por defecto', async () => {
+  it('AC5/AC6: en Matrículas y en Todos el panel Columnas la ofrece sin marcar por defecto', async () => {
     prefs.get.mockResolvedValue({ scope: 'tramites.columns', value: {} });
     montar();
     await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/ }));
+    expect(await screen.findByRole('checkbox', { name: /Dígito de placa/ })).not.toBeChecked();
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('tab', { name: 'Matrículas' }));
     await userEvent.click(screen.getByRole('button', { name: /Columnas/ }));
     expect(await screen.findByRole('checkbox', { name: /Dígito de placa/ })).not.toBeChecked();
