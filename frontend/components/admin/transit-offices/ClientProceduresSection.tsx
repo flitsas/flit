@@ -59,6 +59,7 @@ import {
 import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
 import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
 import {
+  NOMBRE_GENERICO_CONSOLIDADO,
   conservarCamposConsolidadoOt,
   esEntregaRadicadaFija,
   mensajeEntregaOtFallida,
@@ -1491,7 +1492,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         radicadoEn = fuente.radicadoEn;
         if (fuente.via === "adjunto_radicado") {
           attId = fuente.attachmentId;
-          filename = `consolidado-maestro-${row.referenceNumber}.pdf`;
+          filename = NOMBRE_GENERICO_CONSOLIDADO;
         } else {
           // HU #12787 (AC1/AC3) — en modo QX read-only el maestro se pide a la ruta de entrega OT (no
           // al adjunto de `GET …/documents`, que puede estar desactualizado). La entrega reconstruye

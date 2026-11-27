@@ -3,6 +3,7 @@ import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client
 import { sessionAwareBase } from "@/lib/api/base-url";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
+import { NOMBRE_GENERICO_CONSOLIDADO } from "@/lib/tramites/consolidado-entrega-ot";
 import type { QueryField } from "./queries";
 import { aErrorDeLote } from "./consolidado-lotes-client";
 import type { CrearLoteConsolidadosRequest, LoteConsolidados } from "./types-consolidado-lotes";
@@ -402,7 +403,7 @@ export function descargarOtConsolidado(
 ): Promise<void> {
   return downloadFile(`${base}/client-procedures/${id}/consolidado`, {
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
-    fallbackFilename: `consolidado_${referenceNumber ?? id}.pdf`,
+    fallbackFilename: NOMBRE_GENERICO_CONSOLIDADO,
   });
 }
 
