@@ -126,10 +126,14 @@ describe('buildTramitesGridLayout', () => {
     expect(tracks).toHaveLength(visible.length + 1);
   });
 
-  it('el orden de los tracks es SIEMPRE el canónico de TRAMITES_COLUMNS, sin importar el orden de entrada', () => {
+  it('HU #14740: los tracks siguen el orden de `visibleKeys` (el elegido por el usuario) y conservan el mismo conjunto', () => {
     const canonical = buildTramitesGridLayout(['radicado', 'placa', 'estado']);
     const shuffled = buildTramitesGridLayout(['estado', 'radicado', 'placa']);
-    expect(shuffled.gridTemplateColumns).toBe(canonical.gridTemplateColumns);
+    const sorted = (l: { gridTemplateColumns: string }) => l.gridTemplateColumns.split(' ').sort();
+    expect(sorted(shuffled)).toEqual(sorted(canonical));
+    expect(shuffled.minWidthPx).toBe(canonical.minWidthPx);
+    const [primero] = shuffled.gridTemplateColumns.split(' ');
+    expect(primero).toBe(buildTramitesGridLayout(['estado']).gridTemplateColumns.split(' ')[0]);
   });
 
   it('nunca produce un grid vacío aunque `visibleKeys` no incluya ninguna columna conocida', () => {
@@ -185,10 +189,12 @@ describe('buildTramitesColWidths', () => {
     expect(sumPercent(widths)).toBeCloseTo(100, 1);
   });
 
-  it('respeta el orden canónico de TRAMITES_COLUMNS sin importar el orden de entrada', () => {
+  it('HU #14740: respeta el orden de entrada (el del usuario) y reparte el mismo total', () => {
     const canonical = buildTramitesColWidths(['radicado', 'placa', 'estado']);
     const shuffled = buildTramitesColWidths(['estado', 'radicado', 'placa']);
-    expect(shuffled).toEqual(canonical);
+    expect([...shuffled].sort()).toEqual([...canonical].sort());
+    expect(shuffled[0]).toBe(buildTramitesColWidths(['estado', 'radicado', 'placa'])[0]);
+    expect(shuffled).not.toEqual(canonical);
   });
 
   it('la pista de Selección solo aparece cuando se pide, es fija (no en %) y el resto le cede su parte proporcional', () => {
@@ -251,7 +257,7 @@ describe('buildTramitesColWidths', () => {
     // `secretaria` (piso 190) crece más que `gestor` (piso 160) en la misma proporción que sus
     // pisos. Es lo que garantiza que ninguna caiga por debajo de su mínimo al comprimir la tabla.
     // Las anchuras salen en el orden del catálogo, y Gestor va antes que Organismo (2026-11-10).
-    const widths = buildTramitesColWidths(['secretaria', 'gestor']);
+    const widths = buildTramitesColWidths(['gestor', 'secretaria']); // HU #14740: las anchuras siguen el orden de entrada
     const [gestor, secretaria] = widths.map((w) => percentOf(w));
     expect(secretaria).not.toBeNull();
     expect(gestor).not.toBeNull();

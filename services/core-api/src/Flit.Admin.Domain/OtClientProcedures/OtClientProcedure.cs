@@ -51,6 +51,14 @@ public sealed record OtClientProcedure
     /// </summary>
     public string? PlatePreferredLastDigit { get; init; }
 
+    /// <summary>HU #14743 — el gestor decidió explícitamente el dígito (incluye «sin preferencia»):
+    /// field_value <c>plate_preferred_last_digit_declared</c> = 'true'.</summary>
+    public bool PlatePreferredLastDigitDeclared { get; init; }
+
+    /// <summary>HU #14743 — Ruta Corta: la placa vino de la consulta al RUNT (field_value <c>plate</c> con
+    /// <c>source</c> = 'consultation'), aunque el trámite ya tenga placa.</summary>
+    public bool PlacaRutaCorta { get; init; }
+
     /// <summary>Check opcional del gestor al «Enviar al OT» (visible en el dashboard OT en <c>entregado</c>).</summary>
     public bool SoatPagado { get; init; }
 

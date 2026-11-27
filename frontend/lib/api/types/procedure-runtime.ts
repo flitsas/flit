@@ -301,6 +301,17 @@ export interface InstanceSummary {
    * marcas y motivos son del Historial interno de plataforma, no del gestor.
    */
   runtConfirmed?: RuntConfirmedValue | null;
+  /**
+   * Epic #14503 (HU #14744) — dígito de preferencia de placa, SOLO en matrícula inicial (en el resto
+   * de trámites los cuatro campos vienen `null`). `plateDigitoPreferido`: 0-9, o `null` si no indicó
+   * o declaró sin preferencia. `plateDigitoDeclarado`: `true` con dígito `null` = «sin preferencia»;
+   * `null`/`false` = no decidido. `clase`: vehicle_class crudo (decide Inicia/Termina). `placaRutaCorta`:
+   * `true` = la placa vino del RUNT (no hay preferencia que mostrar). Opcionales: backends anteriores.
+   */
+  plateDigitoPreferido?: string | null;
+  plateDigitoDeclarado?: boolean | null;
+  clase?: string | null;
+  placaRutaCorta?: boolean | null;
   estado: InstanceStatus;
   /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
   rejectedFrom?: RejectedFrom | null;

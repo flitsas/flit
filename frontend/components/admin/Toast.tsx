@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
 
 // Toast mínimo sin dependencias externas (HU #10194). Éxito #00DBD5, error #FF4E00.
@@ -39,6 +39,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(() => ({ show }), [show]);
+
+  // Aviso de «no se pudo guardar la vista de columnas» (lo emite useUiPreferences). Literal en vez de
+  // importar el hook para no crear una dependencia circular componente -> hook -> componente.
+  useEffect(() => {
+    const onSaveError = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      show(typeof detail === "string" ? detail : "No se pudo guardar la vista de columnas.", "error");
+    };
+    window.addEventListener("flit:ui-preferences-save-error", onSaveError);
+    return () => window.removeEventListener("flit:ui-preferences-save-error", onSaveError);
+  }, [show]);
 
   return (
     <ToastContext.Provider value={value}>

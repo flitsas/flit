@@ -38,7 +38,70 @@ export interface UseUiPreferencesResult {
   saving: boolean;
   /** Cambia la selección de columnas; optimista, revierte si el backend falla al guardar. */
   setVisible: (next: string[]) => void;
+  /**
+   * Orden COMPLETO de las columnas (visibles y ocultas). Una columna oculta conserva su lugar, así
+   * que al volver a mostrarla reaparece donde estaba.
+   */
+  order: string[];
+  /** Cambia el orden completo; `visible` se recalcula siguiendo ese orden. Optimista, con aviso si falla. */
+  setOrder: (next: string[]) => void;
+  /**
+   * Restablece la vista de esta tabla al default (columnas visibles + orden). Descarta además
+   * `widths` (anchos por columna) del valor guardado: otra HU los agrega y deben volver a "Por defecto".
+   */
+  reset: () => void;
+  /** Anchos por columna (clave → px) guardados por el usuario; vacío = todas con su ancho por defecto. */
+  widths: Record<string, number>;
+  /** Fija el ancho (px) de una columna y lo guarda. Optimista; revierte con aviso si falla. */
+  setWidth: (key: string, px: number) => void;
+  /** Quita el ancho guardado de una columna (vuelve a su ancho por defecto) y lo guarda. */
+  resetWidth: (key: string) => void;
 }
+
+/** Solo pares clave → número finito > 0; cualquier otra cosa del valor guardado se descarta. */
+/** Igual a `COLUMN_RESIZE_MAX_PX` del tirador; vive aquí para no acoplar el hook al componente. */
+const MAX_SAVED_COLUMN_WIDTH_PX = 640;
+
+function sanitizeWidths(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    // Tope al cargar: un valor guardado enorme no debe romper el layout (mismo máximo que el arrastre).
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+      out[k] = Math.min(Math.round(v), MAX_SAVED_COLUMN_WIDTH_PX);
+    }
+  }
+  return out;
+}
+
+/**
+ * Evento que el hook emite cuando no se pudo guardar; `ToastProvider` lo escucha y muestra el aviso.
+ * Así el aviso reutiliza el toast del proyecto sin acoplar el hook (ni sus tests) al contexto.
+ */
+export const UI_PREFERENCES_SAVE_ERROR_EVENT = 'flit:ui-preferences-save-error';
+export const SAVE_ERROR_MESSAGE = 'No se pudo guardar la vista de columnas. Se mantiene la anterior.';
+
+/** Inserta en `order` las claves del catálogo que faltan, cada una tras su vecina previa del catálogo. */
+function mergeOrder(saved: readonly string[], catalog: readonly string[] | undefined): string[] {
+  if (!catalog) return [...saved];
+  const result = saved.filter((k, i) => catalog.includes(k) && saved.indexOf(k) === i);
+  catalog.forEach((key, i) => {
+    if (result.includes(key)) return;
+    let at = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = result.indexOf(catalog[j]);
+      if (prev >= 0) {
+        at = prev + 1;
+        break;
+      }
+    }
+    result.splice(at, 0, key);
+  });
+  return result;
+}
+
+const sameList = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((k, i) => k === b[i]);
 
 /**
  * Persiste qué columnas ve el usuario en una tabla de trámites (scope `tramites.columns` o
@@ -54,6 +117,12 @@ export function useUiPreferences(
 ): UseUiPreferencesResult {
   const { catalog, addedSinceLegacy, reshowOnce } = options;
   const [visible, setVisibleState] = useState<string[]>(() => [...defaultVisible]);
+  const [order, setOrderState] = useState<string[]>(() => [...(catalog ?? defaultVisible)]);
+  const orderRef = useRef(order);
+  // Resto del valor guardado que este hook no gestiona (p. ej. `widths`): se conserva al guardar.
+  const extrasRef = useRef<Record<string, unknown>>({});
+  const [widths, setWidthsState] = useState<Record<string, number>>({});
+  const widthsRef = useRef(widths);
   const [status, setStatus] = useState<UiPreferencesStatus>('loading');
   const [saving, setSaving] = useState(false);
   // Ref viva de la selección actual: `setVisible` la usa para revertir ante un fallo de guardado
@@ -72,6 +141,7 @@ export function useUiPreferences(
   const reshownSavedRef = useRef<string[]>([]);
   useEffect(() => {
     visibleRef.current = visible;
+    orderRef.current = order;
     catalogRef.current = catalog;
     defaultsRef.current = defaultVisible;
     addedRef.current = addedSinceLegacy;
@@ -100,6 +170,13 @@ export function useUiPreferences(
             ? (rawReshown as string[])
             : [];
         reshownSavedRef.current = reshown;
+        const extras: Record<string, unknown> = { ...(res?.value ?? {}) };
+        for (const k of ['visible', 'known', 'reshown', 'order', 'widths']) delete extras[k];
+        extrasRef.current = extras;
+        const cleanWidths = sanitizeWidths(res?.value?.widths);
+        widthsRef.current = cleanWidths;
+        setWidthsState(cleanWidths);
+        const savedOrder = res?.value?.order;
         // Sin preferencia guardada, el backend responde `value: {}` (AC del contrato) — se
         // conservan las columnas por defecto. Igual si `visible` llega vacío/corrupto.
         if (Array.isArray(saved) && saved.length > 0 && saved.every((k) => typeof k === 'string')) {
@@ -124,10 +201,19 @@ export function useUiPreferences(
             ...saved,
             ...[...nuevas, ...reMostrar].filter((k, i, all) => !saved.includes(k) && all.indexOf(k) === i),
           ];
-          // Orden canónico del catálogo, no el de llegada.
-          setVisibleState(
-            catalogoActual ? catalogoActual.filter((k) => merged.includes(k)) : merged,
-          );
+          // Orden guardado por el usuario; sin él, el canónico del catálogo. Las columnas nuevas
+          // del catálogo entran en su posición del catálogo (`mergeOrder`).
+          const base =
+            Array.isArray(savedOrder) && savedOrder.every((k) => typeof k === 'string')
+              ? (savedOrder as string[])
+              : (catalogoActual ?? merged);
+          const fullOrder = mergeOrder(base, catalogoActual);
+          const shown = fullOrder.filter((k) => merged.includes(k));
+          // Claves visibles que el orden no conoce (sin catálogo): al final, sin perderlas.
+          const extra = merged.filter((k) => !fullOrder.includes(k));
+          orderRef.current = [...fullOrder, ...extra];
+          setOrderState(orderRef.current);
+          setVisibleState([...shown, ...extra]);
         }
         setStatus('ready');
       } catch {
@@ -142,35 +228,62 @@ export function useUiPreferences(
     };
   }, [scope]);
 
-  const setVisible = useCallback(
-    (next: string[]) => {
-      // Defensa adicional (el selector ya lo impide en la UI): nunca cero columnas visibles.
-      if (next.length === 0) return;
-      const previous = visibleRef.current;
-      setVisibleState(next);
+  const persist = useCallback(
+    (
+      nextVisible: string[],
+      nextOrder: string[],
+      opts: { resetting?: boolean; widths?: Record<string, number> } = {},
+    ) => {
+      const previousVisible = visibleRef.current;
+      const previousOrder = orderRef.current;
+      const previousWidths = widthsRef.current;
+      const nextWidths = opts.resetting ? {} : (opts.widths ?? previousWidths);
+      setVisibleState(nextVisible);
+      setOrderState(nextOrder);
+      setWidthsState(nextWidths);
+      visibleRef.current = nextVisible;
+      orderRef.current = nextOrder;
+      widthsRef.current = nextWidths;
       setSaving(true);
-      // Mismo motivo que la carga: try/catch dentro de una función async atrapa también un
-      // `throw` síncrono del cliente, no solo un rechazo de la promesa.
+      // try/catch dentro de una función async: atrapa también un `throw` síncrono del cliente.
       (async () => {
         try {
           // `known` deja constancia del catálogo vigente al guardar: es lo que permite que una
           // columna añadida MÁS TARDE se distinga de una que el usuario ocultó a propósito.
           const catalogoActual = catalogRef.current;
           const reshowActual = reshowRef.current;
-          // `reshown` registra que la re-muestra única ya se aplicó: desde aquí, si el usuario oculta
-          // la columna, la próxima carga lo respeta.
+          // `reshown` registra que la re-muestra única ya se aplicó.
           const reshown = reshowActual?.length
             ? [...new Set([...reshownSavedRef.current, ...reshowActual])]
             : null;
+          const baseOrder = catalogoActual ?? defaultsRef.current;
+          // El orden solo se persiste si el usuario lo movió; así, sin reordenar, el valor guardado
+          // sigue siendo el de siempre y cualquier columna nueva cae en su lugar del catálogo.
+          const guardarOrden = !sameList(nextOrder, baseOrder);
+          // "Por defecto" también descarta `widths`: la vista vuelve a empezar de cero.
+          const extras = opts.resetting ? {} : extrasRef.current;
           await uiPreferencesClient.put(scope, {
-            visible: next,
+            ...extras,
+            ...(Object.keys(nextWidths).length > 0 ? { widths: nextWidths } : {}),
+            visible: nextVisible,
+            ...(guardarOrden ? { order: nextOrder } : {}),
             ...(catalogoActual ? { known: [...catalogoActual] } : {}),
             ...(reshown ? { reshown } : {}),
           });
+          if (opts.resetting) extrasRef.current = {};
         } catch {
-          // Fallo al guardar: revierte a la selección previa sin interrumpir al usuario (puede
-          // volver a intentarlo cambiando de nuevo la selección).
-          setVisibleState(previous);
+          // Fallo al guardar: se conserva lo que se veía (nunca tabla en blanco) y se avisa.
+          setVisibleState(previousVisible);
+          setOrderState(previousOrder);
+          visibleRef.current = previousVisible;
+          orderRef.current = previousOrder;
+          setWidthsState(previousWidths);
+          widthsRef.current = previousWidths;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent(UI_PREFERENCES_SAVE_ERROR_EVENT, { detail: SAVE_ERROR_MESSAGE }),
+            );
+          }
         } finally {
           setSaving(false);
         }
@@ -179,5 +292,59 @@ export function useUiPreferences(
     [scope],
   );
 
-  return { visible, status, saving, setVisible };
+  const setVisible = useCallback(
+    (next: string[]) => {
+      // Defensa adicional (el selector ya lo impide en la UI): nunca cero columnas visibles.
+      if (next.length === 0) return;
+      const faltan = next.filter((k) => !orderRef.current.includes(k));
+      const fullOrder = [...orderRef.current, ...faltan];
+      // Las visibles siguen el orden del usuario aunque el caller las entregue en orden de catálogo:
+      // marcar o desmarcar una columna no debe deshacer el orden que la persona eligió.
+      persist(fullOrder.filter((k) => next.includes(k)), fullOrder);
+    },
+    [persist],
+  );
+
+  const setOrder = useCallback(
+    (requested: string[]) => {
+      // Claves del orden actual que el caller no mencionó (p. ej. no seleccionables) no se pierden.
+      const next = [...requested, ...orderRef.current.filter((k) => !requested.includes(k))];
+      const nextVisible = next.filter((k) => visibleRef.current.includes(k));
+      if (nextVisible.length === 0) return;
+      persist(nextVisible, next);
+    },
+    [persist],
+  );
+
+  const reset = useCallback(() => {
+    const defaults = [...defaultsRef.current];
+    const baseOrder = [...(catalogRef.current ?? defaults)];
+    persist(
+      baseOrder.filter((k) => defaults.includes(k)),
+      baseOrder,
+      { resetting: true },
+    );
+  }, [persist]);
+
+  const setWidth = useCallback(
+    (key: string, px: number) => {
+      if (!Number.isFinite(px) || px <= 0) return;
+      persist(visibleRef.current, orderRef.current, {
+        widths: { ...widthsRef.current, [key]: Math.round(px) },
+      });
+    },
+    [persist],
+  );
+
+  const resetWidth = useCallback(
+    (key: string) => {
+      if (!(key in widthsRef.current)) return;
+      const next = { ...widthsRef.current };
+      delete next[key];
+      persist(visibleRef.current, orderRef.current, { widths: next });
+    },
+    [persist],
+  );
+
+  return { visible, status, saving, setVisible, order, setOrder, reset, widths, setWidth, resetWidth };
 }
