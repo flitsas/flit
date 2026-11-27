@@ -12,6 +12,10 @@ import {
 import type { QueryCondition, QueryField } from '@/lib/api/queries';
 import { COPY } from '@/lib/copy/copy-catalog';
 
+/** Ayuda de la búsqueda múltiple: tooltip (pantallas angostas) y descripción para lector de pantalla. */
+const BUSQUEDA_AYUDA =
+  'Puedes buscar varios radicados, placas o VIN a la vez separándolos con coma. Ejemplo: AAA111, BBB222';
+
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
  * filtros SIEMPRE visible (~185px de alto, casi muda en reposo): ahora vive DENTRO de la fila de
@@ -566,7 +570,8 @@ export function TramitesFiltrosBar({
   onSearchChange,
   // HU #12372 — el ejemplo enseña el formato del radicado (FT1-0000012) sin decir que sea lo
   // único que acepta: el número solo (12) y el prefijo a medias (ft1 12) también encuentran.
-  searchPlaceholder = 'Buscar radicado (FT1-0000012), placa, VIN...',
+  // Búsqueda múltiple: radicado, placa o VIN separados por coma traen los que coincidan con cualquiera.
+  searchPlaceholder = 'Radicado, placa o VIN · varios separados por coma',
   searchAriaLabel = 'Buscar trámites',
   onAplicar,
   onEmpezarDeCero,
@@ -576,6 +581,7 @@ export function TramitesFiltrosBar({
   bulkUploadAction,
   revocationRequestsLink,
 }: TramitesFiltrosBarProps) {
+  const ayudaId = useId();
   return (
     <>
       {/* Búsqueda: ancho fijo w-64, icono marca — spec flit-tramites-chrome. */}
@@ -587,8 +593,13 @@ export function TramitesFiltrosBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}
+          title={BUSQUEDA_AYUDA}
+          aria-describedby={ayudaId}
           className={`${INPUT_CLS} w-full pl-9`}
         />
+        <span id={ayudaId} className="sr-only">
+          {BUSQUEDA_AYUDA}
+        </span>
       </div>
 
       <PeriodoPopover
