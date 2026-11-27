@@ -1,6 +1,7 @@
 using System.Globalization;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -74,8 +75,7 @@ public sealed class IdentityCertificatePdfGenerator : IIdentityCertificateGenera
             });
         }).GeneratePdf();
 
-        var safeRef = Val(data.ReferenceNumber).Replace('/', '-');
-        var filename = $"certificado_identidad_{safeRef}.pdf";
+        var filename = NombreDocumentoTramite.Generar("certificado_identidad", data.ReferenceNumber, data.Placa);
         return new GeneratedDocument("certificado_identidad", filename, "application/pdf", bytes);
     }
 

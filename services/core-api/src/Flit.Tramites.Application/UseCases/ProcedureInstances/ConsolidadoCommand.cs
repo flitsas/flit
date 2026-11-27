@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -403,7 +404,7 @@ public sealed class GenerarConsolidadoHandler(
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
-        var filename = $"consolidado_{SafeRef(instance.ReferenceNumber)}.pdf";
+        var filename = NombreDocumentoTramite.Generar("consolidado", instance);
         var doc = new GeneratedDocument("consolidado", filename, "application/pdf", merged);
 
         // HU #12797 — el anterior NO se borra aquí: se sube el nuevo, se guarda, y solo entonces se
@@ -628,7 +629,4 @@ public sealed class GenerarConsolidadoHandler(
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.FaltanObligatorios ?? [];
     }
-
-    private static string SafeRef(string reference) =>
-        string.Concat(reference.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_'));
 }

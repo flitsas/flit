@@ -29,6 +29,23 @@ public static class NombreDocumentoTramite
         return $"{SanearTipo(tipo)}_{(r.Length == 0 ? ConsolidadoLoteNombres.SinRadicado : r)}_{(p.Length == 0 ? ConsolidadoLoteNombres.SinPlaca : p)}.pdf";
     }
 
+    /// <summary>
+    /// HU #14735 — nombre para un documento que FLIT genera de la instancia: radicado = <c>ReferenceNumber</c>;
+    /// placa = <c>Plate</c> denormalizada o, si falta, el field value <c>plate</c>. No consulta RUNT.
+    /// </summary>
+    public static string Generar(string tipo, Flit.Tramites.Domain.Entities.ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        var placa = instance.Plate;
+        if (string.IsNullOrWhiteSpace(placa))
+        {
+            placa = instance.FieldValues
+                .FirstOrDefault(f => string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        }
+
+        return Generar(tipo, instance.ReferenceNumber, placa);
+    }
+
     private static string SanearTipo(string? tipo)
     {
         if (string.IsNullOrEmpty(tipo))

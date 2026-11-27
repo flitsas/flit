@@ -24,7 +24,7 @@ public sealed class SoatRtmCertificatePdfGeneratorTests
         Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
         doc.Tipo.Should().Be("certificado_soat_rtm");
         doc.Mimetype.Should().Be("application/pdf");
-        doc.Filename.Should().Be("certificado_soat_rtm_TRM-2026-000777.pdf");
+        doc.Filename.Should().Be("certificado_soat_rtm_TRM-2026-000777_ABC123.pdf");
     }
 
     [Fact]

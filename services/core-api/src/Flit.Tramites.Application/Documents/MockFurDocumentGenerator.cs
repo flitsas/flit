@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 
 namespace Flit.Tramites.Application.Documents;
 
@@ -19,7 +20,7 @@ public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
         sb.AppendLine("=== FUR (Formulario Único de Registro) — DOCUMENTO MOCK ===");
         sb.AppendLine("// MOCK FUR — sin librería PDF; swap a generador real (deuda)");
         AppendComun(sb, data);
-        return Build("fur", "fur", data.ReferenceNumber, sb);
+        return Build("fur", "fur", data.ReferenceNumber, data.Placa, sb);
     }
 
     public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor)
@@ -28,7 +29,8 @@ public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
         sb.AppendLine("=== FUR FILL-ALL (calibración) — DOCUMENTO MOCK ===");
         sb.AppendLine("FILL_ALL_MANIFEST");
         sb.AppendLine($"FORMAT={format}");
-        return Build("fur", "fur_FILLALL", "FILLALL", sb);
+        // Plantilla de calibración: conserva su nombre histórico (no es un documento de trámite).
+        return new GeneratedDocument("fur", "fur_FILLALL_FILLALL.txt", "text/plain", Encoding.UTF8.GetBytes(sb.ToString()));
     }
 
     public GeneratedDocument GenerateCompraventa(FurDocumentData data)
@@ -39,7 +41,7 @@ public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
         sb.AppendLine("=== CONTRATO DE COMPRAVENTA — DOCUMENTO MOCK ===");
         sb.AppendLine("// MOCK FUR — sin librería PDF; swap a generador real (deuda)");
         AppendComun(sb, data);
-        return Build("compraventa", "compraventa", data.ReferenceNumber, sb);
+        return Build("compraventa", "compraventa", data.ReferenceNumber, data.Placa, sb);
     }
 
     private static void AppendComun(StringBuilder sb, FurDocumentData data)
@@ -86,10 +88,10 @@ public sealed class MockFurDocumentGenerator : IFurDocumentGenerator
         sb.AppendLine($"Generado (mock): {DateTimeOffset.UtcNow:O}");
     }
 
-    private static GeneratedDocument Build(string tipo, string baseName, string reference, StringBuilder sb)
+    private static GeneratedDocument Build(string tipo, string baseName, string reference, string? placa, StringBuilder sb)
     {
-        var safeRef = reference.Replace('/', '-');
-        var filename = $"{baseName}_{safeRef}.txt";
+        // HU #14735 — mismo patrón {tipo}_{radicado}_{placa} que el generador real; el mock conserva .txt.
+        var filename = Path.ChangeExtension(NombreDocumentoTramite.Generar(baseName, reference, placa), ".txt");
         var bytes = Encoding.UTF8.GetBytes(sb.ToString());
         return new GeneratedDocument(tipo, filename, "text/plain", bytes);
     }
