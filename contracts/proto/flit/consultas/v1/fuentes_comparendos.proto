@@ -73,6 +73,9 @@ enum TipoErrorFuente {
   TIPO_ERROR_FUENTE_AUTENTICACION = 6;
   TIPO_ERROR_FUENTE_ESTADO_NO_OK = 7;
   TIPO_ERROR_FUENTE_EXCEPCION = 8;
+  // El proveedor limitó las peticiones (HTTP 429 o, en Intempo, un 200 con el texto del límite). Transitorio: el consumidor
+  // reintenta con su política (diagnóstico: espera mínima 60 s).
+  TIPO_ERROR_FUENTE_LIMITE_PROVEEDOR = 9;
 }
 
 // Un comparendo como lo trae la fuente, ya normalizado. Fechas AAAA-MM-DD, hora HH:mm, valores en pesos como texto

@@ -11,7 +11,9 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// adjunto <c>diagnostico-{8 primeros del id}-{placa o VIN}.pdf</c>; 409 <c>VEHICULO_NO_TERMINADO</c> si aún no se puede emitir
 /// (<see cref="EmisionPdf"/>). Misma huella → los mismos bytes guardados.</item>
 /// <item><c>GET /diagnosticos/{id}/excel</c> (HU #13849, F07-H4): Excel del lote (<see cref="DescargaExcelLote"/>), como adjunto
-/// <c>diagnostico-{8 primeros del id}.xlsx</c>; 404 antes que 409 <c>LOTE_SIN_LANZAR</c> (lote CREADO). Misma huella → los mismos bytes.</item>
+/// <c>diagnostico-{8 primeros del id}.xlsx</c> (sin placa ni documento); 404 antes que 409 <c>LOTE_SIN_LANZAR</c> (lote CREADO). Misma
+/// huella → los mismos bytes. HU #14752 (SP-8): lleva datos personales en claro (D3), así que sale con <c>no-store</c>,
+/// <c>Pragma: no-cache</c> y <c>nosniff</c>.</item>
 /// </list>
 /// </summary>
 internal static class ReportesEndpoints
@@ -42,8 +44,11 @@ internal static class ReportesEndpoints
     private static async Task<IResult> ExcelAsync(Guid id, DescargaExcelLote descarga, HttpResponse respuesta, CancellationToken ct)
     {
         var archivo = await descarga.ObtenerAsync(id, ct).ConfigureAwait(false);
-        // Igual que el PDF: documentos enmascarados y datos de la compañía, sin caché intermedia.
+        // HU #14752 (SP-8): el Excel v4 lleva en claro los datos de D3 (ADR-0076, enmienda 2026-11-27) y datos de la compañía: sin
+        // caché intermedia ni detección de tipo por el navegador.
         respuesta.Headers.CacheControl = "no-store";
+        respuesta.Headers.Pragma = "no-cache";
+        respuesta.Headers.XContentTypeOptions = "nosniff";
         return Results.File(archivo.Contenido, archivo.ContentType, archivo.Nombre);
     }
 

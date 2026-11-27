@@ -217,6 +217,25 @@ internal static class LectorDetalleRunt
     /// <summary>El detalle de la respuesta cifrada; null si no hay o no se puede leer (la cancelación sí se propaga).</summary>
     public static DetalleRuntReporte? Leer(IProtectorRespuestaFuente protector, byte[]? cifrada)
     {
+        if (LeerRespuesta(protector, cifrada) is not { } respuesta)
+            return null;
+        try
+        {
+            return Desde(respuesta);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Igual que antes de extraer LeerRespuesta: un fallo al proyectar tampoco se registra.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// La respuesta tipada de la celda RUNT (HU #14752: la usa también el Excel del lote, <see cref="DatosRuntExcel"/>); null si no hay o
+    /// no se puede leer (la cancelación sí se propaga). Sin logs, por la misma razón que <see cref="Leer"/>.
+    /// </summary>
+    internal static ConsultarVehiculoIntempoResponse? LeerRespuesta(IProtectorRespuestaFuente protector, byte[]? cifrada)
+    {
         ArgumentNullException.ThrowIfNull(protector);
         if (cifrada is null)
             return null;
@@ -224,7 +243,7 @@ internal static class LectorDetalleRunt
         {
             if (!RespuestaFuenteCelda.TryLeerVehiculo(protector, cifrada, out var json) || json is not { } respuesta)
                 return null;
-            return Desde(Lector.Parse<ConsultarVehiculoIntempoResponse>(respuesta.GetRawText()));
+            return Lector.Parse<ConsultarVehiculoIntempoResponse>(respuesta.GetRawText());
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -177,6 +177,10 @@ internal static class ConsultasSimuladas
             case TipoErrorFuente.Autenticacion:
                 respuesta.TipoError = TipoErrorIntempo.Autenticacion;
                 break;
+            case TipoErrorFuente.LimiteProveedor:
+                respuesta.TipoError = TipoErrorIntempo.LimiteProveedor;
+                respuesta.HttpStatus = 200;
+                break;
             default:
                 respuesta.TipoError = TipoErrorIntempo.RespuestaInvalida;
                 break;
