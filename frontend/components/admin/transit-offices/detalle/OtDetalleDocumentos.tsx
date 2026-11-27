@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/admin-ot";
 import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
 import {
+  NOMBRE_GENERICO_CONSOLIDADO,
   esEntregaRadicadaFija,
   mensajeEntregaOtFallida,
   resolverFuenteMaestroOt,
@@ -339,7 +340,7 @@ export function OtDetalleDocumentos({
         listado ?? {
           id: fuente.attachmentId,
           tipo: "consolidado_maestro",
-          filename: "consolidado-maestro-radicado.pdf",
+          filename: NOMBRE_GENERICO_CONSOLIDADO,
           mimetype: "application/pdf",
           sizeBytes: 0,
           sha256: "",

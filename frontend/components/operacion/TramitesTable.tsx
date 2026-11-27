@@ -1191,7 +1191,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const abrirConsolidado = consolidadoPreview.openConsolidado;
   useEffect(() => {
     if (!consolidadoTramite?.consolidadoAttachmentId) return;
-    void abrirConsolidado(`expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`);
+    void abrirConsolidado();
   }, [consolidadoTramite, abrirConsolidado]);
 
   // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.

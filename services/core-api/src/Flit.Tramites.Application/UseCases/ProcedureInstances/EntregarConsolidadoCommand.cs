@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -131,6 +132,20 @@ public sealed class EntregarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
+        var (result, error) = await EntregarAsync(instance, request, ct).ConfigureAwait(false);
+
+        // HU #14736 — el nombre que ve el cliente se calcula al entregar con la placa ACTUAL (solo si lo generó
+        // FLIT); no cambia el binario ni la base. Cubre todas las salidas (vigente, regenerado, radicado fijo…).
+        return result is null
+            ? (null, error)
+            : (result with { Document = NombreDocumentoEntrega.ParaDocumento(result.Document, instance) }, error);
+    }
+
+    private async Task<(GenerarConsolidadoResult? Result, string? Error)> EntregarAsync(
+        ProcedureInstance instance,
+        EntregarConsolidadoRequest request,
+        CancellationToken ct)
+    {
         var esMaestro = request.Tipo == ConsolidadoEntregaTipo.Maestro;
         var tipoAdjunto = esMaestro ? "consolidado_maestro" : "consolidado";
         var existente = ConsolidadoEntregaModos.Existente(instance, tipoAdjunto);

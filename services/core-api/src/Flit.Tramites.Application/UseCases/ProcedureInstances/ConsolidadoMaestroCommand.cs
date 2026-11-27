@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 
@@ -194,7 +195,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // bandera ni el FUR. Mismo read que decidiría generar (cubre la carrera con otra generación).
         if (soloSiNoExiste && vigente is not null)
         {
-            var existenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
+            var existenteDto = Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaDocumento(vigente, instance);
             return (new GenerarConsolidadoResult(existenteDto, Regenerado: false), null);
         }
 
@@ -207,7 +208,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         var furDesactualizado = FurVigenciaExpediente.FurDesactualizado(instance);
         if (!force && instance.ConsolidadoMaestroVigente && vigente is not null && !furDesactualizado)
         {
-            var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
+            var vigenteDto = Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaDocumento(vigente, instance);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
 
@@ -298,7 +299,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
-        var filename = $"consolidado_maestro_{SafeRef(instance.ReferenceNumber)}.pdf";
+        var filename = NombreDocumentoTramite.Generar("consolidado_maestro", instance);
         const string tipoMaestro = "consolidado_maestro";
         var doc = new GeneratedDocument(tipoMaestro, filename, "application/pdf", merged);
 
@@ -383,7 +384,4 @@ public sealed class GenerarConsolidadoMaestroHandler(
             return [];
         }
     }
-
-    private static string SafeRef(string reference) =>
-        string.Concat(reference.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_'));
 }

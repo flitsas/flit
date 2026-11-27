@@ -26,7 +26,16 @@ public sealed class IdentityCertificatePdfGeneratorTests
         Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
         doc.Mimetype.Should().Be("application/pdf");
         doc.Tipo.Should().Be("certificado_identidad");
-        doc.Filename.Should().EndWith(".pdf").And.Contain("TRM-2026-000123");
+        doc.Filename.Should().Be("certificado_identidad_TRM-2026-000123_SIN-PLACA.pdf");
+    }
+
+    [Fact]
+    public void Generate_ConPlaca_NombreEstandarConPlaca()
+    {
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf
+        var doc = new IdentityCertificatePdfGenerator().GenerateIdentityCertificate(FullData() with { Placa = "xyz987" });
+
+        doc.Filename.Should().Be("certificado_identidad_TRM-2026-000123_XYZ987.pdf");
     }
 
     [Fact]

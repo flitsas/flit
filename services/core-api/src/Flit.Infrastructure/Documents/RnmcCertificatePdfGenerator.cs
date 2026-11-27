@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -87,8 +88,7 @@ public sealed class RnmcCertificatePdfGenerator : IRnmcCertificateGenerator
             });
         }).GeneratePdf();
 
-        var safeRef = Val(data.ReferenceNumber).Replace('/', '-');
-        var filename = $"certificado_rnmc_{safeRef}.pdf";
+        var filename = NombreDocumentoTramite.Generar("certificado_rnmc", data.ReferenceNumber, data.Placa);
         return new GeneratedDocument("certificado_rnmc", filename, "application/pdf", bytes);
     }
 

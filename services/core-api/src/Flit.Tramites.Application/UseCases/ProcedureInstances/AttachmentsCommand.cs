@@ -729,7 +729,9 @@ public sealed class ListAttachmentsHandler(
 
         var dtos = instance.Attachments
             .OrderBy(a => a.UploadedAt)
-            .Select(a => UploadAttachmentHandler.ToDto(a, signedIds.Contains(a.Id)))
+            // HU #14736 — documentos generados por FLIT: nombre calculado con la placa actual (no se toca la base).
+            .Select(a => UploadAttachmentHandler.ToDto(a, signedIds.Contains(a.Id))
+                with { Filename = Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaAdjunto(a, instance) })
             .ToList();
         return (new AttachmentsResponse(dtos), null);
     }
@@ -766,7 +768,10 @@ public sealed class DownloadAttachmentHandler(
         if (stream is null)
             return (null, "file_missing");
 
-        var filename = string.IsNullOrWhiteSpace(attachment.Filename) ? attachment.Tipo : attachment.Filename;
+        // HU #14736 — generado por FLIT: {tipo}_{radicado}_{placa}.pdf con la placa actual; el resto, su nombre.
+        var filename = Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaAdjunto(attachment, instance);
+        if (string.IsNullOrWhiteSpace(filename))
+            filename = attachment.Tipo;
         var mime = string.IsNullOrWhiteSpace(attachment.Mimetype) ? "application/octet-stream" : attachment.Mimetype;
         return (new AttachmentDownload(stream, mime, filename), null);
     }
