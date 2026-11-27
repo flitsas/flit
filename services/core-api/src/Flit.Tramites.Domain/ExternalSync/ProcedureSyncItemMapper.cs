@@ -46,7 +46,9 @@ public static class ProcedureSyncItemMapper
             eliminado || row.InvoiceAttachmentId is null || row.InvoiceUploadedAt is null
                 ? null
                 : new ProcedureSyncFactura(row.InvoiceAttachmentId.Value, Texto(row.InvoiceFilename), ColombiaTime.From(row.InvoiceUploadedAt.Value)),
-            new ProcedureSyncCompania(row.TenantId, Texto(row.TenantTaxId), Texto(row.TenantLegalName)));
+            new ProcedureSyncCompania(row.TenantId, Texto(row.TenantTaxId), Texto(row.TenantLegalName)),
+            Texto(row.ManagerName),
+            Texto(row.ManagerEmail));
     }
 
     private static ProcedureSyncVehiculo Vehiculo(ProcedureSyncRow row, IReadOnlyDictionary<string, string> serviceTypeNames)

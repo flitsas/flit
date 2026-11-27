@@ -4,6 +4,8 @@ namespace Flit.Tramites.Domain.ExternalSync;
 /// HU #13079 (Feature #13066, Épica #12737) — ítem del feed de sincronización, con los nombres y la
 /// forma del contrato v3.1 §4. Todas las claves van siempre presentes: el dato ausente es <c>null</c>,
 /// nunca una clave omitida ni una cadena vacía; <see cref="Compradores"/> nunca es <c>null</c>.
+/// <see cref="NombreGestor"/> y <see cref="CorreoGestor"/> (v3.4): la persona que gestiona el trámite hoy
+/// (reasignada si la hubo, si no quien lo radicó); <c>null</c> si no se puede resolver. Son datos personales.
 /// Sin enmascarar: el enmascarado de datos personales lo aplica el endpoint (HU #13081).
 /// </summary>
 public sealed record ProcedureSyncItem(
@@ -22,7 +24,9 @@ public sealed record ProcedureSyncItem(
     ProcedureSyncOrganismo? Organismo,
     IReadOnlyList<ProcedureSyncComprador> Compradores,
     ProcedureSyncFactura? Factura,
-    ProcedureSyncCompania CompaniaGestora);
+    ProcedureSyncCompania CompaniaGestora,
+    string? NombreGestor = null,
+    string? CorreoGestor = null);
 
 public sealed record ProcedureSyncTramite(string Codigo, string Nombre, string? Familia);
 
@@ -111,7 +115,9 @@ public sealed record ProcedureSyncRow(
     DateTimeOffset? InvoiceUploadedAt,
     Guid TenantId,
     string? TenantTaxId,
-    string? TenantLegalName);
+    string? TenantLegalName,
+    string? ManagerName = null,
+    string? ManagerEmail = null);
 
 public sealed record ProcedureSyncActorRow(
     int Ordinal,
