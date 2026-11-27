@@ -52,7 +52,7 @@ public static class QueryNormalizer
 
         // «Contiene» es un solo texto por definición; si llegan varios se queda con el primero en
         // vez de rechazar la consulta entera.
-        if (condition.Operator == QueryOperator.Contiene && values.Count > 1)
+        if (condition.Operator == QueryOperator.Contiene && values.Count > 1 && !catalog.ContieneAdmiteVarios)
         {
             values = [values[0]];
         }

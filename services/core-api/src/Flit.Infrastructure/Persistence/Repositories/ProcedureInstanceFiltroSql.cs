@@ -99,9 +99,9 @@ internal static class ProcedureInstanceFiltroSql
                         && !textos.Contains(x.ReferenceNumber.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")));
                 }
             case QueryOperator.Contiene:
-                return query.Where(x => x.ReferenceNumber
+                return ContieneAlguno(query, valores, v => x => x.ReferenceNumber
                     .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                    .Contains(valores[0]));
+                    .Contains(v));
             case QueryOperator.EstaVacio:
                 return query.Where(x => x.ReferenceNumber == "");
             case QueryOperator.NoEstaVacio:
@@ -247,6 +247,31 @@ internal static class ProcedureInstanceFiltroSql
             node == origen ? destino : base.VisitParameter(node);
     }
 
+    /// <summary>
+    /// «Contiene» con varios valores (placa, VIN, radicado): <c>OR</c> de un «contiene» por valor, en un
+    /// único <c>Where</c>. Con un solo valor el predicado es el de siempre. Los valores llegan ya
+    /// normalizados, sin vacíos ni repetidos; se leen a lo sumo <see cref="MaxTramosBusqueda"/>.
+    /// </summary>
+    internal static IQueryable<T> ContieneAlguno<T>(
+        IQueryable<T> query, List<string> valores,
+        Func<string, Expression<Func<T, bool>>> predicadoPorValor)
+    {
+        if (valores.Count == 0)
+            return query;
+
+        var x = Expression.Parameter(typeof(T), "x");
+        Expression? cuerpo = null;
+        foreach (var valor in valores.Take(MaxTramosBusqueda))
+        {
+            // Variable local por iteración: cada closure es un parámetro distinto en el SQL.
+            var buscado = valor;
+            var predicado = predicadoPorValor(buscado);
+            var enX = new ReemplazaParametro(predicado.Parameters[0], x).Visit(predicado.Body)!;
+            cuerpo = cuerpo is null ? enX : Expression.OrElse(cuerpo, enX);
+        }
+        return query.Where(Expression.Lambda<Func<T, bool>>(cuerpo!, x));
+    }
+
     public static IQueryable<ProcedureInstance> PorPlaca(
         IQueryable<ProcedureInstance> query, string op, List<string> valores) => op switch
         {
@@ -254,9 +279,9 @@ internal static class ProcedureInstanceFiltroSql
                 x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
             QueryOperator.NoEsNinguno => query.Where(x => x.Plate == null || !valores.Contains(
                 x.Plate.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-            QueryOperator.Contiene => query.Where(x => x.Plate != null && x.Plate
+            QueryOperator.Contiene => ContieneAlguno(query, valores, v => x => x.Plate != null && x.Plate
                 .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                .Contains(valores[0])),
+                .Contains(v)),
             QueryOperator.EstaVacio => query.Where(x => x.Plate == null || x.Plate == ""),
             QueryOperator.NoEstaVacio => query.Where(x => x.Plate != null && x.Plate != ""),
             _ => query,
@@ -269,9 +294,9 @@ internal static class ProcedureInstanceFiltroSql
                 x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
             QueryOperator.NoEsNinguno => query.Where(x => x.Vin == null || !valores.Contains(
                 x.Vin.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))),
-            QueryOperator.Contiene => query.Where(x => x.Vin != null && x.Vin
+            QueryOperator.Contiene => ContieneAlguno(query, valores, v => x => x.Vin != null && x.Vin
                 .ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")
-                .Contains(valores[0])),
+                .Contains(v)),
             QueryOperator.EstaVacio => query.Where(x => x.Vin == null || x.Vin == ""),
             QueryOperator.NoEstaVacio => query.Where(x => x.Vin != null && x.Vin != ""),
             _ => query,
@@ -312,14 +337,14 @@ internal static class ProcedureInstanceFiltroSql
                         && valores.Contains(a.DocumentNumber.ToUpper()))),
 
             QueryOperator.Contiene => esComprador
-                ? query.Where(x =>
-                    (x.CompradorNombre != null && x.CompradorNombre.ToUpper().Contains(valores[0]))
+                ? ContieneAlguno(query, valores, v => x =>
+                    (x.CompradorNombre != null && x.CompradorNombre.ToUpper().Contains(v))
                     || x.Actors.Any(a => a.ActorType == ActorTipoComprador
-                        && a.DocumentNumber.ToUpper().Contains(valores[0])))
-                : query.Where(x =>
-                    (x.VendedorNombre != null && x.VendedorNombre.ToUpper().Contains(valores[0]))
+                        && a.DocumentNumber.ToUpper().Contains(v)))
+                : ContieneAlguno(query, valores, v => x =>
+                    (x.VendedorNombre != null && x.VendedorNombre.ToUpper().Contains(v))
                     || x.Actors.Any(a => a.ActorType == ActorTipoVendedor
-                        && a.DocumentNumber.ToUpper().Contains(valores[0]))),
+                        && a.DocumentNumber.ToUpper().Contains(v))),
 
             QueryOperator.EstaVacio => esComprador
                 ? query.Where(x => x.CompradorNombre == null || x.CompradorNombre == "")

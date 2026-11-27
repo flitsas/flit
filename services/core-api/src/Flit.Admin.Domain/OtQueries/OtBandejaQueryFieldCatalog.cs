@@ -112,16 +112,16 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
         // Excel trae «ABC-123» tan a menudo como «ABC123»— y `contiene` cubre la búsqueda parcial:
         // por eso «exacta o parcial» no obliga a elegir, lo decide el operador.
         new(Placa, "Placa", QueryFieldKind.Texto, GrupoVehiculo, TextoOperators, [],
-            "Se puede pegar una lista completa desde Excel.", AdmiteLista: true),
+            "Puede poner varias, separadas por coma, o pegar una lista de Excel.", AdmiteLista: true),
         new(Vin, "VIN", QueryFieldKind.Texto, GrupoVehiculo, TextoOperators, [],
-            "Se puede pegar una lista completa desde Excel.", AdmiteLista: true),
+            "Puede poner varias, separadas por coma, o pegar una lista de Excel.", AdmiteLista: true),
         new(Radicado, "Radicado", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
-            "Radicado del trámite (FT1-0000012). Vale también el número solo. Se puede pegar una lista.", AdmiteLista: true),
+            "Radicado del trámite (FT1-0000012). Vale también el número solo. Puede poner varios, separados por coma.", AdmiteLista: true),
 
         new(Comprador, "Comprador", QueryFieldKind.Texto, GrupoPersonas, TextoOperators, [],
-            "Busca por nombre y también por número de documento.", AdmiteLista: true),
+            "Busca por nombre y también por documento. Varios, separados por coma.", AdmiteLista: true),
         new(Vendedor, "Propietario / vendedor", QueryFieldKind.Texto, GrupoPersonas, TextoOperators,
-            [], "Solo los traspasos tienen vendedor; en matrícula inicial no hay.", AdmiteLista: true),
+            [], "Varios, separados por coma. Solo los traspasos tienen vendedor.", AdmiteLista: true),
 
         // Opciones resueltas por el repositorio: las empresas que de verdad le entregan a este
         // organismo y los tipos que de verdad ha recibido. Ofrecer una empresa con la que nunca ha
@@ -135,7 +135,7 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
             "El estado con el que el trámite llega al organismo, no el que tiene en su empresa.",
             AdmiteLista: true),
         new(Gestor, "Gestor", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
-            "Quién radicó el trámite en la empresa cliente.", AdmiteLista: false),
+            "Quién radicó el trámite en la empresa cliente. Varios, separados por coma.", AdmiteLista: true),
 
         new(Prioritario, "Prioritario", QueryFieldKind.Booleano, GrupoCaracteristicas,
             BooleanoOperators, SiNoOptions,
@@ -164,6 +164,9 @@ public sealed class OtBandejaQueryFieldCatalog : IQueryFieldCatalog
     string IQueryFieldCatalog.Universo => "el organismo";
 
     bool IQueryFieldCatalog.IsIdentifier(string fieldId) => IsIdentifier(fieldId);
+
+    /// <inheritdoc />
+    bool IQueryFieldCatalog.ContieneAdmiteVarios => true;
 
     // ── Superficie estática ───────────────────────────────────────────────────────────────────
 
