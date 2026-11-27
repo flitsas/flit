@@ -122,6 +122,7 @@ import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePagin
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { COLUMN_RESIZE_MIN_PX, ColumnResizeHandle, useColumnWidths, type ColumnWidthsState } from '@/components/atom/ColumnResizeHandle';
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
@@ -440,6 +441,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     order: columnOrder,
     setOrder: setColumnOrder,
     reset: resetColumns,
+    widths: savedWidths,
+    setWidth: setSavedWidth,
+    resetWidth: resetSavedWidth,
   } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
     catalog: TRAMITES_COLUMN_KEYS,
     addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
@@ -490,9 +494,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     );
   }, [visibleColumns]);
 
+  // HU #14741 — anchos que el usuario fijó arrastrando el borde de la cabecera (solo de columnas que existen).
+  const columnWidths = useColumnWidths(savedWidths, TRAMITES_COLUMN_KEYS, setSavedWidth, resetSavedWidth);
   const gridLayout = useMemo(
-    () => buildTramitesGridLayout(effectiveColumns, { includeSelectColumn }),
-    [effectiveColumns, includeSelectColumn],
+    () => buildTramitesGridLayout(effectiveColumns, { includeSelectColumn, widths: columnWidths.widths }),
+    [effectiveColumns, includeSelectColumn, columnWidths.widths],
   );
 
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
@@ -1739,6 +1745,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           onPageSizeChange={handlePageSizeChange}
           visibleColumns={effectiveColumns}
           gridLayout={gridLayout}
+          columnWidths={columnWidths}
           page={safePage}
           totalPages={totalPages}
           onPageChange={setPage}
@@ -2337,6 +2344,7 @@ function TableBody({
   onPageSizeChange,
   visibleColumns,
   gridLayout,
+  columnWidths,
   page,
   totalPages,
   onPageChange,
@@ -2378,6 +2386,8 @@ function TableBody({
   /** `gridTemplateColumns` + ancho mínimo, calculados UNA vez a partir de `visibleColumns` — la
    *  cabecera y cada fila lo reciben ya resuelto, así quedan alineados por construcción. */
   gridLayout: TramitesGridLayout;
+  /** HU #14741 — anchos por columna ajustables arrastrando el borde de la cabecera. */
+  columnWidths: ColumnWidthsState;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -2505,6 +2515,7 @@ function TableBody({
   // con el MISMO `visibleColumns` — así quedan alineados con `visibleDefs` por construcción.
   const colWidths = buildTramitesColWidths(visibleColumns, {
     includeSelectColumn: gridLayout.includeSelectColumn,
+    widths: columnWidths.widths,
   });
 
   return (
@@ -2571,6 +2582,14 @@ function TableBody({
                     sortBy={sortBy}
                     sortDir={sortDir}
                     onSortChange={onSortChange}
+                  />
+                  <ColumnResizeHandle
+                    label={col.label}
+                    width={columnWidths.widths[col.key] ?? col.minPx}
+                    min={Math.max(col.minPx, COLUMN_RESIZE_MIN_PX)}
+                    onPreview={(px) => columnWidths.preview(col.key, px)}
+                    onCommit={(px) => columnWidths.commit(col.key, px)}
+                    onReset={() => columnWidths.reset(col.key)}
                   />
                 </th>
               ))}

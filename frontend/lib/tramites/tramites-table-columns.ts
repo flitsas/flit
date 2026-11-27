@@ -245,6 +245,21 @@ export interface BuildTramitesGridLayoutOptions {
    * menos un borrador ICT en el listado; si no, deja un hueco vacío al inicio de cada fila.
    */
   includeSelectColumn?: boolean;
+  /**
+   * HU #14741 — anchos (px) que el usuario fijó arrastrando el borde de la cabecera. Una columna con
+   * ancho propio pasa a ser de ancho exacto (sale del reparto flexible); el resto se reparte lo que
+   * queda, así la tabla sigue cubriendo el ancho del contenedor. Claves que ya no existen se ignoran.
+   */
+  widths?: Readonly<Record<string, number>>;
+}
+
+/** Ancho propio válido de una columna (nunca por debajo del piso `minPx`), o `undefined`. */
+export function anchoPropio(
+  c: TramitesColumnDef,
+  widths: Readonly<Record<string, number>> | undefined,
+): number | undefined {
+  const w = widths?.[c.key];
+  return typeof w === 'number' && Number.isFinite(w) && w > 0 ? Math.max(w, c.minPx) : undefined;
 }
 
 /**
@@ -275,8 +290,11 @@ export function buildTramitesGridLayout(
 ): TramitesGridLayout {
   const includeSelectColumn = options.includeSelectColumn === true;
   const columns = resolveColumns(visibleKeys);
-  const track = (c: TramitesColumnDef): string =>
-    c.fixed ? `${c.minPx}px` : `${(c.minPx / PX_POR_FR).toFixed(2)}fr`;
+  const track = (c: TramitesColumnDef): string => {
+    const propio = anchoPropio(c, options.widths);
+    if (propio !== undefined) return `${propio}px`;
+    return c.fixed ? `${c.minPx}px` : `${(c.minPx / PX_POR_FR).toFixed(2)}fr`;
+  };
   return {
     includeSelectColumn,
     gridTemplateColumns: [
@@ -288,7 +306,7 @@ export function buildTramitesGridLayout(
     // caen exactamente en su mínimo a la vez. Por debajo, scroll horizontal.
     minWidthPx:
       (includeSelectColumn ? SELECT_COL_MIN_PX : 0) +
-      columns.reduce((sum, c) => sum + c.minPx, 0) +
+      columns.reduce((sum, c) => sum + (anchoPropio(c, options.widths) ?? c.minPx), 0) +
       ACTIONS_COL_PX,
   };
 }
@@ -318,10 +336,19 @@ export function buildTramitesColWidths(
 
   // Si el usuario dejó visibles SOLO columnas fijas, no hay ninguna que absorba el sobrante: se
   // tratan todas como flexibles antes que devolver un reparto que no cubre el ancho de la tabla.
-  const hayFlexibles = columns.some((c) => !c.fixed);
-  const esFija = (c: TramitesColumnDef): boolean => c.fixed === true && hayFlexibles;
+  const propios = new Map<string, number>();
+  for (const c of columns) {
+    const w = anchoPropio(c, options.widths);
+    if (w !== undefined) propios.set(c.key, w);
+  }
+  // Una columna con ancho propio es SIEMPRE de ancho exacto. Las `fixed` sin ancho propio solo lo
+  // son si queda alguna flexible que absorba el sobrante; si no, pasan a flexibles (como antes).
+  const hayFlexibles = columns.some((c) => !c.fixed && !propios.has(c.key));
+  const esFija = (c: TramitesColumnDef): boolean =>
+    propios.has(c.key) || (c.fixed === true && hayFlexibles);
+  const anchoFijo = (c: TramitesColumnDef): number => propios.get(c.key) ?? c.minPx;
 
-  const pxFijos = columns.reduce((sum, c) => sum + (esFija(c) ? c.minPx : 0), 0) + ACTIONS_COL_PX;
+  const pxFijos = columns.reduce((sum, c) => sum + (esFija(c) ? anchoFijo(c) : 0), 0) + ACTIONS_COL_PX;
   const remFijos = includeSelectColumn ? SELECT_COL_REM : 0;
   const pesoFlexible = columns.reduce((sum, c) => sum + (esFija(c) ? 0 : c.minPx), 0);
 
@@ -335,7 +362,7 @@ export function buildTramitesColWidths(
 
   return [
     ...(includeSelectColumn ? [SELECT_COL_WIDTH] : []),
-    ...columns.map((c) => (esFija(c) ? `${c.minPx}px` : anchoFlexible(c.minPx))),
+    ...columns.map((c) => (esFija(c) ? `${anchoFijo(c)}px` : anchoFlexible(c.minPx))),
     `${ACTIONS_COL_PX}px`,
   ];
 }

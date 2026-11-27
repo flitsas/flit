@@ -45,6 +45,7 @@ import {
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { SearchableSelect } from '@/components/atom/SearchableSelect';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
+import { ColumnResizeHandle, useColumnWidths, type ColumnWidthsState } from '@/components/atom/ColumnResizeHandle';
 import { useNetworkScope } from '@/hooks/useNetworkScope';
 import { NetworkScopeSelector } from '@/components/operacion/NetworkScopeSelector';
 import { NetworkScopeBadge } from '@/components/operacion/NetworkScopeBadge';
@@ -227,6 +228,12 @@ type IdentidadColumnKey = (typeof IDENTIDAD_COLUMNS)[number]['key'] | 'compania'
 const IDENTIDAD_COLUMN_KEYS = IDENTIDAD_COLUMNS.map((c) => c.key);
 const COMPANIA_COLUMN = { key: 'compania', label: 'Compañía', width: 'minmax(0,1.4fr)' } as const;
 const ACCIONES_WIDTH = 'minmax(0,0.9fr)';
+/** HU #14741 — claves cuyo ancho puede guardarse: las del catálogo y la columna de compañía. */
+const IDENTIDAD_WIDTH_KEYS: readonly string[] = [...IDENTIDAD_COLUMN_KEYS, 'compania'];
+/** HU #14741 — piso (px) al ajustar el ancho de una columna con el tirador. */
+const IDENTIDAD_COL_MIN_PX = 80;
+/** HU #14741 — ancho de referencia (px) de una columna sin ajustar, solo para `aria-valuenow`. */
+const IDENTIDAD_COL_DEFAULT_PX = 140;
 
 /** HU #10944 (D10) — tope y cooldown de reenvíos, seguidos client-side (el contrato no los expone). */
 const MAX_REENVIOS = 3;
@@ -576,7 +583,12 @@ function ValidacionesLista({
     order: columnOrder,
     setOrder: setColumnOrder,
     reset: resetColumns,
+    widths: savedWidths,
+    setWidth: setSavedWidth,
+    resetWidth: resetSavedWidth,
   } = useUiPreferences('identidad.columns', IDENTIDAD_COLUMN_KEYS, { catalog: IDENTIDAD_COLUMN_KEYS });
+  // HU #14741 — anchos que el usuario fijó arrastrando el borde de la cabecera (compañía incluida).
+  const columnWidths = useColumnWidths(savedWidths, IDENTIDAD_WIDTH_KEYS, setSavedWidth, resetSavedWidth);
   const tableColumns = useMemo<IdentidadColumnKey[]>(() => {
     const elegidas = visibleColumns.filter((k): k is IdentidadColumnKey =>
       (IDENTIDAD_COLUMN_KEYS as readonly string[]).includes(k),
@@ -1325,6 +1337,7 @@ function ValidacionesLista({
           <PersonasTable
             rows={persons}
             columns={tableColumns}
+            columnWidths={columnWidths}
             esSoloConsulta={esSoloConsulta}
             companyLabel={companyLabel}
             now={nowTick}
@@ -2137,7 +2150,10 @@ function FranjaIdentidad({
  * Bug #13055 — antes eran `fr` de una grilla de div; con `table-fixed` se conservan las proporciones y
  * el contenido puede truncarse dentro de cada celda.
  */
-function anchosColumnas(columns: readonly IdentidadColumnKey[]): string[] {
+function anchosColumnas(
+  columns: readonly IdentidadColumnKey[],
+  widths: Readonly<Record<string, number>> = {},
+): string[] {
   const fr = (w: string) => Number(/([\d.]+)fr/.exec(w)?.[1] ?? 1);
   const pesos = [
     ...columns.map((key) =>
@@ -2145,8 +2161,17 @@ function anchosColumnas(columns: readonly IdentidadColumnKey[]): string[] {
     ),
     fr(ACCIONES_WIDTH),
   ];
-  const total = pesos.reduce((a, b) => a + b, 0);
-  return pesos.map((w) => `${((w / total) * 100).toFixed(2)}%`);
+  // HU #14741 — una columna con ancho propio es de ancho exacto; el resto se reparte lo que queda.
+  const propios = columns.map((key) => widths[key]);
+  const pxFijos = propios.reduce<number>((sum, w) => sum + (w ?? 0), 0);
+  const totalFlex = pesos.reduce((sum, w, i) => sum + (propios[i] ? 0 : w), 0);
+  return pesos.map((w, i) => {
+    if (propios[i]) return `${propios[i]}px`;
+    const percent = (w / totalFlex) * 100;
+    return pxFijos > 0
+      ? `calc(${percent.toFixed(4)}% - ${((percent / 100) * pxFijos).toFixed(2)}px)`
+      : `${percent.toFixed(2)}%`;
+  });
 }
 
 function columnLabel(key: IdentidadColumnKey): string {
@@ -2166,6 +2191,7 @@ type CompanyLabelFn = (
 function PersonasTable({
   rows,
   columns,
+  columnWidths,
   esSoloConsulta,
   companyLabel,
   now,
@@ -2182,6 +2208,8 @@ function PersonasTable({
 }: {
   rows: TenantBiometricPerson[];
   columns: readonly IdentidadColumnKey[];
+  /** HU #14741 — anchos ajustables por columna. */
+  columnWidths: ColumnWidthsState;
   /** HU #12709 — ¿la fila de esta compañía es de solo consulta (hija vista por la cabeza)? */
   esSoloConsulta: (tenantId: string | undefined) => boolean;
   companyLabel: CompanyLabelFn;
@@ -2241,6 +2269,7 @@ function PersonasTable({
     <ValidacionesTable
       rows={mapped}
       columns={columns}
+      columnWidths={columnWidths}
       esSoloConsulta={esSoloConsulta}
       companyLabel={companyLabel}
       now={now}
@@ -2268,6 +2297,7 @@ function PersonasTable({
 function ValidacionesTable({
   rows,
   columns,
+  columnWidths,
   esSoloConsulta,
   companyLabel,
   now,
@@ -2285,6 +2315,7 @@ function ValidacionesTable({
 }: {
   rows: TenantBiometricValidation[];
   columns: readonly IdentidadColumnKey[];
+  columnWidths: ColumnWidthsState;
   esSoloConsulta: (tenantId: string | undefined) => boolean;
   companyLabel: CompanyLabelFn;
   now: number;
@@ -2301,9 +2332,11 @@ function ValidacionesTable({
   canVencer: boolean;
   onVencerClick: (row: TenantBiometricValidation) => void;
 }) {
-  const anchos = anchosColumnas(columns);
+  const anchos = anchosColumnas(columns, columnWidths.widths);
   // Ancho mínimo proporcional a las columnas visibles: con pocas no fuerza scroll horizontal.
-  const minWidth = Math.max(640, 100 * (columns.length + 1));
+  const propiosPx = columns.reduce((sum, key) => sum + (columnWidths.widths[key] ?? 0), 0);
+  const sinAjustar = columns.filter((key) => !columnWidths.widths[key]).length + 1;
+  const minWidth = Math.max(640, propiosPx + 100 * sinAjustar);
   return (
     <div className="overflow-x-auto shrink-0">
       {/* Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica (antes grilla de
@@ -2326,16 +2359,29 @@ function ValidacionesTable({
         </colgroup>
         <thead>
           <tr>
-            {[...columns.map((key) => columnLabel(key)), 'Acciones'].map((label, i, arr) => (
-              <th
-                key={label}
-                scope="col"
-                className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
-                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-              >
-                {label}
-              </th>
-            ))}
+            {[...columns.map((key) => columnLabel(key)), 'Acciones'].map((label, i, arr) => {
+              const key = columns[i];
+              return (
+                <th
+                  key={label}
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  {label}
+                  {key ? (
+                    <ColumnResizeHandle
+                      label={label}
+                      width={columnWidths.widths[key] ?? IDENTIDAD_COL_DEFAULT_PX}
+                      min={IDENTIDAD_COL_MIN_PX}
+                      onPreview={(px) => columnWidths.preview(key, px)}
+                      onCommit={(px) => columnWidths.commit(key, px)}
+                      onReset={() => columnWidths.reset(key)}
+                    />
+                  ) : null}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>

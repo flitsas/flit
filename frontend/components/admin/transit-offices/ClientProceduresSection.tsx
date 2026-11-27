@@ -67,6 +67,7 @@ import {
 } from "@/lib/tramites/consolidado-entrega-ot";
 import { Icono } from "@flit/ui/Icono";
 import { ClientProceduresTable } from "./ClientProceduresTable";
+import { useColumnWidths } from "@/components/atom/ColumnResizeHandle";
 import {
   ClientProcedureDetailModal,
   type OtDetalleSeccionId,
@@ -440,6 +441,8 @@ function LtOcrPanel({
   );
 }
 
+const OT_COLUMN_KEYS: readonly string[] = OT_PROCEDURES_COLUMNS.map((c) => c.key);
+
 export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -497,9 +500,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     order: columnOrder,
     setOrder: setColumnOrder,
     reset: resetColumns,
+    widths: savedWidths,
+    setWidth: setSavedWidth,
+    resetWidth: resetSavedWidth,
   } = useUiPreferences("ot.procedures.columns", DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS, {
     catalog: OT_PROCEDURES_COLUMNS.map((c) => c.key),
   });
+  // HU #14741 — anchos que el usuario fijó arrastrando el borde de la cabecera.
+  const columnWidths = useColumnWidths(savedWidths, OT_COLUMN_KEYS, setSavedWidth, resetSavedWidth);
 
   /** ¿La selección de columnas se apartó del default? Es lo que marca el control en azul. */
   const columnasPersonalizadas = useMemo(() => {
@@ -1837,6 +1845,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           visibleColumns={visibleColumns}
+          columnWidths={columnWidths}
           sortBy={sortBy}
           sortDir={sortDir}
           onSortChange={handleSortChange}
