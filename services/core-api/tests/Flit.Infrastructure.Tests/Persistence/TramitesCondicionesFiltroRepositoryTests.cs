@@ -140,6 +140,46 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
         total.Should().Be(1);
     }
 
+    // -- «Contiene» con varios valores separados por coma (HU #14747) --------------------------
+
+    [Fact]
+    public async Task ContieneVarios_PlacaVinRadicadoCompradorGestor()
+    {
+        await using var db = NewContext(nameof(ContieneVarios_PlacaVinRadicadoCompradorGestor));
+        var (ana, beto) = (Guid.NewGuid(), Guid.NewGuid());
+        db.Users.AddRange(
+            new User { Id = ana, Email = "ana@flit.io", DisplayName = "Ana Gestora" },
+            new User { Id = beto, Email = "beto@flit.io", DisplayName = "Beto Gestor" });
+        var a = Instancia("FT1-0000001", plate: "ABC123", vin: "9BWZZZ111AA000001", comprador: "Carlos Perez");
+        var b = Instancia("FT1-0000002", plate: "XYZ789", vin: "8AAZZZ222BB000002", comprador: "Maria Lopez");
+        var c = Instancia("FT1-0000003", plate: "QQQ000", vin: "7CCZZZ333CC000003", comprador: "Otro Nombre");
+        a.CreatedByUserId = ana; b.CreatedByUserId = beto;
+        db.ProcedureInstances.AddRange(a, b, c);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        // El endpoint valida antes de llegar al repositorio: «contiene» con varios valores debe pasar.
+        TramitesQueryConditions.Validate([Cond(TramitesQueryFieldCatalog.Placa, QueryOperator.Contiene, "ZZT9", "QAB1")]).Should().BeNull();
+        TramitesQueryConditions.Validate([Cond(TramitesQueryFieldCatalog.Gestor, QueryOperator.Contiene, "Ana", "Beto")]).Should().BeNull();
+        QueryNormalizer.Normalize(TramitesQueryFieldCatalog.Instance, Cond(TramitesQueryFieldCatalog.Placa, QueryOperator.Contiene, "ZZT9", "QAB1"))!
+            .Values.Should().Equal("ZZT9", "QAB1");
+
+        async Task<List<string>> Con(string campo, params string[] v) =>
+            (await Filtrar(db, Cond(campo, QueryOperator.Contiene, v))).Referencias;
+
+        (await Con(TramitesQueryFieldCatalog.Placa, "abc", "XYZ-7", "NOEXISTE")).Should().Equal("FT1-0000001", "FT1-0000002");
+        (await Con(TramitesQueryFieldCatalog.Placa, "ABC")).Should().Equal("FT1-0000001");
+        (await Con(TramitesQueryFieldCatalog.Placa, "ABC", "abc", " ")).Should().Equal("FT1-0000001");
+        (await Con(TramitesQueryFieldCatalog.Vin, "BWZZZ", "8AAZ")).Should().Equal("FT1-0000001", "FT1-0000002");
+        (await Con(TramitesQueryFieldCatalog.Radicado, "0000001", "FT1-0000003")).Should().Equal("FT1-0000001", "FT1-0000003");
+        (await Con(TramitesQueryFieldCatalog.Comprador, "carlos", "LOPEZ")).Should().Equal("FT1-0000001", "FT1-0000002");
+        (await Con(TramitesQueryFieldCatalog.Gestor, "Ana", "Beto")).Should().Equal("FT1-0000001", "FT1-0000002");
+
+        (await Filtrar(db, Cond(TramitesQueryFieldCatalog.Comprador, QueryOperator.EsAlguno, "Carlos Perez", "Maria Lopez")))
+            .Referencias.Should().Equal("FT1-0000001", "FT1-0000002");
+        (await Filtrar(db, Cond(TramitesQueryFieldCatalog.Comprador, QueryOperator.NoEsNinguno, "Carlos Perez", "Maria Lopez")))
+            .Referencias.Should().Equal("FT1-0000003");
+    }
+
     [Fact]
     public async Task Contiene_EnPlaca_HaceBusquedaParcial()
     {

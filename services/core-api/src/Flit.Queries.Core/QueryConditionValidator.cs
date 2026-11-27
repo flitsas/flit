@@ -58,7 +58,7 @@ public static class QueryConditionValidator
                 return $"Falta el valor del filtro «{campo.Label}».";
 
             // «Contiene» compara UN texto: con varios, el resultado dependería de cuál se eligiera.
-            if (condicion.Operator == QueryOperator.Contiene && valores.Count > 1)
+            if (condicion.Operator == QueryOperator.Contiene && valores.Count > 1 && !catalogo.ContieneAdmiteVarios)
                 return $"El filtro «{campo.Label}» con «contiene» admite un solo valor.";
 
             // Una lista pegada en un campo que no la admite suele ser un error de quien la pega, y

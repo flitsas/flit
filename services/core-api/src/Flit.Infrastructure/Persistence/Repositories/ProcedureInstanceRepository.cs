@@ -3079,24 +3079,32 @@ internal sealed partial class ProcedureInstanceRepository(
             // Nombre y organismo van en minúsculas y placa/VIN en mayúsculas porque así se comparan
             // ya en el resto de este método; el criterio no cambia por venir de la barra de búsqueda.
             var termino = filter.Busqueda.Trim();
-            var enMinusculas = termino.ToLowerInvariant();
-            var enMayusculas = termino.ToUpperInvariant();
-            var (consecutivoBuscado, radicadoCanonico) = ProcedureInstanceFiltroSql.LeerBusquedaRadicado(termino);
 
-            query = query.Where(x =>
-                (consecutivoBuscado != null && x.Consecutivo == consecutivoBuscado)
-                || (radicadoCanonico != null && x.ReferenceNumber.ToUpper().Replace("-", "") == radicadoCanonico)
-                || (x.Plate != null && x.Plate.ToUpper().Contains(enMayusculas))
-                || (x.Vin != null && x.Vin.ToUpper().Contains(enMayusculas))
-                || (x.CompradorNombre != null && x.CompradorNombre.ToLower().Contains(enMinusculas))
-                || (x.VendedorNombre != null && x.VendedorNombre.ToLower().Contains(enMinusculas))
-                || x.Actors.Any(a => a.DocumentNumber != null
-                    && a.DocumentNumber.ToLower().Contains(enMinusculas))
-                || x.FieldValues.Any(fv => fv.FieldKey == TransitOfficeNameFieldKey
-                    && fv.ValueText != null
-                    && fv.ValueText.ToLower().Contains(enMinusculas))
-                || db.Tenants.Any(t => t.Id == x.TenantId
-                    && t.LegalName.ToLower().Contains(enMinusculas)));
+            // HU #14747 — con coma el texto es una lista de IDs / placas / VIN (OR entre tramos) y
+            // NO se busca por nombre, documento, organismo ni compañía. Sin coma, igual que siempre.
+            if (ProcedureInstanceFiltroSql.LeerBusquedaMultivalor(termino) is { } tramos)
+                query = ProcedureInstanceFiltroSql.AplicarBusquedaMultivalor(query, tramos);
+            else
+            {
+                var enMinusculas = termino.ToLowerInvariant();
+                var enMayusculas = termino.ToUpperInvariant();
+                var (consecutivoBuscado, radicadoCanonico) = ProcedureInstanceFiltroSql.LeerBusquedaRadicado(termino);
+
+                query = query.Where(x =>
+                    (consecutivoBuscado != null && x.Consecutivo == consecutivoBuscado)
+                    || (radicadoCanonico != null && x.ReferenceNumber.ToUpper().Replace("-", "") == radicadoCanonico)
+                    || (x.Plate != null && x.Plate.ToUpper().Contains(enMayusculas))
+                    || (x.Vin != null && x.Vin.ToUpper().Contains(enMayusculas))
+                    || (x.CompradorNombre != null && x.CompradorNombre.ToLower().Contains(enMinusculas))
+                    || (x.VendedorNombre != null && x.VendedorNombre.ToLower().Contains(enMinusculas))
+                    || x.Actors.Any(a => a.DocumentNumber != null
+                        && a.DocumentNumber.ToLower().Contains(enMinusculas))
+                    || x.FieldValues.Any(fv => fv.FieldKey == TransitOfficeNameFieldKey
+                        && fv.ValueText != null
+                        && fv.ValueText.ToLower().Contains(enMinusculas))
+                    || db.Tenants.Any(t => t.Id == x.TenantId
+                        && t.LegalName.ToLower().Contains(enMinusculas)));
+            }
         }
 
         if (filter.Condiciones is { Count: > 0 } condiciones)
@@ -3196,9 +3204,10 @@ internal sealed partial class ProcedureInstanceRepository(
                 QueryOperator.NoEsNinguno => query.Where(x => !x.FieldValues.Any(fv =>
                     fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null
                     && valores.Contains(fv.ValueText.ToUpper()))),
-                QueryOperator.Contiene => query.Where(x => x.FieldValues.Any(fv =>
-                    fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null
-                    && fv.ValueText.ToUpper().Contains(valores[0]))),
+                QueryOperator.Contiene => ProcedureInstanceFiltroSql.ContieneAlguno(query, valores, v => x =>
+                    x.FieldValues.Any(fv =>
+                        fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null
+                        && fv.ValueText.ToUpper().Contains(v))),
                 QueryOperator.EstaVacio => query.Where(x => !x.FieldValues.Any(fv =>
                     fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null && fv.ValueText != "")),
                 QueryOperator.NoEstaVacio => query.Where(x => x.FieldValues.Any(fv =>
@@ -3232,9 +3241,10 @@ internal sealed partial class ProcedureInstanceRepository(
                 QueryOperator.NoEsNinguno => query.Where(x => !db.Users.Any(u =>
                     u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
                     && valores.Contains(u.DisplayName.ToUpper()))),
-                QueryOperator.Contiene => query.Where(x => db.Users.Any(u =>
-                    u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
-                    && u.DisplayName.ToUpper().Contains(valores[0]))),
+                QueryOperator.Contiene => ProcedureInstanceFiltroSql.ContieneAlguno(query, valores, v => x =>
+                    db.Users.Any(u =>
+                        u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
+                        && u.DisplayName.ToUpper().Contains(v))),
                 // "Sin gestor" no es una columna nula —el id efectivo siempre trae valor, porque cae
                 // a `CreatedByUserId`— sino un usuario que ya no se puede resolver, que es justo
                 // cuando la fila muestra "—".

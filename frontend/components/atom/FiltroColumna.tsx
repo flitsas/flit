@@ -117,8 +117,13 @@ export function EditorColumna({ columna, inicial, onAplicar, onQuitar }: EditorP
             onChange={(e) =>
               setTexto(sanitizeNoAngleBrackets(e.target.value).slice(0, SEARCH_TEXT_MAX_LENGTH))
             }
+            aria-describedby={`${uid}-ayuda`}
+            placeholder="Varios separados por coma"
             className={INPUT_CLS}
           />
+          <p id={`${uid}-ayuda`} className="text-[11px] text-muted-foreground">
+            Puedes poner varios valores separados por coma.
+          </p>
         </div>
       ) : null}
 

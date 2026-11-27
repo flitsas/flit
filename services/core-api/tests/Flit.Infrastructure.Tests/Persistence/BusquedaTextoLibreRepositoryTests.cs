@@ -281,6 +281,130 @@ public sealed class BusquedaTextoLibreRepositoryTests
         (await BuscarAsync(db, "   ")).Should().HaveCount(2);
     }
 
+    // ── Varios valores separados por coma (HU #14747) ─────────────────────────────────────────
+
+    private static async Task<FlitDbContext> SembrarMultivalorAsync(string nombre)
+    {
+        var db = NewContext(nombre);
+        db.ProcedureInstances.AddRange(
+            Tramite("FT1-0000102", placa: "KYU631", vin: "LRWYGCEK7TC769623", comprador: "Juan Pérez", documento: "1020998455"),
+            Tramite("FT1-0000103", placa: "SCG440", vin: "LRWYGCFJ9TC823137"),
+            Tramite("FT1-0000104", placa: "BBB222", vin: "WDD2040011A000004"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return db;
+    }
+
+    [Fact]
+    public async Task AC1_Multivalor_VariasPlacas()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC1_Multivalor_VariasPlacas));
+        (await BuscarAsync(db, "kyu631, scg440")).Should().BeEquivalentTo(["FT1-0000102", "FT1-0000103"]);
+    }
+
+    [Theory]
+    [InlineData("scg440, FT1-0000102")]
+    [InlineData("SCG440,102")]
+    [InlineData("scg440 , 0000102")]
+    [InlineData("scg440, ft1 102")]
+    public async Task AC2_Multivalor_PlacaMasId(string texto)
+    {
+        await using var db = await SembrarMultivalorAsync($"{nameof(AC2_Multivalor_PlacaMasId)}-{texto}");
+        (await BuscarAsync(db, texto)).Should().BeEquivalentTo(["FT1-0000102", "FT1-0000103"]);
+    }
+
+    [Fact]
+    public async Task AC3_Multivalor_VinMasPlaca()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC3_Multivalor_VinMasPlaca));
+        (await BuscarAsync(db, "lrwygcfj9tc823137, BBB222")).Should().BeEquivalentTo(["FT1-0000103", "FT1-0000104"]);
+    }
+
+    [Fact]
+    public async Task AC4_SinComa_IgualQueAntes()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC4_SinComa_IgualQueAntes));
+        (await BuscarAsync(db, "scg")).Should().BeEquivalentTo(["FT1-0000103"]);
+        (await BuscarAsync(db, "769623")).Should().BeEquivalentTo(["FT1-0000102"]);
+        (await BuscarAsync(db, "102")).Should().BeEquivalentTo(["FT1-0000102"]);
+        (await BuscarAsync(db, "pérez")).Should().BeEquivalentTo(["FT1-0000102"]);
+        (await BuscarAsync(db, "1020998455")).Should().BeEquivalentTo(["FT1-0000102"]);
+    }
+
+    [Fact]
+    public async Task AC5_Multivalor_ComasDoblesYFinales_SeIgnoran()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC5_Multivalor_ComasDoblesYFinales_SeIgnoran));
+        (await BuscarAsync(db, "aaa111 ,, BBB222,")).Should().BeEquivalentTo(["FT1-0000104"]);
+        // Con coma siempre es multivalor, aunque quede un solo tramo: no busca por nombre.
+        (await BuscarAsync(db, "pérez,")).Should().BeEmpty();
+        (await BuscarAsync(db, " , ,")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AC6_Multivalor_UnTramoInexistente_NoEscondeALosDemas()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC6_Multivalor_UnTramoInexistente_NoEscondeALosDemas));
+        (await BuscarAsync(db, "ZZZ999, KYU631, 999")).Should().BeEquivalentTo(["FT1-0000102"]);
+    }
+
+    [Fact]
+    public async Task AC7_Multivalor_SinDuplicadosYTotalCuentaUnaVez()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC7_Multivalor_SinDuplicadosYTotalCuentaUnaVez));
+        var (items, total) = await new ProcedureInstanceRepository(db).ListWithSummaryGraphFilteredAsync(
+            TenantId, 0, 100,
+            new ProcedureInstanceListFilter { Busqueda = "KYU631, LRWYGCEK7TC769623, 102, FT1-0000102, kyu631" },
+            ProcedureInstanceSortBy.Default, SortDirection.Descending,
+            TestContext.Current.CancellationToken);
+
+        items.Select(i => i.ReferenceNumber).Should().Equal("FT1-0000102");
+        total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AC8_Multivalor_NoBuscaPorNombreDocumentoNiCompania()
+    {
+        await using var db = await SembrarMultivalorAsync(nameof(AC8_Multivalor_NoBuscaPorNombreDocumentoNiCompania));
+        (await BuscarAsync(db, "Juan Pérez, 1020998455")).Should().BeEmpty();
+    }
+
+    // ── Helper de lectura ─────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("KYU631")]
+    [InlineData("FT1-0000102")]
+    public void Helper_SinComa_DevuelveNulo(string? texto) =>
+        ProcedureInstanceFiltroSql.LeerBusquedaMultivalor(texto).Should().BeNull();
+
+    [Fact]
+    public void Helper_ConComa_RecortaDescartaVaciosYRepetidos()
+    {
+        var tramos = ProcedureInstanceFiltroSql.LeerBusquedaMultivalor(" kyu631 ,, FT1-102 , 12, KYU631,")!;
+
+                tramos.Select(t => t.Mayusculas).Should().Equal("KYU631", "FT1-102", "12");
+        tramos[0].Should().Be(new ProcedureInstanceFiltroSql.TramoBusqueda(null, null, "KYU631"));
+        tramos[1].Should().Be(new ProcedureInstanceFiltroSql.TramoBusqueda(null, "FT10000102", "FT1-102"));
+        tramos[2].Should().Be(new ProcedureInstanceFiltroSql.TramoBusqueda(12, null, "12"));
+    }
+
+    [Fact]
+    public void Helper_UnSoloTramoConComa_SigueSiendoMultivalor() =>
+        ProcedureInstanceFiltroSql.LeerBusquedaMultivalor("kyu631,")!.Should().HaveCount(1);
+
+    [Fact]
+    public void Helper_SoloComas_DevuelveListaVacia() =>
+        ProcedureInstanceFiltroSql.LeerBusquedaMultivalor(", ,,")!.Should().BeEmpty();
+
+    [Fact]
+    public void Helper_LimitaLosTramos()
+    {
+        var texto = string.Join(",", Enumerable.Range(1, 120).Select(i => $"P{i:000}"));
+        ProcedureInstanceFiltroSql.LeerBusquedaMultivalor(texto)!
+            .Should().HaveCount(ProcedureInstanceFiltroSql.MaxTramosBusqueda);
+    }
+
     [Fact]
     public async Task SoloPrioritarios_FiltraEnLaConsulta()
     {
