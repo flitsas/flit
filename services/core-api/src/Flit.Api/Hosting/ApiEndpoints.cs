@@ -44,6 +44,7 @@ internal static class ApiEndpoints
         app.MapSecurityBulkInvitationEndpoints(); // Feature #14420 (HU #14424) — /security/invitations/bulk*
         app.MapUserUiPreferencesEndpoints();
         app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
+        app.MapAdminPlataformaDrFlitEndpoints(); // HU #14771 — visibilidad UI DR. FLIT (SuperAdmin)
         app.MapAdminCompaniesEndpoints();
         app.MapAdminCompaniesBrandingEndpoints();
         app.MapCompanyBrandingEndpoints();
