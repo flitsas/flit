@@ -73,3 +73,11 @@ Se acepta el esfuerzo multi-capa de la Opción 1 para no mentir en la casilla ti
 - Feature ADO #14497
 - Resolución 20233040017145 de 2023 (Mintransporte) — Anexo 46 FUR
 - Dictamen ExpertDocEngine sesión 2026-11-10: sin casilla PPT; literal en observaciones
+
+## Actualización 2026-11-27 — Kyverum RUNT (#113)
+
+`kyverum-runt` PR #113 incorporó el flujo automático de PPT en `POST /v1/personas:consultar`: resuelve nombres y primer apellido en la Procuraduría (tipo 10, PPT de 7 u 8 dígitos) y consulta el RUNT con tipo `Y` (aceptando `tipoDocumento: "Y"` o `"PPT"`), fallando cerrado si no se identifica. En consecuencia:
+
+- `KyverumRuntDocType.NormalizeForPersona("PPT")` envía `"Y"` a `/v1/personas:consultar` (omitir el tipo provocaba que Kyverum intentara identidad como cédula `C` y luego probara `Y` sin primer apellido).
+- `KyverumRuntDocType.NormalizeForVehicle("PPT")` conserva `null` porque `/v1/vehiculos:consultar` solo acepta `C, E, T, P, N, D, R, PT` y rechaza `"Y"`/`"PPT"` con `400 VALIDATION_ERROR`.
+- `KyverumRuntVehicleResultMapper.MapOwnerDocType` mapea `"Y"` y `"PPT"` a `"PPT"` para sembrar `owner_document_type`.
