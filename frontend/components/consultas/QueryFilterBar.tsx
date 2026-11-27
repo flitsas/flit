@@ -64,6 +64,7 @@ export function QueryFilterBar({
   onChange,
   disabled,
   testIdPrefix,
+  contieneAdmiteVarios = false,
 }: {
   fields: QueryField[];
   conditions: QueryCondition[];
@@ -71,6 +72,8 @@ export function QueryFilterBar({
   disabled?: boolean;
   /** Las dos consolas usan esta barra; el prefijo las hace distinguibles en las pruebas. */
   testIdPrefix: string;
+  /** Ver `ConditionEditor`. Solo las bandejas de trámites lo activan. */
+  contieneAdmiteVarios?: boolean;
 }) {
   // `null` = cerrado; una cadena = editando ese campo; "" = eligiendo cuál añadir.
   const [editing, setEditing] = useState<string | null>(null);
@@ -145,6 +148,7 @@ export function QueryFilterBar({
               onApply={upsert}
               onRemove={() => remove(condition.fieldId)}
               testIdPrefix={testIdPrefix}
+              contieneAdmiteVarios={contieneAdmiteVarios}
             />
           )}
         </span>
@@ -180,6 +184,7 @@ export function QueryFilterBar({
             onApply={upsert}
             onRemove={() => setEditing(null)}
             testIdPrefix={testIdPrefix}
+            contieneAdmiteVarios={contieneAdmiteVarios}
           />
         </div>
       )}
@@ -240,6 +245,7 @@ export function ConditionEditor({
   onRemove,
   testIdPrefix,
   anchored = true,
+  contieneAdmiteVarios = false,
 }: {
   field: QueryField;
   value: QueryCondition | null;
@@ -248,6 +254,12 @@ export function ConditionEditor({
   testIdPrefix: string;
   /** `false` lo pinta en el flujo del contenedor, sin flotar: es como lo usa el panel de trámites. */
   anchored?: boolean;
+  /**
+   * «contiene» con varios valores separados por coma. Solo lo aceptan las bandejas de trámites del
+   * gestor y del OT; en Consultas/reportes el servidor toma un solo valor, así que ahí no se
+   * promete ni se cuenta. «es» / «no es ninguno» aceptan varios en todos lados.
+   */
+  contieneAdmiteVarios?: boolean;
 }) {
   const [operator, setOperator] = useState<QueryOperator>(
     value?.operator ?? field.operators[0] ?? "es_alguno",
@@ -318,13 +330,17 @@ export function ConditionEditor({
             onChange={(e) => setTexto(e.target.value)}
             rows={operator === "contiene" ? 1 : 4}
             placeholder={
-              operator === "contiene" ? "Parte del texto…" : "Un valor por línea, o pega una columna de Excel"
+              operator === "contiene"
+                ? contieneAdmiteVarios
+                  ? "Parte del texto · varios separados por coma"
+                  : "Parte del texto…"
+                : "Varios valores separados por coma, o uno por línea"
             }
             aria-label={`Valores de ${field.label}`}
             className={`${FIELD_CLS} w-full resize-y`}
             data-testid={`${testIdPrefix}-valores-${field.id}`}
           />
-          {operator !== "contiene" && valores.length > 0 && (
+          {(operator !== "contiene" ? valores.length > 0 : contieneAdmiteVarios && valores.length > 1) && (
             <p className="mt-1 text-[11px] text-muted-foreground">
               {plural(valores.length, "valor", "valores")}
             </p>

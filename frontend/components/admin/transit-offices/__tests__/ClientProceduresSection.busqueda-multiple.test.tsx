@@ -70,7 +70,7 @@ describe("ClientProceduresSection — ayuda de búsqueda múltiple", () => {
   it("el buscador indica varios valores separados por coma y lo describe al lector de pantalla", async () => {
     renderSection();
     const caja = await screen.findByRole("searchbox", { name: "Buscar en la bandeja de trámites" });
-    expect(caja).toHaveAttribute("placeholder", "Radicado, placa o VIN · varios separados por coma");
+    expect(caja).toHaveAttribute("placeholder", "Radicado, placa o VIN · varios con coma");
     expect(caja).toHaveAccessibleDescription(/separándolos con coma.*AAA111, BBB222/);
     expect(caja).toHaveAttribute("title", expect.stringMatching(/AAA111, BBB222/));
   });

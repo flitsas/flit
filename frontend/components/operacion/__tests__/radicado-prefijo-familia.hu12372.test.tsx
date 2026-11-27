@@ -64,7 +64,7 @@ describe('HU #12372 — el buscador enseña el formato del radicado', () => {
       />,
     );
 
-    const caja = screen.getByPlaceholderText('Radicado, placa o VIN · varios separados por coma');
+    const caja = screen.getByPlaceholderText('Radicado, placa o VIN · varios con coma');
     expect(caja).toBeInTheDocument();
     // Accesibilidad: la ayuda de varios valores se anuncia por descripción, no solo por placeholder.
     expect(caja).toHaveAccessibleDescription(/separándolos con coma.*AAA111, BBB222/);

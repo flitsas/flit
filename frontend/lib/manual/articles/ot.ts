@@ -149,9 +149,9 @@ export const OT_ARTICLES: ManualArticle[] = [
           "La cabecera cuenta el universo completo por clase de trabajo: Preasignación (radicados sin placa), Asignado (con placa; el gestor gestiona SOAT e impuestos), Entregado (esperando tu decisión), Aprobado, Solicitud de revocatoria, Rechazado (desde entregado o desde preasignación) y Revocado. Las pestañas Todos, Matrículas, Traspaso y Otros trámites acotan la tabla y las tarjetas a esa familia; en Traspaso y Otros no hay Preasignación ni Asignado. Pulsar una tarjeta filtra la tabla. La bandeja abre en Entregado: es tu trabajo pendiente.",
         ],
         bullets: [
-          "Búsqueda libre «Radicado, placa o VIN · varios separados por coma»: el radicado casa exacto; placa, VIN, nombre y documento de las partes y razón social de la compañía, por texto parcial. Para buscar varios radicados, placas o VIN a la vez, sepáralos con coma (por ejemplo «AAA111, BBB222»): la bandeja trae los que coincidan con cualquiera.",
+          "Búsqueda libre «Radicado, placa o VIN · varios con coma»: el radicado casa exacto; placa, VIN, nombre y documento de las partes y razón social de la compañía, por texto parcial. Para buscar varios radicados, placas o VIN a la vez, sepáralos con coma (por ejemplo «AAA111, BBB222»): la bandeja trae los que coincidan con cualquiera.",
           "«Búsqueda rápida»: los atajos «Por aprobar» (entregados a la espera de tu decisión), «Por preasignar» (radicados sin placa) y «Revocatorias» (aprobados con una solicitud de revocatoria activa) resaltan y filtran de una vez la tarjeta correspondiente, sin tener que ubicarla en la cabecera.",
-          "«Periodo» por fecha de radicación y «+ Filtro» con la gramática de Consultas (campo, operador, valores; admite pegar una columna de Excel).",
+          "«Periodo» por fecha de radicación y «+ Filtro» con la gramática de Consultas (campo, operador, valores; en Placa, VIN e ID/Radicado puedes poner varios valores separados por coma, uno por línea o pegar una columna de Excel; lo mismo en el filtro de cada columna).",
           "«Exportar» genera un Excel con todas las filas que cumplen los filtros, no solo la página.",
           "Columnas configurables; la elección se guarda por usuario.",
         ],
