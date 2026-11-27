@@ -3,8 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Flit.Consultas.Api.RuntIntempo;
 using Flit.Consultas.Grpc.V1;
+using Flit.Consultas.Tests.Impuesto;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace Flit.Consultas.Tests;
@@ -15,7 +17,8 @@ namespace Flit.Consultas.Tests;
 /// <see cref="ContratosRentingTests"/>. Fixtures inventados (placas TST###, VIN 9ZZPRUEBA…, documentos 99999…).
 /// <para>Uso de ejemplo:</para>
 /// <code>
-/// var p = new ProveedorRuntIntempo(fabrica, IntempoOpciones.Desde(config));
+/// var o = IntempoOpciones.Desde(config);
+/// var p = new ProveedorRuntIntempo(fabrica, o, new LimitadorIntempo(o), TimeProvider.System, logger);
 /// if (p.NoConectado is null) { var r = await p.ConsultarPorPlacaAsync("TST301", ct); }
 /// </code>
 /// </summary>
@@ -43,8 +46,29 @@ public sealed class RuntIntempoProveedorTests
         foreach (var (k, v) in extra ?? [])
             valores[k] = v;
         var intempo = new IntempoFalso(responder);
-        return (new ProveedorRuntIntempo(new Fabrica(intempo), Opciones(valores)), intempo);
+        return (Proveedor(new Fabrica(intempo), Opciones(valores)), intempo);
     }
+
+    private static ProveedorRuntIntempo Proveedor(IHttpClientFactory fabrica, IntempoOpciones o, ListaLogger<ProveedorRuntIntempo>? log = null,
+        TimeProvider? reloj = null) =>
+        new(fabrica, o, new LimitadorIntempo(o), reloj ?? new RelojInstantaneo(), log ?? new ListaLogger<ProveedorRuntIntempo>());
+
+    /// <summary>Proveedor con su Intempo falso, el logger de prueba y el reloj que registra las esperas (sin dormir).</summary>
+    private static (ProveedorRuntIntempo Proveedor, IntempoFalso Intempo, ListaLogger<ProveedorRuntIntempo> Log, RelojInstantaneo Reloj) Armar(
+        params Func<HttpRequestMessage, HttpResponseMessage>[] respuestas)
+    {
+        var n = 0;
+        var intempo = new IntempoFalso(pedido => respuestas[Math.Min(n++, respuestas.Length - 1)](pedido));
+        var log = new ListaLogger<ProveedorRuntIntempo>();
+        var reloj = new RelojInstantaneo();
+        return (Proveedor(new Fabrica(intempo), Opciones(new() { ["INTEMPO_API_BASE_URL"] = Base }), log, reloj), intempo, log, reloj);
+    }
+
+    /// <summary>El texto plano de 89 B que Intempo devuelve con HTTP 200 al exceder su límite por placa (hallazgo 2026-11-27).</summary>
+    private const string TextoLimite = "Excedio el límite de peticiones para la placa consultada, intenta nuevamente en 1 minuto";
+
+    private static Func<HttpRequestMessage, HttpResponseMessage> Texto(HttpStatusCode codigo, string cuerpo, string tipo) =>
+        _ => new HttpResponseMessage(codigo) { Content = new StringContent(cuerpo, Encoding.UTF8, tipo) };
 
     private static Func<HttpRequestMessage, HttpResponseMessage> Responde(HttpStatusCode codigo, string cuerpo = "") =>
         _ => new HttpResponseMessage(codigo) { Content = new StringContent(cuerpo, Encoding.UTF8, "application/json") };
@@ -62,7 +86,7 @@ public sealed class RuntIntempoProveedorTests
             ["INTEMPO_API_SECONDS_TIMEOUT"] = "37",
         };
 
-        var construir = () => new ProveedorRuntIntempo(new Fabrica(intempo), Opciones(valores));
+        var construir = () => Proveedor(new Fabrica(intempo), Opciones(valores));
         var p = construir.Should().NotThrow("sin la URL base el servicio arranca y la fuente queda no conectada").Subject;
 
         p.NoConectado.Should().NotBeNull().And.Contain("INTEMPO_API_BASE_URL").And.StartWith("Falta configurar Intempo");
@@ -70,7 +94,7 @@ public sealed class RuntIntempoProveedorTests
         Opciones(valores).Faltan().Should().Equal("INTEMPO_API_BASE_URL");
 
         // Una URL que no es absoluta tampoco conecta, y su valor no se repite en el motivo.
-        var invalida = new ProveedorRuntIntempo(new Fabrica(intempo), Opciones(new() { ["INTEMPO_API_BASE_URL"] = "no-es-url-valor-prueba" }));
+        var invalida = Proveedor(new Fabrica(intempo), Opciones(new() { ["INTEMPO_API_BASE_URL"] = "no-es-url-valor-prueba" }));
         invalida.NoConectado.Should().Contain("INTEMPO_API_BASE_URL").And.NotContain("no-es-url-valor-prueba");
 
         // Llamar sin configuración es un error de programación (el servicio gRPC revisa NoConectado antes): no sale a la red.
@@ -308,6 +332,163 @@ public sealed class RuntIntempoProveedorTests
             var error = r.Errores.Should().ContainSingle(nombre).Subject;
             (error.Code, error.Description).Should().Be((codigo, r.MensajeError), nombre);
             (r.HasHttpStatus ? r.HttpStatus : 404).Should().Be(codigo, $"{nombre}: errores[0].code es el status, o 404 si no lo hubo");
+        }
+    }
+
+    // ── HU #14752 (D5 = a, contrato-runt §3.2): límite de Intempo, un reintento del 200 no-JSON y Warning 7441 sin PII ──────────
+
+    [Fact]
+    public async Task HU14752_200_texto_con_el_limite_es_LIMITE_PROVEEDOR_con_una_sola_llamada()
+    {
+        var (p, intempo, _, reloj) = Armar(Texto(HttpStatusCode.OK, TextoLimite, "text/plain"));
+
+        var r = await p.ConsultarPorPlacaAsync("TST301", Ct);
+
+        (r.Resultado, r.TipoError, r.HttpStatus).Should().Be((ResultadoRuntIntempo.Error, TipoErrorFuente.LimiteProveedor, 200));
+        r.MensajeError.Should().Be("Intempo limitó las peticiones de la consulta (HTTP 200).");
+        r.Errores.Should().ContainSingle().Which.Code.Should().Be(200);
+        intempo.Pedidos.Should().HaveCount(1, "el límite no se reintenta aquí: lo programa diagnóstico con al menos 60 s");
+        reloj.Esperas.Should().BeEmpty();
+        r.Vehiculo.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HU14752_200_HTML_y_luego_JSON_valido_es_ENCONTRADO_con_dos_llamadas()
+    {
+        var (p, intempo, _, reloj) = Armar(Texto(HttpStatusCode.OK, "<html><body>Servicio no disponible</body></html>", "text/html"),
+            Responde(HttpStatusCode.OK, CrudoTst301));
+
+        var r = await p.ConsultarPorPlacaAsync("TST301", Ct);
+
+        r.Resultado.Should().Be(ResultadoRuntIntempo.Encontrado);
+        r.Vehiculo.Plate.Should().Be("TST301");
+        intempo.Pedidos.Should().HaveCount(2, "un 200 que no es JSON se reintenta una vez");
+        reloj.Esperas.Should().Equal(ProveedorRuntIntempo.EsperaReintentoNoJson);
+        ProveedorRuntIntempo.EsperaReintentoNoJson.Should().Be(TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task HU14752_200_no_JSON_dos_veces_es_RESPUESTA_INVALIDA_con_dos_llamadas()
+    {
+        var (p, intempo, _, _) = Armar(Texto(HttpStatusCode.OK, "<html>mantenimiento</html>", "text/html"));
+
+        var r = await p.ConsultarPorVinAsync("9ZZPRUEBA00000301", Ct);
+
+        (r.Resultado, r.TipoError, r.HttpStatus).Should().Be((ResultadoRuntIntempo.Error, TipoErrorFuente.RespuestaInvalida, 200));
+        r.MensajeError.Should().Be("La respuesta de Intempo no es JSON válido.");
+        intempo.Pedidos.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task HU14752_200_no_JSON_y_luego_el_limite_es_LIMITE_PROVEEDOR()
+    {
+        var (p, intempo, _, _) = Armar(Texto(HttpStatusCode.OK, "<html>mantenimiento</html>", "text/html"),
+            Texto(HttpStatusCode.OK, TextoLimite, "text/plain"));
+
+        var r = await p.ConsultarPorPlacaAsync("TST301", Ct);
+
+        (r.Resultado, r.TipoError).Should().Be((ResultadoRuntIntempo.Error, TipoErrorFuente.LimiteProveedor), "si el segundo intento trae el límite, gana el límite");
+        intempo.Pedidos.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task HU14752_200_JSON_sin_vehiculo_es_RESPUESTA_INVALIDA_sin_reintento()
+    {
+        var (p, intempo, log, _) = Armar(Responde(HttpStatusCode.OK, """{"marca":"MARCA PRUEBA"}"""));
+
+        var r = await p.ConsultarPorPlacaAsync("TST301", Ct);
+
+        (r.Resultado, r.TipoError).Should().Be((ResultadoRuntIntempo.Error, TipoErrorFuente.RespuestaInvalida));
+        r.MensajeError.Should().Be("La respuesta de Intempo no trae un vehículo.");
+        intempo.Pedidos.Should().HaveCount(1, "un JSON sin vehículo es definitivo");
+        log.Eventos.Should().BeEmpty("un JSON bien formado no se registra");
+    }
+
+    [Theory]
+    [InlineData("limite", 200, "text/plain", "LIMITE_PROVEEDOR")]
+    [InlineData("nojson", 200, "text/html", "NO_JSON")]
+    [InlineData("500", 500, "text/plain", "HTTP_NO_EXITOSO")]
+    [InlineData("401", 401, "text/plain", "AUTENTICACION")]
+    public async Task HU14752_Warning_7441_lleva_status_y_clasificacion_sin_cuerpo_placa_ni_URL(string caso, int status, string tipo, string clasificacion)
+    {
+        const string placa = "TST301";
+        var cuerpo = caso switch
+        {
+            "limite" => TextoLimite,
+            "nojson" => $"<html>falla para {placa} propietario EMPRESA PRUEBA UNO SAS 999990301</html>",
+            _ => $"error interno consultando {placa} de 999990301 EMPRESA PRUEBA UNO SAS",
+        };
+        var (p, _, log, _) = Armar(Texto((HttpStatusCode)status, cuerpo, tipo));
+
+        await p.ConsultarPorPlacaAsync(placa, Ct);
+
+        log.Eventos.Should().NotBeEmpty().And.OnlyContain(e => e.Id == 7441);
+        log.Niveles.Should().OnlyContain(n => n == LogLevel.Warning);
+        var mensaje = log.Textos[0];
+        mensaje.Should().Contain(status.ToString(System.Globalization.CultureInfo.InvariantCulture)).And.Contain(clasificacion)
+            .And.Contain(tipo).And.Contain("placa").And.Contain("intento 1");
+        log.Textos.Should().Contain($"Clasificacion={clasificacion}").And.Contain($"Status={status}").And.Contain("Operacion=placa");
+        foreach (var texto in log.Textos)
+            texto.Should().NotContainAny(placa, "999990301", "EMPRESA PRUEBA", "Excedio", "límite de peticiones", "intempo.prueba.local", "Plate=", "<html>");
+    }
+
+    [Fact]
+    public async Task HU14752_Warning_7441_del_no_JSON_registra_los_dos_intentos_y_la_operacion_vin()
+    {
+        var (p, _, log, _) = Armar(Texto(HttpStatusCode.OK, "<html>x</html>", "text/html"));
+
+        await p.ConsultarPorVinAsync("9ZZPRUEBA00000301", Ct);
+
+        log.Eventos.Should().HaveCount(2).And.OnlyContain(e => e.Id == 7441);
+        log.Textos.Should().Contain("Intento=1").And.Contain("Intento=2").And.Contain("Operacion=vin");
+        log.Textos.Should().NotContain(t => t.Contains("9ZZPRUEBA00000301"));
+    }
+
+    [Fact]
+    public void HU14752_IntempoOpciones_limites_por_defecto_4_y_4_y_fuera_de_rango_toma_el_defecto()
+    {
+        var o = Opciones(new() { ["INTEMPO_API_BASE_URL"] = Base });
+        (o.MaxConcurrentes, o.MaxPorSegundo).Should().Be((4, 4));
+        IntempoOpciones.VariableMaxConcurrentes.Should().Be("INTEMPO_API_MAX_CONCURRENT");
+        IntempoOpciones.VariableMaxPorSegundo.Should().Be("INTEMPO_API_MAX_REQUESTS_PER_SECOND");
+
+        foreach (var invalido in new[] { "0", "-1", "65", "abc", " ", "4.5" })
+            Opciones(new() { ["INTEMPO_API_MAX_CONCURRENT"] = invalido }).MaxConcurrentes.Should().Be(4, $"«{invalido}» está fuera de 1..64");
+        foreach (var invalido in new[] { "0", "-1", "101", "abc", " " })
+            Opciones(new() { ["INTEMPO_API_MAX_REQUESTS_PER_SECOND"] = invalido }).MaxPorSegundo.Should().Be(4, $"«{invalido}» está fuera de 1..100");
+
+        var propio = Opciones(new() { ["INTEMPO_API_MAX_CONCURRENT"] = "64", ["INTEMPO_API_MAX_REQUESTS_PER_SECOND"] = "1" });
+        (propio.MaxConcurrentes, propio.MaxPorSegundo).Should().Be((64, 1));
+        var minimo = Opciones(new() { ["INTEMPO_API_MAX_CONCURRENT"] = "1", ["INTEMPO_API_MAX_REQUESTS_PER_SECOND"] = "100" });
+        (minimo.MaxConcurrentes, minimo.MaxPorSegundo).Should().Be((1, 100));
+    }
+
+    /// <summary>Reloj que no duerme: cada <c>Task.Delay</c> vence en el acto y queda registrado en <see cref="Esperas"/>.</summary>
+    private sealed class RelojInstantaneo : TimeProvider
+    {
+        public List<TimeSpan> Esperas { get; } = [];
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            if (dueTime != Timeout.InfiniteTimeSpan)
+            {
+                lock (Esperas)
+                    Esperas.Add(dueTime);
+                ThreadPool.QueueUserWorkItem(_ => callback(state));
+            }
+
+            return new Temporizador();
+        }
+
+        private sealed class Temporizador : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+            public void Dispose()
+            {
+            }
+
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 
