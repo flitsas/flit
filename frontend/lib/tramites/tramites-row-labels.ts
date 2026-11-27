@@ -262,6 +262,8 @@ export function digitoPlacaLabel(d: DigitoPlacaDatos): string {
 }
 
 export function digitoPlacaLabelDeFila(item: InstanceSummary): string {
+  // En «Todos» las filas que no son matrícula quedan vacías (no «—», que significa ruta corta).
+  if (item.modalidad !== 'MATRICULAS') return '';
   return digitoPlacaLabel({
     digito: item.plateDigitoPreferido,
     declarado: item.plateDigitoDeclarado,

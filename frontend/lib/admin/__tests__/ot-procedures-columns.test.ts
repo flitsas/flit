@@ -28,9 +28,9 @@ describe("ot-procedures-columns", () => {
     expect(otColumnToSortBy("placa")).toBe("placa");
   });
 
-  it("todas las columnas arrancan visibles por defecto, salvo las exclusivas de matrícula (HU #14744)", () => {
+  it("todas las columnas arrancan visibles por defecto, salvo las exclusivas de Todos y Matrículas (HU #14744)", () => {
     expect(DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS).toEqual(
-      OT_PROCEDURES_COLUMNS.filter((c) => !c.matriculaOnly).map((c) => c.key),
+      OT_PROCEDURES_COLUMNS.filter((c) => !c.soloTodosYMatriculas).map((c) => c.key),
     );
   });
 });

@@ -386,7 +386,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "La estrella marca un trámite como prioritario; el filtro «solo prioritarios» los aísla y, sin orden explícito, van primero.",
           "«Exportar» genera un Excel con TODAS las filas que cumplen los filtros actuales, no solo las de pantalla.",
           "El selector de columnas te deja elegir qué ver; la elección se guarda por usuario.",
-          "En la pestaña de matrículas puedes activar la columna «Dígito de placa» desde «Columnas». Muestra el dígito que pidió el cliente al radicar sin placa: «Termina en 3» en carros, «Inicia en 7» en motos y motocarros, «Sin preferencia» si no pidió ninguno y «—» si el vehículo ya traía placa. No viene activada por defecto y no aparece en traspaso ni en otros trámites.",
+          "En las pestañas «Todos» y «Matrículas» puedes activar la columna «Dígito de placa» desde «Columnas». Muestra el dígito que pidió el cliente al radicar sin placa: «Termina en 3» en carros, «Inicia en 7» en motos y motocarros, «Sin preferencia» si no pidió ninguno y «—» si el vehículo ya traía placa. En «Todos», las filas que no son matrícula quedan con la celda vacía. No viene activada por defecto y no aparece en las pestañas Traspaso ni Otros trámites.",
         ],
       },
       {

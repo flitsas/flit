@@ -465,7 +465,7 @@ export function ClientProceduresTable({
   const columnasVisibles =
     visibleColumns && visibleColumns.length > 0
       ? OT_PROCEDURES_COLUMNS.filter((c) => visibleColumns.includes(c.key))
-      : OT_PROCEDURES_COLUMNS.filter((c) => !c.matriculaOnly);
+      : OT_PROCEDURES_COLUMNS.filter((c) => !c.soloTodosYMatriculas);
 
   /**
    * Acciones disponibles para una fila, en el orden en que el operador las necesita: primero
