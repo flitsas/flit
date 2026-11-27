@@ -95,8 +95,43 @@ export function marcasDe(item: InstanceSummary): readonly (typeof MARCAS_TRAMITE
  * dato desaparecería justo en el sitio donde nadie puede contrastarlo con la pantalla.
  */
 export function marcasLabel(item: InstanceSummary): string {
-  const activas = marcasDe(item);
-  return activas.length > 0 ? activas.map((m) => m.label.replace('Con ', '')).join(', ') : '';
+  const partes = marcasDe(item).map((m) => m.label.replace('Con ', '') as string);
+  const quipux = quipuxMarca(item);
+  if (quipux) partes.push(quipux.texto);
+  return partes.join(', ');
+}
+
+export type QuipuxEstado = NonNullable<InstanceSummary["quipuxEstado"]>;
+
+/**
+ * Etiqueta «QX · …» de la columna Marcas: en qué punto del canal Quipux está el trámite. Solo los
+ * estados que NO dice ya el estado del trámite: aprobado y rechazado no se pintan (ni van al Excel).
+ * Discreta a propósito: etiqueta plana pequeña, y solo «Falló» lleva tono de alerta.
+ */
+export const QUIPUX_MARCA: Partial<
+  Record<QuipuxEstado, { texto: string; ayuda: string; tono: "danger" | "info" | "neutral" }>
+> = {
+  en_cola: {
+    texto: "QX · En cola",
+    ayuda: "Se radica automáticamente en Quipux; el estado cambia cuando Quipux lo confirme.",
+    tono: "neutral",
+  },
+  radicado: {
+    texto: "QX · Radicado",
+    ayuda: "Radicado en Quipux; esperando la decisión del organismo.",
+    tono: "info",
+  },
+  fallido: {
+    texto: "QX · Falló",
+    ayuda: "Quipux no respondió tras varios intentos. Revisa el LOG QX y reintenta desde la consola de Quipux.",
+    tono: "danger",
+  },
+};
+
+/** Datos de la píldora Quipux de la fila, o null si no va por Quipux (o estado desconocido). */
+export function quipuxMarca(item: InstanceSummary): NonNullable<(typeof QUIPUX_MARCA)[QuipuxEstado]> | null {
+  const estado = item.quipuxEstado;
+  return estado ? (QUIPUX_MARCA[estado] ?? null) : null;
 }
 
 /**

@@ -118,7 +118,12 @@ public sealed record InstanceSummaryDto(
     IReadOnlyList<ActorListadoDto>? VendedoresActores = null,
     IReadOnlyList<ActorListadoDto>? CompradoresActores = null,
                                               // Marca informativa de la fila: algún lado tiene 2+ propietarios.
-    bool MultiplesPropietarios = false);
+    bool MultiplesPropietarios = false,
+                                              // Marca «Quipux» de la fila (QuipuxListadoEstado): "en_cola" | "radicado" | "fallido" |
+                                              // "rechazado" | "aprobado"; null = el trámite no va por Quipux. Aditivo.
+    string? QuipuxEstado = null,
+                                              // Id del ÚLTIMO envío Quipux del trámite (para enlazar a la trazabilidad); null si no tiene envíos o no va por Quipux.
+    Guid? QuipuxEnvioId = null);
 
 /// <summary>
 /// ADR-0053 — un propietario de un lado en el listado: su nombre y cómo está acreditado
@@ -221,6 +226,11 @@ public sealed class ListProcedureInstancesHandler(
         IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
+        // Marca «Quipux»: una consulta en lote para la página (último envío o en_cola).
+        IReadOnlyDictionary<Guid, QuipuxMarcaListado> quipuxEstados = await repo.GetQuipuxEstadosAsync(
+            instances.Select(i => i.Id).ToList(), ct)
+            ?? new Dictionary<Guid, QuipuxMarcaListado>();
+
         // Excepción de firma (matrícula sin placa, canal gestor/OT): se resuelve en lote con caché de canal por OT
         // para que `canSubmit` de la fila coincida con el del wizard.
         var exentas = await ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
@@ -246,7 +256,8 @@ public sealed class ListProcedureInstancesHandler(
                     exentas.Contains(e.Id),
                     // ADR-0053 — misma comprobación, actor por actor, para el desplegable de copropietarios.
                     IdentityApprovalResolver.ApprovedActorsFromKeys(
-                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null));
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null),
+                    quipuxEstados.GetValueOrDefault(e.Id));
             })
             .ToList();
     }
@@ -335,7 +346,8 @@ public sealed class ListProcedureInstancesHandler(
         bool prendaVigente = false,
         string? revocationRequestStatus = null,
         bool firmaExenta = false,
-        IReadOnlySet<ProcedureInstanceActor>? actoresAprobados = null)
+        IReadOnlySet<ProcedureInstanceActor>? actoresAprobados = null,
+        QuipuxMarcaListado? quipuxMarca = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         // ADR-0053 — un lado puede tener hasta 4 propietarios. Se ordena por `Ordinal` para que el
@@ -417,7 +429,9 @@ public sealed class ListProcedureInstancesHandler(
             ConsolidadoWizard: ConsolidadoVigenciaProyeccion.Wizard(e),
             VendedoresActores: ActoresListado(e, partesIdentidad, SellerActorType, sellers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
             CompradoresActores: ActoresListado(e, partesIdentidad, BuyerActorType, buyers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
-            MultiplesPropietarios: sellers.Count > 1 || buyers.Count > 1);
+            MultiplesPropietarios: sellers.Count > 1 || buyers.Count > 1,
+            QuipuxEstado: quipuxMarca?.Estado,
+            QuipuxEnvioId: quipuxMarca?.EnvioId);
     }
 
     /// <summary>
