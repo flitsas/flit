@@ -309,9 +309,13 @@ public static class EscenariosDeFuga
         new EscenarioDeFuga(RutaExcelLote, async (empresa, ct) =>
         {
             var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del Excel", vehiculos: [new("TST906", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
-            await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
+            var celda = await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
                 """{"placa":"TST906","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
-            return new Sembrado(Reportes.ExcelDePrueba.Ruta(lote.Id), [lote.Id.ToString()]);
+            // HU #14752 SP-9: el Excel v4 lleva en claro el documento y el nombre del locatario; los de cada empresa son exclusivos.
+            var (_, documento) = DePrueba(empresa);
+            var nombre = $"LOCATARIO FUGA {documento}";
+            await Reportes.ExcelLoteTests.SembrarLocatarioEnClaroAsync(empresa, celda, documento, nombre, ct);
+            return new Sembrado(Reportes.ExcelDePrueba.Ruta(lote.Id), [lote.Id.ToString(), documento, nombre], Exclusivos: [lote.Id.ToString(), documento, nombre]);
         }, Reportes.ExcelDePrueba.TextoAsync),
         new EscenarioDeFuga(RutaEstadoEvidencia, async (empresa, ct) =>
         {

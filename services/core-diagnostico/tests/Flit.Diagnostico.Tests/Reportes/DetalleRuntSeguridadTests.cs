@@ -115,6 +115,32 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         leer.Should().Throw<OperationCanceledException>();
     }
 
+    // HU #14752 SP-1 (regresión) — la respuesta trae nombres de locatario y de acreedores persona natural que el Excel v4 sí lee
+    // (DatosRuntExcel, en claro), pero el detalle del PDF sigue igual: «Persona natural» en garantías y garantías mobiliarias y ningún
+    // nombre de persona en el texto del PDF. LeerRespuesta (extraída de Leer) devuelve la respuesta tipada o null, sin excepción.
+    [Fact]
+    public void HU14752_el_pdf_sigue_con_persona_natural_y_sin_nombres_aunque_el_excel_los_lea()
+    {
+        var respuesta = ExcelLoteTests.RespuestaExcel("ABC123");
+        var protector = new ProtectorEnClaroSimple();
+
+        var leida = LectorDetalleRunt.LeerRespuesta(protector, protector.Proteger(ContenidoReporteTests.ProtoJson(respuesta)));
+        leida.Should().Be(respuesta);
+        LectorDetalleRunt.LeerRespuesta(protector, null).Should().BeNull();
+        LectorDetalleRunt.LeerRespuesta(new ProtectorQueFalla(new InvalidOperationException("SECRETO")), [1, 2, 3]).Should().BeNull();
+        var excel = DatosRuntExcel.Desde(leida!)!;
+        excel.GarantiasAFavor.Should().Contain(new GarantiaEnClaro("PERSONA NATURAL FICTICIA", "CC", "1012345678"));
+        excel.GarantiasMobiliarias.Should().Contain(g => g.Entidad == "ACREEDOR NATURAL FICTICIO");
+        excel.Locatarios.Should().Contain(l => l.Nombre == "LOCATARIO FICTICIO UNO");
+
+        var detalle = LectorDetalleRunt.Leer(protector, protector.Proteger(ContenidoReporteTests.ProtoJson(respuesta)))!;
+        detalle.Should().BeEquivalentTo(LectorDetalleRunt.Desde(respuesta), "Leer = LeerRespuesta + Desde, sin cambio de proyección");
+        detalle.GarantiasAFavor.Should().Contain(g => g.Acreedor == DetalleRuntGarantia.PersonaNatural && g.NumeroDocumento == "1012345678");
+        detalle.GarantiasMobiliarias.Should().Contain(g => g.Entidad == DetalleRuntGarantia.PersonaNatural);
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123") with { DetalleRunt = detalle }, GeneradoEn));
+        texto.Should().NotContainAny(["PERSONA NATURAL FICTICIA", "ACREEDOR NATURAL FICTICIO", "LOCATARIO FICTICIO", "LEASING FICTICIO", "PROPIETARIO FICTICIO"]);
+    }
+
     private static IReadOnlyList<DetalleRuntDato> Accidentalidad(AccidenteIntempo accidente)
     {
         var respuesta = RespuestaRunt("ABC123");
@@ -136,6 +162,14 @@ public sealed partial class PdfVehiculoDisenoV2Tests
             FechaInscripcion = "20/03/2020",
         });
         return LectorDetalleRunt.Desde(respuesta)!.GarantiasAFavor.Should().ContainSingle().Subject;
+    }
+
+    /// <summary>Protector de prueba que no cifra (texto UTF-8 tal cual).</summary>
+    private sealed class ProtectorEnClaroSimple : IProtectorRespuestaFuente
+    {
+        public byte[] Proteger(string texto) => System.Text.Encoding.UTF8.GetBytes(texto);
+
+        public string Desproteger(byte[] cifrado) => System.Text.Encoding.UTF8.GetString(cifrado);
     }
 
     /// <summary>Protector de prueba que falla al descifrar con la excepción dada.</summary>

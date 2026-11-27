@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
@@ -38,11 +39,19 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// <remarks>
 /// Detalle del RUNT (PDF v2, ajuste 2026-10-27): solo en el contenido del vehículo (PDF y ZIP), con la respuesta completa de la
 /// fuente de la celda RUNT COMPLETADO, descifrada en memoria con <see cref="IProtectorRespuestaFuente"/> y proyectada por
-/// <see cref="LectorDetalleRunt"/> (acreedores persona natural sin nombre y enmascarados). El contenido del lote (Excel) no la lee.
+/// <see cref="LectorDetalleRunt"/> (acreedores persona natural sin nombre y enmascarados).
+/// <para>
+/// Excel del lote v4 (HU #14752, D3; ADR-0076 enmienda 2026-11-27): SOLO en <see cref="LoteAsync(CabeceraDiagnostico, string?, CancellationToken)"/>
+/// se descifran en memoria el documento del propietario y del locatario del RUNT (columnas de <see cref="VehiculoDiagnostico"/>) y la
+/// respuesta de la celda RUNT (<see cref="DatosRuntExcel"/>, con el nombre del locatario): van a <see cref="VehiculoReporte.Excel"/>, fuera
+/// de la huella. Un documento que no se puede descifrar deja la celda vacía y se registra sin valores (<see cref="Catalogo.LogReportes.NoDescifradoExcel"/>, SP-7).
+/// El PDF y el ZIP no cambian.
+/// </para>
 /// </remarks>
 internal sealed class LectorContenidoReporte(
     DiagnosticoDb db, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, IResolutorNombresUsuario nombres,
-    ICatalogoTiposTramite catalogo, IOptions<Trabajos.OpcionesRedaccion> redaccion)
+    ICatalogoTiposTramite catalogo, IOptions<Trabajos.OpcionesRedaccion> redaccion,
+    ILogger<LectorContenidoReporte> logger)
 {
     /// <summary>Texto de cada motivo de N/A (los mismos del detalle de celda de la interfaz).</summary>
     /// <remarks>Sale de <see cref="RotulosDiagnostico.MotivosNa"/> (punto 5): el mismo texto de <c>motivo_na_etiqueta</c> en la API.</remarks>
@@ -157,6 +166,11 @@ internal sealed class LectorContenidoReporte(
                 v.PropietarioDeclaradoDocTipo,
                 v.PropietarioDeclaradoDocCifrado,
                 v.CambioPropietario,
+                v.PropietarioDocTipo,
+                v.PropietarioDocCifrado,
+                v.LocatarioDocTipo,
+                v.LocatarioDocCifrado,
+                v.LocatarioDocOrigen,
             })
             .ToListAsync(ct).ConfigureAwait(false);
         var celdas = (await Celdas(cabecera, null).ToListAsync(ct).ConfigureAwait(false)).ToLookup(c => c.VehiculoId);
@@ -168,18 +182,52 @@ internal sealed class LectorContenidoReporte(
                 .ToListAsync(ct).ConfigureAwait(false))
             .ToLookup(p => p.VehiculoId);
         var encabezado = await EncabezadoAsync(cabecera, empresa, ct).ConfigureAwait(false);
+        var conRunt = Alcance.Agrupar(cabecera.Alcance).Fuentes.Contains(Fuente.Runt);
 
         return new ContenidoReporteLote(encabezado, [.. vehiculos.Select(f =>
         {
             var v = f.Identificacion;
-            // El declarado se descifra solo para enmascararlo (como las personas); el número en claro no llega al contenido.
+            // El declarado se descifra solo para enmascararlo (como las personas): el Excel no lo lleva en claro (no está en D3).
             var declarado = f.PropietarioDeclaradoDocTipo is { } tipo && f.PropietarioDeclaradoDocCifrado is { } cifrado
                 ? $"{tipo} {EnmascaradorDocumento.EnmascararCifrado(protector, cifrado)}"
                 : null;
+            // HU #14752 (D3, SP-1): el locatario solo si lo informó el RUNT (el declarado por el cliente no sale, como en las personas).
+            var delProveedor = f.LocatarioDocOrigen == OrigenDocumento.Proveedor;
+            var runtCompletado = conRunt ? celdas[v.Id].FirstOrDefault(c => c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado) : null;
+            var runt = runtCompletado is null ? null
+                : LectorDetalleRunt.LeerRespuesta(protectorRespuesta, runtCompletado.Cifrada) is { } respuesta ? DatosRuntExcel.Desde(respuesta) : null;
+            var locatarioTipo = delProveedor ? f.LocatarioDocTipo : null;
+            var locatarioNumero = delProveedor ? DescifrarParaExcel(f.LocatarioDocCifrado, v.Id, RolLocatario) : null;
+            var excel = new DatosExcelVehiculo(
+                f.PropietarioDocTipo, DescifrarParaExcel(f.PropietarioDocCifrado, v.Id, RolPropietario), locatarioTipo, locatarioNumero,
+                DatosExcelVehiculo.NombreDelLocatario(runt, locatarioTipo, locatarioNumero), runt, RuntSinDetalle: runtCompletado is not null && runt is null);
             return new VehiculoReporte(
                 v.Id, v.Orden, v.Identificador, CodigosDeEnum.Codigo(v.Tipo), v.Placa, v.Vin,
-                Secciones(cabecera, [.. celdas[v.Id]], [.. personas[v.Id]]), declarado, f.CambioPropietario);
+                Secciones(cabecera, [.. celdas[v.Id]], [.. personas[v.Id]]), declarado, f.CambioPropietario, excel);
         })]);
+    }
+
+    private const string RolPropietario = "PROPIETARIO";
+
+    private const string RolLocatario = "LOCATARIO";
+
+    /// <summary>
+    /// HU #14752 (SP-1, SP-7): el documento en claro, solo para el Excel del lote; null sin documento o si no se puede descifrar (la celda
+    /// sale vacía). El fallo se registra con el vehículo, el rol y el tipo de la excepción: nunca el valor ni el mensaje.
+    /// </summary>
+    private string? DescifrarParaExcel(byte[]? cifrado, Guid vehiculoId, string rol)
+    {
+        if (cifrado is null)
+            return null;
+        try
+        {
+            return protector.Desproteger(cifrado);
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException or ArgumentException or InvalidOperationException)
+        {
+            Catalogo.LogReportes.NoDescifradoExcel(logger, vehiculoId, rol, ex.GetType().Name);
+            return null;
+        }
     }
 
     /// <summary>La cabecera debe existir en la empresa del contexto: una de otra compañía pasada a mano no se lee (404).</summary>

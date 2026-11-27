@@ -26,6 +26,8 @@ using Grpc.Core;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 using Intempo = Flit.Consultas.Grpc.V1;
@@ -612,6 +614,69 @@ public sealed class ContenidoReporteTests
         LectorDetalleRunt.Leer(protector, protector.Proteger("""{"resultado":{"no":"es del contrato"}}""")).Should().BeNull();
     }
 
+    // HU #14752 SP-7 — el descifrado del documento del propietario falla con una excepción que cita PII: la celda sale vacía, el lote se
+    // genera (el Excel se escribe sin excepción) y el log (Warning NoDescifradoExcel) solo lleva el vehículo, el rol y el tipo de la
+    // excepción: ni el número, ni el nombre del locatario, ni el mensaje. El contenido del vehículo (PDF, VehiculoAsync) no cambia: no
+    // trae los datos del Excel.
+    [Fact]
+    public async Task HU14752_SP7_documento_no_descifrable_deja_la_celda_vacia_y_el_log_sin_pii()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt], vehiculos: [new("TST9F1", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        var celda = await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST9F1", Fuente.Runt), PayloadRunt.Replace("TST901", "TST9F1", StringComparison.Ordinal), ct);
+        await RespuestaFuenteTests.GuardarCifradaAsync(api, celda.Id, RespuestaFuenteTests.Cifrar(api, ProtoJson(ExcelLoteTests.RespuestaExcel("TST9F1"))), ct);
+        var real = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        byte[] ilegible = [0xBA, 0xD0, 0x01];
+        var vehiculo = lote.Vehiculos.Single().Id;
+        await using (var escritura = empresa.Db())
+        {
+            var fila = await escritura.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == vehiculo, ct);
+            fila.PropietarioDocTipo = "CC";
+            fila.PropietarioDocCifrado = ilegible;
+            fila.LocatarioDocTipo = "CC";
+            fila.LocatarioDocCifrado = real.Proteger("1098765432");
+            fila.LocatarioDocOrigen = OrigenDocumento.Proveedor;
+            await escritura.SaveChangesAsync(ct);
+        }
+
+        var captura = new Catalogo.CapturaLogs();
+        using var fabrica = LoggerFactory.Create(b => b.AddProvider(captura).SetMinimumLevel(LogLevel.Trace));
+        var protector = new ProtectorDocumentoQueFalla(real, ilegible, new InvalidOperationException("SECRETO 1055566677 LOCATARIO FICTICIO UNO"));
+        await using var db = empresa.Db();
+        var lector = Lector(api, db, new UsuariosIdentidadDePrueba(), protector: protector, logger: fabrica.CreateLogger<LectorContenidoReporte>());
+
+        var delLote = await lector.LoteAsync(Usuario(empresa.Id), lote.Id, ct);
+
+        var excel = delLote.Vehiculos.Single().Excel.Should().NotBeNull().And.Subject.As<DatosExcelVehiculo>();
+        excel.PropietarioTipo.Should().Be("CC");
+        excel.PropietarioNumero.Should().BeNull("no se pudo descifrar: la celda sale vacía");
+        excel.LocatarioNumero.Should().Be("1098765432");
+        excel.LocatarioNombre.Should().Be("LOCATARIO FICTICIO UNO");
+        var generar = () => Flit.Diagnostico.Api.Infraestructura.Excel.TabularWorkbookWriter.Write(
+            ExcelLote.Hojas(delLote, new Dictionary<Guid, DatosTecnicosVehiculo>(), null));
+        generar.Should().NotThrow();
+        var avisos = captura.Lineas.Where(l => l.Contains("Excel del lote", StringComparison.Ordinal)).ToList();
+        avisos.Should().ContainSingle().Which.Should().StartWith("Warning").And.Contain(vehiculo.ToString()).And.Contain("PROPIETARIO")
+            .And.Contain(nameof(InvalidOperationException));
+        captura.Lineas.Should().NotContain(l => l.Contains("1055566677", StringComparison.Ordinal) || l.Contains("1098765432", StringComparison.Ordinal)
+            || l.Contains("LOCATARIO FICTICIO", StringComparison.Ordinal) || l.Contains("SECRETO", StringComparison.Ordinal));
+
+        var delVehiculo = await Lector(api, db, new UsuariosIdentidadDePrueba()).VehiculoAsync(Usuario(empresa.Id), lote.Id, vehiculo, ct);
+        Texto(delVehiculo).Should().NotContainAny(["1098765432", "LOCATARIO FICTICIO UNO"], "el PDF no lee los datos del Excel");
+        delVehiculo.DetalleRunt!.GarantiasAFavor.Should().Contain(g => g.Acreedor == DetalleRuntGarantia.PersonaNatural, "el PDF sigue con «Persona natural»");
+    }
+
+    /// <summary>Protector de documentos que falla con <paramref name="error"/> al descifrar <paramref name="marca"/>; lo demás va al real.</summary>
+    private sealed class ProtectorDocumentoQueFalla(IProtectorDocumentoPersona real, byte[] marca, Exception error) : IProtectorDocumentoPersona
+    {
+        public byte[] Proteger(string numero) => real.Proteger(numero);
+
+        public string Desproteger(byte[] cifrado) => cifrado.AsSpan().SequenceEqual(marca) ? throw error : real.Desproteger(cifrado);
+    }
+
     /// <summary>Respuesta ENCONTRADO de core-consultas para un vehículo ficticio (placa ABC123), con datos de persona que no deben salir.</summary>
     internal static Intempo.ConsultarVehiculoIntempoResponse RespuestaRunt(string placa = "ABC123") => new()
     {
@@ -717,13 +782,14 @@ public sealed class ContenidoReporteTests
     }
 
     internal static LectorContenidoReporte Lector(
-        ApiDePrueba api, DiagnosticoDb db, UsuariosIdentidadDePrueba identidad, OpcionesRedaccion? redaccion = null)
+        ApiDePrueba api, DiagnosticoDb db, UsuariosIdentidadDePrueba identidad, OpcionesRedaccion? redaccion = null,
+        IProtectorDocumentoPersona? protector = null, ILogger<LectorContenidoReporte>? logger = null)
     {
         var scope = api.App.Services.CreateScope();
         return new LectorContenidoReporte(
-            db, api.App.Services.GetRequiredService<IProtectorDocumentoPersona>(), api.App.Services.GetRequiredService<IProtectorRespuestaFuente>(),
+            db, protector ?? api.App.Services.GetRequiredService<IProtectorDocumentoPersona>(), api.App.Services.GetRequiredService<IProtectorRespuestaFuente>(),
             identidad.Resolutor(), scope.ServiceProvider.GetRequiredService<ICatalogoTiposTramite>(),
-            Options.Create(redaccion ?? new OpcionesRedaccion()));
+            Options.Create(redaccion ?? new OpcionesRedaccion()), logger ?? NullLogger<LectorContenidoReporte>.Instance);
     }
 
     /// <summary>Quien pide: usuario de la empresa con <c>diagnosticos.ver</c> y el claim <c>company_name</c> ficticio.</summary>

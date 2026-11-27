@@ -12,6 +12,10 @@ internal static partial class LogReportes
     [LoggerMessage(Level = LogLevel.Warning, Message = "Documento no descifrable en el reporte {TipoReporte}: persona {PersonaId} ({Excepcion}); sale «No disponible».")]
     public static partial void NoDescifrado(ILogger logger, string tipoReporte, Guid? personaId, string excepcion);
 
+    /// <summary>HU #14752 (SP-7): un documento del Excel del lote que no se pudo descifrar; solo el vehículo, el rol y el tipo de la excepción.</summary>
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Documento no descifrable en el Excel del lote: vehículo {VehiculoId}, rol {Rol} ({Excepcion}); la celda sale vacía.")]
+    public static partial void NoDescifradoExcel(ILogger logger, Guid vehiculoId, string rol, string excepcion);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Exportación de {TipoReporte} {Formato} rechazada: {Filas} filas pasan el máximo de {Maximo}.")]
     public static partial void DemasiadoGrande(ILogger logger, string tipoReporte, string formato, int filas, int maximo);
 

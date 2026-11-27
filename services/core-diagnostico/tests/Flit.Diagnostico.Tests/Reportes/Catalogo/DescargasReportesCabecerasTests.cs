@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Tests.Aislamiento;
 using FluentAssertions;
 using Xunit;
@@ -64,5 +65,44 @@ public sealed partial class DescargasReportesCabecerasTests
         foreach (var pii in new[] { "RPT901", "9ZZDES00000000901", "8080808080" })
             logs.Lineas.Should().NotContain(l => l.Contains(pii, StringComparison.Ordinal), $"SP-9: «{pii}» no va a los logs de las exportaciones");
         logs.Lineas.Should().Contain(l => l.Contains("XLSX", StringComparison.Ordinal) && l.Contains("entregado", StringComparison.Ordinal));
+    }
+
+    // HU #14752 SP-8 / SP-5 — el Excel del lote (con PII en claro, D3) sale con no-store, Pragma: no-cache, nosniff y como adjunto
+    // diagnostico-{8}.xlsx (sin placa ni documento); sin diagnostico.reportes.descargar 403; con PROPIOS, el lote de otro usuario 404.
+    [Fact]
+    public async Task HU14752_excel_del_lote_cabeceras_permiso_y_visibilidad()
+    {
+        await using var api = await ReportesDePrueba.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var creador = ExcelDePrueba.Token(api, empresa.Id);
+        var otro = ExcelDePrueba.Token(api, empresa.Id);
+        var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, creador: Tablero.Tablero.Usuario(creador), alcance: [Fuente.Runt],
+            vehiculos: [new("RPT951", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(), """{"placa":"RPT951","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
+
+        var respuesta = await api.Cliente(creador).GetAsync(ExcelDePrueba.Ruta(lote.Id), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await ExcelDePrueba.CuerpoSiNoEsExcel(respuesta, ct));
+        respuesta.Content.Headers.ContentType!.MediaType.Should().Be(ExcelDePrueba.ContentType);
+        respuesta.Headers.CacheControl!.NoStore.Should().BeTrue();
+        respuesta.Headers.Pragma.ToString().Should().Be("no-cache");
+        respuesta.Headers.GetValues("X-Content-Type-Options").Should().Equal("nosniff");
+        var disposicion = respuesta.Content.Headers.ContentDisposition!;
+        disposicion.DispositionType.Should().Be("attachment");
+        disposicion.FileName!.Trim('"').Should().Be($"diagnostico-{lote.Id.ToString()[..8]}.xlsx").And.NotContain("RPT951");
+
+        var soloVer = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer], roles: ["usuario_diagnostico"]);
+        (await api.Cliente(soloVer).GetAsync(ExcelDePrueba.Ruta(lote.Id), ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        await using (var db = empresa.Db())
+        {
+            db.Add(new Flit.Diagnostico.Api.Modulos.Configuracion.ConfiguracionEmpresa { VisibilidadUsuario = Flit.Diagnostico.Domain.Configuracion.VisibilidadUsuario.Propios });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var ajeno = await api.Cliente(otro).GetAsync(ExcelDePrueba.Ruta(lote.Id), ct);
+        ajeno.StatusCode.Should().Be(HttpStatusCode.NotFound, "PROPIOS: el lote es de otro usuario");
+        (await ajeno.Content.ReadAsStringAsync(ct)).Should().NotContain("RPT951");
     }
 }

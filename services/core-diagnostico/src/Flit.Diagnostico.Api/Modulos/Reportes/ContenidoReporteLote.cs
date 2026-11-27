@@ -5,8 +5,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// <summary>
 /// Contenido del Excel del lote (HU #13847, F07-H2; columnas de F07-H4): la hoja de identificación (<see cref="Encabezado"/>) y
 /// un <see cref="VehiculoReporte"/> por vehículo, en el orden de la carga, con las mismas secciones que el PDF de cada uno
-/// (<see cref="ContenidoReporteVehiculo"/>). Tipo cerrado, sin origen, usuario manual, proveedor, transacción, payload ni
-/// documentos completos (R-20).
+/// (<see cref="ContenidoReporteVehiculo"/>). Tipo cerrado, sin origen, usuario manual, proveedor, transacción ni payload (R-20). El
+/// Excel lleva en claro solo lo de D3 (ADR-0076, enmienda 2026-11-27), en <see cref="VehiculoReporte.Excel"/>; el resto, enmascarado.
 /// </summary>
 /// <example>
 /// <code>
@@ -18,7 +18,8 @@ public sealed record ContenidoReporteLote(EncabezadoLoteReporte Encabezado, IRea
 {
     /// <summary>
     /// Lo que sale en el Excel y no viene de las celdas ni de la cabecera (para <see cref="EntradaHuella.Encabezado"/>): los textos
-    /// de la hoja de identificación, la identificación de cada vehículo y cada persona enmascarada.
+    /// de la hoja de identificación, la identificación de cada vehículo y cada persona enmascarada. HU #14752 (SP-2): no lee
+    /// <see cref="VehiculoReporte.Excel"/>; ningún dato en claro entra a la huella.
     /// </summary>
     public IReadOnlyDictionary<string, string?> ParaHuella()
     {
@@ -64,7 +65,8 @@ public sealed record EncabezadoLoteReporte(
 /// <summary>
 /// Un vehículo del lote en el Excel: su id (para casar con su PDF en el ZIP), orden, identificación y secciones. HU #14582 (§1.3):
 /// <paramref name="PropietarioDeclarado"/> es el propietario actual declarado ya enmascarado («TIPO ****1234», null sin declarado) y
-/// <paramref name="CambioPropietario"/> el valor persistido de <c>cambio_propietario</c> (no se recalcula al leer, SP-1).
+/// <paramref name="CambioPropietario"/> el valor persistido de <c>cambio_propietario</c> (no se recalcula al leer, SP-1). HU #14752:
+/// <paramref name="Excel"/> trae lo que solo el Excel del lote lleva en claro (D3); null en el PDF y en el ZIP.
 /// </summary>
 public sealed record VehiculoReporte(
     Guid VehiculoId,
@@ -75,4 +77,5 @@ public sealed record VehiculoReporte(
     string? Vin,
     IReadOnlyList<SeccionReporte> Secciones,
     string? PropietarioDeclarado = null,
-    bool? CambioPropietario = null);
+    bool? CambioPropietario = null,
+    DatosExcelVehiculo? Excel = null);
