@@ -36,6 +36,12 @@ public sealed class OtClientProcedureResponse
     /// al asignar; no obliga (puede asignar una placa que termine en otro dígito).</summary>
     public string? PlatePreferredLastDigit { get; init; }
 
+    /// <summary>HU #14743 — el gestor decidió explícitamente el dígito (incluye «sin preferencia»).</summary>
+    public bool PlatePreferredLastDigitDeclared { get; init; }
+
+    /// <summary>HU #14743 — Ruta Corta: la placa vino del RUNT (source 'consultation'), aunque ya tenga placa.</summary>
+    public bool PlacaRutaCorta { get; init; }
+
     /// <summary>Check opcional del gestor al «Enviar al OT»; badge en el dashboard OT en <c>entregado</c>.</summary>
     public bool SoatPagado { get; init; }
 
@@ -259,6 +265,8 @@ internal static class OtClientProcedureMapper
             PlateUpdatedAt = procedure.PlateUpdatedAt,
             SoatEstado = procedure.SoatEstado,
             PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,
+            PlatePreferredLastDigitDeclared = procedure.PlatePreferredLastDigitDeclared,
+            PlacaRutaCorta = procedure.PlacaRutaCorta,
             SoatPagado = procedure.SoatPagado,
             ImpuestoDepartamentalPagado = procedure.ImpuestoDepartamentalPagado,
             TransitOfficeId = procedure.TransitOfficeId,
