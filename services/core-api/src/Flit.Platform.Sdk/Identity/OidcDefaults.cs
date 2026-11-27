@@ -22,6 +22,15 @@ public static class OidcDefaults
         ["platform.identidad.empresas"] = ServiceAudiences.Plataforma,
         // ADR-0092: entrega de la API key del impuesto a svc-consultas.
         ["platform.identidad.credenciales.impuesto"] = ServiceAudiences.Plataforma,
+        // HU #14694 (ADR-0093): datos del alta en el proveedor, copia de la llave de Diagnóstico al aprovisionar y reporte del
+        // estado de aprovisionamiento. Los atiende core-identity (solo svc-impuestos).
+        ["platform.identidad.empresas.alta"] = ServiceAudiences.Plataforma,
+        ["platform.identidad.credenciales.impuesto.copia"] = ServiceAudiences.Plataforma,
+        // HU #14694 (M04b, D-ALTA-IDEM): reemplazo de la llave de Diagnóstico cuando el alta del proveedor la rota.
+        ["platform.identidad.credenciales.impuesto.actualizar"] = ServiceAudiences.Plataforma,
+        // HU #14711: secreto del webhook del impuesto para svc-consultas (verifica los avisos del proveedor).
+        ["platform.identidad.credenciales.impuesto.webhook"] = ServiceAudiences.Plataforma,
+        ["platform.aprovisionamiento.reportar"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).
         ["platform.consultas.admin"] = ServiceAudiences.Consultas,
@@ -38,6 +47,9 @@ public static class OidcDefaults
         // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; los atiende core-api (solo svc-diagnostico).
         ["platform.usuarios.diagnostico"] = ServiceAudiences.Tramites,
         ["platform.usuarios.diagnostico.conteos"] = ServiceAudiences.Tramites,
+        // HU #14694: usuarios de Impuestos gestionados desde el producto; los atiende core-api (solo svc-impuestos).
+        ["platform.usuarios.impuestos"] = ServiceAudiences.Tramites,
+        ["platform.usuarios.impuestos.conteos"] = ServiceAudiences.Tramites,
         // ADR-0091: configuración de IA y llave sellada del redactor de Diagnóstico; la atiende core-api (solo svc-diagnostico).
         ["platform.ia.diagnostico"] = ServiceAudiences.Tramites,
         // HU #14050 (Épica #14021): lectura por pull de las solicitudes radicadas en core-personanatural (la usa core-api, svc-tramites).

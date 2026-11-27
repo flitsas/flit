@@ -61,7 +61,8 @@ public sealed class SolicitudVirtualPdfGeneratorTests
         doc.Tipo.Should().Be("tramite_virtual");
         doc.Mimetype.Should().Be("application/pdf");
         doc.Content.Should().NotBeEmpty();
-        doc.Filename.Should().StartWith("solicitud_tramite_virtual_");
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf
+        doc.Filename.Should().Be("tramite_virtual_REF-2026-1_ABC123.pdf");
     }
 
     [Fact]

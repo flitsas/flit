@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 
 namespace Flit.Tramites.Application.Documents;
 
@@ -32,8 +33,9 @@ public sealed class MockIdentityCertificateGenerator : IIdentityCertificateGener
         sb.AppendLine();
         sb.AppendLine($"Generado (mock): {DateTimeOffset.UtcNow:O}");
 
-        var safeRef = data.ReferenceNumber.Replace('/', '-');
-        var filename = $"certificado_identidad_{safeRef}.txt";
+        // HU #14735 — mismo patrón {tipo}_{radicado}_{placa} que el generador real; el mock conserva .txt.
+        var filename = Path.ChangeExtension(
+            NombreDocumentoTramite.Generar("certificado_identidad", data.ReferenceNumber, data.Placa), ".txt");
         var bytes = Encoding.UTF8.GetBytes(sb.ToString());
         return new GeneratedDocument("certificado_identidad", filename, "text/plain", bytes);
     }

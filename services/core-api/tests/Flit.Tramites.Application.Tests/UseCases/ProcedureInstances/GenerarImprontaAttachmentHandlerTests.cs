@@ -280,6 +280,8 @@ public sealed class GenerarImprontaAttachmentHandlerTests
         _client.LastRequest!.Placa.Should().Be("abc123");
         _client.LastRequest!.Vin.Should().BeNull();
         _client.LastRequest!.Documento.Should().Be("222");
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf (placa del field value, en mayúsculas)
+        instance.Attachments.Single(x => x.Tipo == "impronta").Filename.Should().Be("impronta_TRM-2026-000001_ABC123.pdf");
     }
 
     [Fact]

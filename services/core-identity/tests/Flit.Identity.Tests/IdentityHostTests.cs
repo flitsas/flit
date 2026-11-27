@@ -43,7 +43,9 @@ public sealed class IdentityHostTests : IClassFixture<IdentityHostTests.Host>
             .Select(t => t.Name);
 
         // HU #13359: core-identity publica sus correos por su outbox siempre (OutboxPublisherService del SDK).
-        flitHostedServices.Should().BeEquivalentTo(["OidcClientSync", "OidcPruningService", "OutboxPublisherService`1"]);
+        // HU #14711: el trabajador del alta automática de diagnostico está apagado por defecto (Platform:ImpuestoProveedor:TrabajadorActivo).
+        flitHostedServices.Should().BeEquivalentTo(
+            ["OidcClientSync", "OidcPruningService", "OutboxPublisherService`1"]);
     }
 
     [Fact]

@@ -1207,7 +1207,7 @@ select t.id, t.tax_id, p.enabled from identity.tenants t
   3. Corre S3 con `TST205`.
 - **Resultado esperado:**
   - Chip **«No aplica»** con «Servicio público».
-  - El detalle dice «El vehículo es de servicio público: esta consulta no aplica.».
+  - El detalle dice «Vehículo de servicio público: no paga impuesto vehicular».
   - No hay botón «Reprocesar».
   - S3 no tiene intentos del impuesto.
   - Si la pila no se puede preparar, anota «Bloqueado».

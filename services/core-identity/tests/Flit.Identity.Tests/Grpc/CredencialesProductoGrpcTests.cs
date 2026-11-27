@@ -28,6 +28,7 @@ namespace Flit.Identity.Tests.Grpc;
 public sealed class CredencialesProductoGrpcTests
 {
     private const string Centinela = "llave-impuesto-CENTINELA-0123456789";
+    private const string LlaveNueva = "llave-rotada-CENTINELA-NUEVA-0123456789";
     private static readonly Guid Empresa = Guid.NewGuid();
     private static readonly Guid Cabeza = Guid.NewGuid();
 
@@ -47,7 +48,20 @@ public sealed class CredencialesProductoGrpcTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private CredencialesProductoGrpcService Servicio() =>
-        new(new GetTenantProductCredentialHandler(_acceso, _credenciales, _protector), _logger);
+        new(
+            new GetTenantProductCredentialHandler(_acceso, _credenciales, _protector),
+            new GetTenantProductCredentialForCopyHandler(_credenciales, _protector),
+            new UpdateTenantProductCredentialFromServiceHandler(_credenciales, _protector),
+            new GetTenantProductWebhookSecretHandler(_acceso, _credenciales, _protector, new RelojFijo(AhoraWebhook)),
+            _logger);
+
+    private static Task<ActualizarCredencialImpuestoDiagnosticoResponse> Actualizar(
+        CredencialesProductoGrpcService servicio, string apiKey = LlaveNueva, string cliente = "svc-impuestos", Guid? empresa = null) =>
+        servicio.ActualizarCredencialImpuestoDiagnostico(
+            new ActualizarCredencialImpuestoDiagnosticoRequest { ApiKey = apiKey }, new Contexto(cliente, empresa ?? Empresa, Ct));
+
+    private static Task<ObtenerCredencialImpuestoParaCopiaResponse> Copiar(CredencialesProductoGrpcService servicio, string cliente = "svc-impuestos", Guid? empresa = null) =>
+        servicio.ObtenerCredencialImpuestoParaCopia(new ObtenerCredencialImpuestoParaCopiaRequest(), new Contexto(cliente, empresa ?? Empresa, Ct));
 
     private static Task<ObtenerCredencialImpuestoResponse> Llamar(CredencialesProductoGrpcService servicio, string cliente = "svc-consultas", Guid? empresa = null) =>
         servicio.ObtenerCredencialImpuesto(new ObtenerCredencialImpuestoRequest(), new Contexto(cliente, empresa ?? Empresa, Ct));
@@ -121,6 +135,7 @@ public sealed class CredencialesProductoGrpcTests
     [Theory]
     [InlineData("svc-diagnostico")]
     [InlineData("svc-tramites")]
+    [InlineData("svc-impuestos")] // HU #14694: svc-impuestos solo tiene el rpc de copia
     public async Task OtroCliente_PermissionDenied_ClienteNoPermitido(string cliente)
     {
         var act = () => Llamar(Servicio(), cliente);
@@ -194,6 +209,327 @@ public sealed class CredencialesProductoGrpcTests
         _credenciales.Fila!.ToString().Should().NotContain("cifrado-opaco");
     }
 
+    // ── HU #14694 — ObtenerCredencialImpuestoParaCopia (D-CRED-DIAG, DA-3 residual) ───────────────────────────────
+
+    [Fact]
+    public async Task Copia_SvcImpuestos_RecibeLaLlaveAunqueDiagnosticoEsteApagado_YSeAudita()
+    {
+        _acceso.Encendidas = [];
+
+        var r = await Copiar(Servicio());
+
+        r.Existe.Should().BeTrue();
+        r.ApiKey.Should().Be(Centinela);
+        r.Version.Should().Be(7);
+        _credenciales.LecturasParaCopia.Should().Equal((Empresa, "diagnostico", "impuesto_api_key", "svc-impuestos", true));
+        _logger.Entradas.Should().ContainSingle(e => e.Texto.Contains("impuesto.credencial.copia.entregada", StringComparison.Ordinal));
+        _logger.Entradas.Should().OnlyContain(e => !e.Texto.Contains(Centinela, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Copia_SinFila_ExisteFalse_Version0_SinDescifrar_YTambienSeAudita()
+    {
+        _credenciales.Fila = null;
+
+        var r = await Copiar(Servicio());
+
+        r.Existe.Should().BeFalse();
+        r.ApiKey.Should().BeEmpty();
+        r.Version.Should().Be(0);
+        _protector.Descifrados.Should().BeEmpty();
+        _credenciales.LecturasParaCopia.Should().Equal((Empresa, "diagnostico", "impuesto_api_key", "svc-impuestos", false));
+    }
+
+    [Theory]
+    [InlineData("svc-consultas")]
+    [InlineData("svc-diagnostico")]
+    public async Task Copia_OtroCliente_PermissionDenied_ClienteNoPermitido_SinLeer(string cliente)
+    {
+        var act = () => Copiar(Servicio(), cliente);
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        PlatformRpcErrors.Reason(ex).Should().Be("CLIENTE_NO_PERMITIDO");
+        _credenciales.Consultas.Should().BeEmpty();
+        _credenciales.LecturasParaCopia.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Copia_SinEmpresa_InvalidArgument()
+    {
+        var act = () => Copiar(Servicio(), empresa: Guid.Empty);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        _credenciales.LecturasParaCopia.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Copia_ErrorInesperado_InternalGenerico_SinLaLlave()
+    {
+        _protector.Falla = new CryptographicException($"detalle interno {Centinela}");
+
+        var act = () => Copiar(Servicio());
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.Internal);
+        ex.Status.Detail.Should().NotContain(Centinela);
+        _logger.Entradas.Should().OnlyContain(e => !e.Texto.Contains(Centinela, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CadaRpc_ExigeSuScope_ElDeCopiaNoAbreLaEntregaAConsultas()
+    {
+        const string Servicio = "/flit.identidad.v1.CredencialesProductoService/";
+
+        ServiceTokenPorMetodoInterceptor.Requisito(Servicio + "ObtenerCredencialImpuestoParaCopia", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be(("platform.identidad.credenciales.impuesto.copia", true));
+        ServiceTokenPorMetodoInterceptor.Requisito(Servicio + "ObtenerCredencialImpuesto", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be((CredencialesProductoGrpcService.Scope, true));
+        CredencialesProductoGrpcService.ScopeCopia.Should().Be("platform.identidad.credenciales.impuesto.copia");
+    }
+
+    // ── HU #14694 (M04b, D-ALTA-IDEM) — ActualizarCredencialImpuestoDiagnostico ────────────────────────────────────
+
+    [Fact]
+    public async Task Actualizar_SvcImpuestos_ConFila_ReemplazaCifrada_YAuditaConElCliente_SinLaLlaveEnLogs()
+    {
+        _acceso.Encendidas = [];
+
+        var r = await Actualizar(Servicio());
+
+        r.Actualizada.Should().BeTrue("hay fila diagnostico/impuesto_api_key; no depende de que Diagnóstico esté encendido");
+        _protector.Cifrados.Should().Equal((Empresa, "impuesto_api_key", LlaveNueva));
+        _credenciales.Reemplazos.Should().Equal((Empresa, "diagnostico", "impuesto_api_key", "cifrado:" + LlaveNueva, "svc-impuestos"));
+        _logger.Entradas.Should().ContainSingle(e => e.Texto.Contains("impuesto.credencial.diagnostico.actualizada", StringComparison.Ordinal));
+        _logger.Entradas.Should().OnlyContain(e => !e.Texto.Contains(LlaveNueva, StringComparison.Ordinal) && !e.Texto.Contains(Centinela, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Actualizar_SinFila_ActualizadaFalse_NoCrea()
+    {
+        _credenciales.Fila = null;
+
+        var r = await Actualizar(Servicio());
+
+        r.Actualizada.Should().BeFalse();
+        _credenciales.Reemplazos.Should().ContainSingle("el repositorio decide sin fila y no crea");
+        _credenciales.Creadas.Should().Be(0);
+        _logger.Entradas.Should().ContainSingle(e => e.Texto.Contains("impuesto.credencial.diagnostico.sin_fila", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("svc-consultas")]
+    [InlineData("svc-diagnostico")]
+    public async Task Actualizar_OtroCliente_PermissionDenied_SinEscribir(string cliente)
+    {
+        var act = () => Actualizar(Servicio(), cliente: cliente);
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        PlatformRpcErrors.Reason(ex).Should().Be("CLIENTE_NO_PERMITIDO");
+        _credenciales.Reemplazos.Should().BeEmpty();
+        _protector.Cifrados.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Actualizar_SinEmpresa_InvalidArgument()
+    {
+        var act = () => Actualizar(Servicio(), empresa: Guid.Empty);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        _credenciales.Reemplazos.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("corta")]
+    [InlineData("llave con espacios 0123456789")]
+    public async Task Actualizar_LlaveInvalida_InvalidArgument_CredencialInvalida_SinEscribir(string llave)
+    {
+        var act = () => Actualizar(Servicio(), apiKey: llave);
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        PlatformRpcErrors.Reason(ex).Should().Be("CREDENCIAL_INVALIDA");
+        _credenciales.Reemplazos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Actualizar_ErrorInesperado_InternalGenerico_SinLaLlave()
+    {
+        _credenciales.FallaReemplazo = new InvalidOperationException($"detalle interno {LlaveNueva}");
+
+        var act = () => Actualizar(Servicio());
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.Internal);
+        ex.Status.Detail.Should().NotContain(LlaveNueva);
+        _logger.Entradas.Should().OnlyContain(e => !e.Texto.Contains(LlaveNueva, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Actualizar_ExigeSuScopePropio_ConEmpresa()
+    {
+        ServiceTokenPorMetodoInterceptor.Requisito(
+                "/flit.identidad.v1.CredencialesProductoService/ActualizarCredencialImpuestoDiagnostico", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be(("platform.identidad.credenciales.impuesto.actualizar", true));
+        CredencialesProductoGrpcService.ScopeActualizar.Should().Be("platform.identidad.credenciales.impuesto.actualizar");
+    }
+
+    // ── HU #14711 — ObtenerSecretoWebhookImpuesto ─────────────────────────────────────────────────────────────────────
+
+    private const string SecretoActual = "whsec_CENTINELA_actual_0123456789"; // gitleaks:allow
+    private const string SecretoAnterior = "whsec_CENTINELA_anterior_0123456789"; // gitleaks:allow
+    private static readonly DateTimeOffset AhoraWebhook = new(2026, 11, 25, 15, 0, 0, TimeSpan.Zero);
+
+    private void ConSecretos(bool anteriorVigente)
+    {
+        _credenciales.PorCodigo["impuesto_webhook_secret"] =
+            new TenantProductCredential(Empresa, "diagnostico", "impuesto_webhook_secret", "cifrado-actual", RowVersion: 12, AhoraWebhook.AddDays(-1));
+        _credenciales.PorCodigo["impuesto_webhook_secret_anterior"] = new TenantProductCredential(
+            Empresa, "diagnostico", "impuesto_webhook_secret_anterior", "cifrado-anterior", RowVersion: 2,
+            anteriorVigente ? AhoraWebhook.AddHours(-2) : AhoraWebhook.AddHours(-30));
+        _protector.PlanoPorCodigo["impuesto_webhook_secret"] = SecretoActual;
+        _protector.PlanoPorCodigo["impuesto_webhook_secret_anterior"] = SecretoAnterior;
+    }
+
+    private static Task<ObtenerSecretoWebhookImpuestoResponse> SecretoWebhook(
+        CredencialesProductoGrpcService servicio, string cliente = "svc-consultas", Guid? empresa = null) =>
+        servicio.ObtenerSecretoWebhookImpuesto(new ObtenerSecretoWebhookImpuestoRequest(), new Contexto(cliente, empresa ?? Empresa, Ct));
+
+    private bool SinSecretosEnLogs() =>
+        _logger.Entradas.All(e => !e.Texto.Contains(SecretoActual, StringComparison.Ordinal)
+            && !e.Texto.Contains(SecretoAnterior, StringComparison.Ordinal)
+            && e.Campos.All(c => c.Value == null
+                || (!c.Value.Contains(SecretoActual, StringComparison.Ordinal) && !c.Value.Contains(SecretoAnterior, StringComparison.Ordinal))));
+
+    [Fact]
+    public async Task SecretoWebhook_SvcConsultas_EntregaActualAnteriorVigenteYVersion_SinSecretosEnLogs()
+    {
+        ConSecretos(anteriorVigente: true);
+
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeTrue();
+        r.Actual.Should().Be(SecretoActual);
+        r.Anterior.Should().Be(SecretoAnterior);
+        r.AnteriorVenceEn.ToDateTimeOffset().Should().Be(AhoraWebhook.AddHours(22));
+        r.Version.Should().Be(12);
+        _logger.Entradas.Should().ContainSingle(e => e.Texto.Contains("impuesto.webhook.secreto.entregado", StringComparison.Ordinal));
+        SinSecretosEnLogs().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_AnteriorVencido_SoloElActual_SinVencimiento()
+    {
+        ConSecretos(anteriorVigente: false);
+
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeTrue();
+        r.Actual.Should().Be(SecretoActual);
+        r.Anterior.Should().BeEmpty();
+        r.AnteriorVenceEn.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_SinSecreto_NoConfigurado_Version0()
+    {
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeFalse();
+        r.Actual.Should().BeEmpty();
+        r.Anterior.Should().BeEmpty();
+        r.Version.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_DiagnosticoApagado_NoConfigurado_SinDescifrar()
+    {
+        ConSecretos(anteriorVigente: true);
+        _acceso.Encendidas = [Cabeza];
+
+        var r = await SecretoWebhook(Servicio());
+
+        r.Configurado.Should().BeFalse();
+        r.Actual.Should().BeEmpty();
+        _protector.Descifrados.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task M4_SecretoWebhook_SinConfigurar_EsInformationConEventoPropio_NoDenegacion()
+    {
+        await SecretoWebhook(Servicio());
+
+        _logger.Entradas.Should().ContainSingle(e => e.Nivel == LogLevel.Information
+            && e.Texto.Contains("impuesto.webhook.secreto.sin_configurar", StringComparison.Ordinal));
+        _logger.Entradas.Should().NotContain(e => e.Nivel == LogLevel.Warning);
+        _logger.Entradas.Should().NotContain(e => e.Texto.Contains("impuesto.webhook.secreto.denegado", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task M4_SecretoWebhook_ProductoApagado_SigueComoDenegacionWarning()
+    {
+        ConSecretos(anteriorVigente: true);
+        _acceso.Encendidas = [Cabeza];
+
+        await SecretoWebhook(Servicio());
+
+        _logger.Entradas.Should().ContainSingle(e => e.Nivel == LogLevel.Warning
+            && e.Texto.Contains("impuesto.webhook.secreto.denegado", StringComparison.Ordinal)
+            && e.Texto.Contains("motivo=ProductoApagado", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("svc-impuestos")]
+    [InlineData("svc-diagnostico")]
+    public async Task SecretoWebhook_OtroCliente_PermissionDenied_SinLeer(string cliente)
+    {
+        ConSecretos(anteriorVigente: true);
+
+        var act = () => SecretoWebhook(Servicio(), cliente);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        _protector.Descifrados.Should().BeEmpty();
+        _credenciales.Consultas.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_SinEmpresa_InvalidArgument()
+    {
+        var act = () => SecretoWebhook(Servicio(), empresa: Guid.Empty);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+    }
+
+    [Fact]
+    public async Task SecretoWebhook_ErrorInesperado_InternalGenerico_SinSecretos()
+    {
+        ConSecretos(anteriorVigente: true);
+        _protector.Falla = new InvalidOperationException("detalle " + SecretoActual);
+
+        var act = () => SecretoWebhook(Servicio());
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.Internal);
+        ex.Status.Detail.Should().NotContain(SecretoActual);
+        SinSecretosEnLogs().Should().BeTrue();
+    }
+
+    [Fact]
+    public void SecretoWebhook_ExigeSuScopePropio_ConEmpresa()
+    {
+        ServiceTokenPorMetodoInterceptor.Requisito(
+                "/flit.identidad.v1.CredencialesProductoService/ObtenerSecretoWebhookImpuesto", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be(("platform.identidad.credenciales.impuesto.webhook", true));
+        CredencialesProductoGrpcService.ScopeWebhook.Should().Be("platform.identidad.credenciales.impuesto.webhook");
+    }
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
     private static ClaimsPrincipal Usuario(string sub, string aud, string scope) =>
         new(new ClaimsIdentity([new Claim("sub", sub), new Claim("aud", aud), new Claim("scope", scope)], "Bearer"));
 
@@ -216,11 +552,16 @@ public sealed class CredencialesProductoGrpcTests
     {
         public TenantProductCredential? Fila { get; set; }
 
+        /// <summary>HU #14711: filas de los secretos del webhook, por código (la llave sigue en <see cref="Fila"/>).</summary>
+        public Dictionary<string, TenantProductCredential> PorCodigo { get; } = new(StringComparer.Ordinal);
+
         public List<(Guid, string, string)> Consultas { get; } = [];
 
         public Task<TenantProductCredential?> GetAsync(Guid tenantId, string productCode, string credentialCode, CancellationToken cancellationToken = default)
         {
             Consultas.Add((tenantId, productCode, credentialCode));
+            if (credentialCode.StartsWith("impuesto_webhook_secret", StringComparison.Ordinal))
+                return Task.FromResult(PorCodigo.TryGetValue(credentialCode, out var s) && s.TenantId == tenantId ? s : null);
             return Task.FromResult(Fila is { } f && f.TenantId == tenantId ? f : null);
         }
 
@@ -232,24 +573,63 @@ public sealed class CredencialesProductoGrpcTests
 
         public Task<bool> DeleteAsync(Guid tenantId, string productCode, string credentialCode, Guid? changedBy, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public List<(Guid, string, string, string, bool)> LecturasParaCopia { get; } = [];
+
+        public Task RegistrarLecturaParaCopiaAsync(Guid tenantId, string productCode, string credentialCode, string lector, bool existe, CancellationToken cancellationToken = default)
+        {
+            LecturasParaCopia.Add((tenantId, productCode, credentialCode, lector, existe));
+            return Task.CompletedTask;
+        }
+
+        public List<(Guid, string, string, string, string)> Reemplazos { get; } = [];
+
+        public int Creadas { get; private set; }
+
+        public Exception? FallaReemplazo { get; set; }
+
+        public Task<bool> ReplaceExistingFromServiceAsync(Guid tenantId, string productCode, string credentialCode, string secretProtected, string servicio, CancellationToken cancellationToken = default)
+        {
+            if (FallaReemplazo is not null)
+                throw FallaReemplazo;
+            Reemplazos.Add((tenantId, productCode, credentialCode, secretProtected, servicio));
+            return Task.FromResult(Fila is { } f && f.TenantId == tenantId);
+        }
+
+        // HU #14711: el alta del proveedor no pasa por estos rpc.
+        public Task<DateTimeOffset> GuardarAltaProveedorAsync(
+            Guid tenantId, string productCode, IReadOnlyList<EscrituraCredencialAlta> escrituras, string motivo, Guid? changedBy,
+            Action<DateTimeOffset>? antesDeGuardar, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task RegistrarAuditoriaAltaProveedorAsync(
+            Guid tenantId, string productCode, string resultado, bool exito, Guid? changedBy, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class Protector : ITenantProductSecretProtector
     {
         public string Plano { get; set; } = string.Empty;
 
+        public Dictionary<string, string> PlanoPorCodigo { get; } = new(StringComparer.Ordinal);
+
         public Exception? Falla { get; set; }
 
         public List<(Guid, string, string)> Descifrados { get; } = [];
 
-        public string Protect(Guid tenantId, string credentialCode, string value) => throw new NotSupportedException();
+        public List<(Guid, string, string)> Cifrados { get; } = [];
+
+        public string Protect(Guid tenantId, string credentialCode, string value)
+        {
+            Cifrados.Add((tenantId, credentialCode, value));
+            return "cifrado:" + value;
+        }
 
         public string Unprotect(Guid tenantId, string credentialCode, string protectedValue)
         {
             if (Falla is not null)
                 throw Falla;
             Descifrados.Add((tenantId, credentialCode, protectedValue));
-            return Plano;
+            return PlanoPorCodigo.TryGetValue(credentialCode, out var plano) ? plano : Plano;
         }
     }
 

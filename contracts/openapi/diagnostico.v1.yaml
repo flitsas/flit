@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.6.1"
+  version: "1.6.2"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -74,6 +74,11 @@ info:
     (Diagnostico:Redaccion:Habilitado), estado_redaccion es PENDIENTE y redaccion_disponible_desde no es nula, el mismo
     predicado de la toma de la cola. Al agotar los reintentos la cola deja la fecha nula y el campo pasa a false.
     No se exponen intentos, lease ni fecha de toma.
+
+    Versión 1.6.2 (decisión del usuario 2026-11-26): sin cambio de forma. Un vehículo de servicio público no paga impuesto:
+    la celda IMPUESTO_DEPARTAMENTAL queda en NA con motivo_na SERVICIO_PUBLICO (código sin cambios) también al volver a
+    publicarse o al reprocesarse, sin consultar al proveedor. Su motivo_na_etiqueta pasa a
+    «Vehículo de servicio público: no paga impuesto vehicular».
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -6137,7 +6142,7 @@ components:
           type: string
           nullable: true
           description: Punto 5 (2026-11-11). Texto de negocio del motivo de N/A; null cuando motivo_na es null.
-          example: "El vehículo es de servicio público: esta consulta no aplica."
+          example: "Vehículo de servicio público: no paga impuesto vehicular"
         tipo_error:
           type: string
           nullable: true
@@ -7942,7 +7947,7 @@ components:
             desde: { type: string, format: date }
             hasta: { type: string, format: date }
             granularidad: { type: string, enum: [DIA, SEMANA, MES], description: "DIA hasta 62 días, SEMANA (cubeta desde el lunes) hasta 183, si no MES." }
-        generado_en: { type: string, format: date-time, description: ISO 8601 con offset (-05:00). }
+        generado_en: { type: string, format: date-time, description: "ISO 8601 con offset (-05:00)." }
         resumen: { $ref: "#/components/schemas/ResumenEstadisticas" }
         serie:
           type: array

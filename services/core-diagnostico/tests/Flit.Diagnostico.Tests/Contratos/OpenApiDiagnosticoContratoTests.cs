@@ -27,7 +27,10 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.6.1\"", "HU #14582 sube a 1.6.0 (propietario actual declarado)");
+        info.Should().Contain("version: \"1.6.2\"", "HU #14582 sube a 1.6.0 (propietario actual declarado); 1.6.2 cambia el texto de SERVICIO_PUBLICO");
+        info.Should().Contain("Versión 1.6.2").And.Contain("SERVICIO_PUBLICO").And.Contain("«Vehículo de servicio público: no paga impuesto vehicular»");
+        Yaml.Value.Should().NotContain("esta consulta no aplica", "el ejemplo de motivo_na_etiqueta usa el texto nuevo")
+            .And.Contain("example: \"Vehículo de servicio público: no paga impuesto vehicular\"");
         info.Should().Contain("Versión 1.3.1").And.Contain("backoffice_diagnostico").And.Contain("SuperAdmin");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
         Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
@@ -184,7 +187,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void BE0_version_1_5_0_con_rutas_esquemas_y_codigos_de_estadisticas_y_reportes()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.1\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
+        info.Should().Contain("version: \"1.6.2\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
         var paths = Bloque("paths:", sangria: 0).Split('\n');
         foreach (var ruta in RutasEstadisticasYReportes)
             paths.Should().Contain("  /api/v1/diagnostico" + ruta, $"el contrato declara {ruta}");
@@ -273,7 +276,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU14582_version_1_6_0_propietario_declarado_y_cambio_propietario()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.1\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
+        info.Should().Contain("version: \"1.6.2\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
 
         var fila = Bloque("FilaVehiculo:", sangria: 4);
         fila.Should().Contain("required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, cambio_propietario]");
@@ -303,7 +306,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU14587_usuarios_de_Diagnostico_en_la_version_1_6_0()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.1\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
+        info.Should().Contain("version: \"1.6.2\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
 
         string[] rutas =
         [
@@ -362,7 +365,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU2_version_1_6_1_redaccion_en_cola_requerido_en_el_dictamen()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.1\"").And.Contain("Versión 1.6.1").And.Contain("redaccion_en_cola");
+        info.Should().Contain("version: \"1.6.2\"").And.Contain("Versión 1.6.1").And.Contain("redaccion_en_cola");
         foreach (var esquema in new[] { "DictamenVehiculo:", "DictamenVehiculoBackoffice:" })
         {
             var bloque = Bloque(esquema, sangria: 4);

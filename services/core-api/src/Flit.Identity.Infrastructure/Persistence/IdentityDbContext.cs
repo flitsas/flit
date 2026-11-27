@@ -54,6 +54,9 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
 
     public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
 
+    // HU #14694 (ADR-0093, DDL 205): estado de aprovisionamiento que reportan los productos (rpc ReportarEstadoAprovisionamiento).
+    public DbSet<TenantProductProvisioningEntity> TenantProductProvisionings => Set<TenantProductProvisioningEntity>();
+
     DbSet<NotificationDeliveryLogEntity> IIdentityDb.NotificationDeliveryLogs => Set<NotificationDeliveryLogEntity>();
 
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();

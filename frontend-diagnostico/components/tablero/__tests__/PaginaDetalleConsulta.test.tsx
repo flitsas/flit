@@ -392,7 +392,7 @@ describe("PaginaDetalleConsulta — sin resultado no hay campos", () => {
 
   it("Novedad: lo dice con su motivo y no pinta campos", async () => {
     const { pagina } = await pintarDetalle(impuestoNa("SERVICIO_PUBLICO"));
-    expect(respuesta(pagina)).toHaveTextContent("El vehículo es de servicio público: esta consulta no aplica.");
+    expect(respuesta(pagina)).toHaveTextContent("Vehículo de servicio público: no paga impuesto vehicular");
     expect(within(respuesta(pagina)).queryByRole("table")).not.toBeInTheDocument();
   });
 

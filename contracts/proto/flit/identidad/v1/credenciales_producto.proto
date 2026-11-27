@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package flit.identidad.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option csharp_namespace = "Flit.Identidad.Grpc.V1";
 
 // Credenciales de un producto por empresa para el servicio que llama a un tercero en su nombre (ADR-0092).
@@ -10,16 +12,67 @@ option csharp_namespace = "Flit.Identidad.Grpc.V1";
 // Autenticación (ADR-0070, contrato §3):
 //   - authorization: token de servicio con aud=plataforma y scope platform.identidad.credenciales.impuesto.
 //   - x-flit-tenant-id: OBLIGATORIA; la empresa del sobre del trabajo. Sin ella INVALID_ARGUMENT.
-//   - Solo el cliente svc-consultas. Otro sub -> PERMISSION_DENIED reason CLIENTE_NO_PERMITIDO.
+//   - Cada rpc tiene su cliente y su scope (abajo). Otro sub -> PERMISSION_DENIED reason CLIENTE_NO_PERMITIDO.
 // Canal h2c interno: la llave viaja en claro dentro de la red de contenedores (riesgo aceptado en ADR-0092, pendiente
 // aval de Seguridad). El campo 6 queda libre para un sobre flit.platform.v1.LlaveCifrada si Seguridad lo exige.
 // core-identity NUNCA escribe la llave en logs. Errores con google.rpc.ErrorInfo (domain flitsas.com).
 service CredencialesProductoService {
+  // Solo svc-consultas, scope platform.identidad.credenciales.impuesto.
   // Idempotente y sin efectos. Fail-closed: con Diagnóstico apagado para la empresa o algún ancestro, disponible=false.
   rpc ObtenerCredencialImpuesto(ObtenerCredencialImpuestoRequest) returns (ObtenerCredencialImpuestoResponse);
+
+  // Solo svc-impuestos, scope platform.identidad.credenciales.impuesto.copia (ADR-0093, DA-2=b, DA-3 residual).
+  // Devuelve el par diagnostico/impuesto_api_key AUNQUE Diagnóstico esté apagado para la empresa o un ancestro: lo usa
+  // core-impuestos una sola vez, al aprovisionar, para copiar la llave a su propio almacén (D-CRED-DIAG). Sin efectos
+  // sobre la credencial de Diagnóstico. Cada llamada queda en admin.tenant_config_audit_logs (sin valor ni huella).
+  rpc ObtenerCredencialImpuestoParaCopia(ObtenerCredencialImpuestoParaCopiaRequest) returns (ObtenerCredencialImpuestoParaCopiaResponse);
+
+  // Solo svc-impuestos, scope platform.identidad.credenciales.impuesto.actualizar (HU #14694, D-ALTA-IDEM, plan §5.8).
+  // El alta del proveedor respondió api_key_rotated=true: la llave anterior de la empresa ya no sirve y core-impuestos
+  // propaga la nueva a Diagnóstico. Solo REEMPLAZA una fila diagnostico/impuesto_api_key que ya existe para la empresa;
+  // nunca la crea (actualizada = false sin fila). No mira si Diagnóstico está encendido. Idempotente: repetir con la misma
+  // llave deja el mismo valor. Cada reemplazo queda en admin.tenant_config_audit_logs (sin valor ni huella, con el cliente).
+  // Llave con forma inválida -> INVALID_ARGUMENT reason CREDENCIAL_INVALIDA (no se reintenta).
+  rpc ActualizarCredencialImpuestoDiagnostico(ActualizarCredencialImpuestoDiagnosticoRequest) returns (ActualizarCredencialImpuestoDiagnosticoResponse);
+
+  // Solo svc-consultas, scope platform.identidad.credenciales.impuesto.webhook (HU #14711, plan §3.2).
+  // El secreto del webhook del proveedor de impuesto de la empresa (diagnostico/impuesto_webhook_secret), con el que
+  // core-consultas verifica la firma de los avisos, y el anterior mientras siga vigente (24 h desde su rotación).
+  // Idempotente y sin efectos. Fail-closed como ObtenerCredencialImpuesto: con Diagnóstico apagado para la empresa o algún
+  // ancestro, o sin secreto, configurado=false. core-identity NUNCA escribe los secretos en logs.
+  rpc ObtenerSecretoWebhookImpuesto(ObtenerSecretoWebhookImpuestoRequest) returns (ObtenerSecretoWebhookImpuestoResponse);
+}
+
+// La empresa va en la metadata x-flit-tenant-id.
+message ObtenerSecretoWebhookImpuestoRequest {}
+
+message ObtenerSecretoWebhookImpuestoResponse {
+  bool configurado = 1;                                // false => sin secreto o Diagnóstico apagado: no se pide aviso
+  string actual = 2;                                   // solo con configurado = true (secreto completo, con su prefijo whsec_)
+  string anterior = 3;                                 // vacío si no hay anterior o ya venció
+  google.protobuf.Timestamp anterior_vence_en = 4;     // solo con anterior
+  int64 version = 5;                                   // row_version del secreto actual; 0 sin secreto. Versión de la caché
+}
+
+// La empresa va en la metadata x-flit-tenant-id. api_key: la nueva llave del impuesto (texto visible, 16 a 256 caracteres).
+message ActualizarCredencialImpuestoDiagnosticoRequest {
+  string api_key = 1;
+}
+
+message ActualizarCredencialImpuestoDiagnosticoResponse {
+  bool actualizada = 1;  // false => no hay fila diagnostico/impuesto_api_key para la empresa (no se crea)
 }
 
 message ObtenerCredencialImpuestoRequest {}
+
+// La empresa va en la metadata x-flit-tenant-id.
+message ObtenerCredencialImpuestoParaCopiaRequest {}
+
+message ObtenerCredencialImpuestoParaCopiaResponse {
+  bool existe = 1;     // false => no hay fila diagnostico/impuesto_api_key para la empresa
+  string api_key = 2;  // solo con existe = true
+  int64 version = 3;   // row_version de la fila; 0 sin fila
+}
 
 message ObtenerCredencialImpuestoResponse {
   bool disponible = 1;                    // false => el consumidor NO llama a la fuente

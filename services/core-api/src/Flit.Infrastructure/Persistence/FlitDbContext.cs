@@ -3,6 +3,7 @@ using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Integrations;
+using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
@@ -217,6 +218,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Suspensión de un usuario en UN producto (ADR-0089, HU #14587): la cuenta y los demás productos no cambian.
     public DbSet<ProductRoleSuspensionEntity> ProductRoleSuspensions => Set<ProductRoleSuspensionEntity>();
+
+    // Estado de aprovisionamiento por empresa y producto que reporta el servicio del producto (HU #14694, ADR-0093, DDL 205).
+    public DbSet<TenantProductProvisioningEntity> TenantProductProvisionings => Set<TenantProductProvisioningEntity>();
 
     // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
     public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();

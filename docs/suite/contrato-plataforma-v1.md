@@ -32,6 +32,7 @@
 | `tramites` | Trámites | `tramites.flitsas.online` | `qa.tramites.flitsas.online` | `dev.tramites.flitsas.online` |
 | `comparendos` | Comparendos | `comparendos.flitsas.online` | `qa.comparendos.flitsas.online` | `dev.comparendos.flitsas.online` |
 | `diagnostico` | Diagnóstico | `diagnostico.flitsas.online` | `qa.diagnostico.flitsas.online` | `dev.diagnostico.flitsas.online` |
+| `impuestos` | Impuestos (HU #14694, ADR-0093) | `impuestos.flitsas.online` | `qa.impuestos.flitsas.online` | `dev.impuestos.flitsas.online` |
 
 - El código es el mismo en carpeta (`core-<código>`, `frontend-<código>`), schema, `aud` del token, roles y aplicación de Argo CD. Excepción histórica: Trámites vive en `services/core-api` y `frontend/`.
 - La API para integradores sigue en `api.<ambiente>.flitsas.online` (`api.flitsas.online` en PDN).
@@ -94,6 +95,20 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 | `platform.notificaciones.admin` | `notificaciones` | Administrar los mensajes muertos de Notificaciones (listar, reintentar, descartar); lo usa core-api para la consola del SuperAdmin |
 | `platform.tramites.ict` | `tramites` | Las llamadas de ICT a la orquestación de Trámites, que hoy usan un secreto compartido |
 | `platform.tramites.catalogos` | `tramites` | Leer catálogos de la plataforma que atiende `core-api` (hoy, los organismos de tránsito para la réplica de Comparendos) |
+| `platform.identidad.empresas.alta` | `plataforma` | HU #14694 (ADR-0093). Datos del alta de una empresa en el proveedor de Impuestos (`EmpresasService.ObtenerDatosAltaProveedor`); solo `svc-impuestos` |
+| `platform.identidad.credenciales.impuesto.copia` | `plataforma` | HU #14694. Copiar la llave del impuesto de Diagnóstico al aprovisionar Impuestos, aunque Diagnóstico esté apagado (`CredencialesProductoService.ObtenerCredencialImpuestoParaCopia`, auditado); solo `svc-impuestos` |
+| `platform.identidad.credenciales.impuesto.actualizar` | `plataforma` | HU #14694 (M04b, D-ALTA-IDEM). Reemplazar la llave del impuesto de Diagnóstico cuando el alta del proveedor la rota (`CredencialesProductoService.ActualizarCredencialImpuestoDiagnostico`, auditado; solo reemplaza una fila existente, nunca la crea); solo `svc-impuestos` |
+| `platform.identidad.credenciales.impuesto.webhook` | `plataforma` | HU #14711. Leer el secreto del webhook del proveedor de impuesto de la empresa (el actual y el anterior mientras siga vigente) para verificar los avisos (`CredencialesProductoService.ObtenerSecretoWebhookImpuesto`, fail-closed con Diagnóstico apagado); solo `svc-consultas` |
+| `platform.aprovisionamiento.reportar` | `plataforma` | HU #14694. Reportar el estado de aprovisionamiento del producto para el admin de compañías (`AprovisionamientoProductoService`); solo `svc-impuestos` |
+| `platform.usuarios.impuestos`, `platform.usuarios.impuestos.conteos` | `tramites` | HU #14694. Usuarios de Impuestos gestionados desde el producto (`flit.platform.v1.UsuariosProductoService` de `core-api`), como los de Diagnóstico (ADR-0089); solo `svc-impuestos` |
+| `platform.identidad.empresas` | `plataforma` | Listado de empresas con un producto encendido (`EmpresasService`), solo para el servicio que lo pide. Lo usan `svc-comparendos`, `svc-diagnostico` y `svc-impuestos` (estaba en `OidcDefaults` sin fila en esta tabla) |
+
+- Cliente `svc-impuestos` (HU #14694, gate G-5 del plan de Impuestos): `platform.manifest`, `platform.identidad.read`,
+  `platform.identidad.empresas`, `platform.identidad.empresas.alta`, `platform.identidad.credenciales.impuesto.copia`,
+  `platform.identidad.credenciales.impuesto.actualizar`, `platform.aprovisionamiento.reportar`, `platform.consultas`, `platform.tramites.catalogos`, `platform.usuarios.impuestos`
+  y `platform.usuarios.impuestos.conteos` (`Suite:Oidc:ServiceClients` de `core-api`). Secreto por ambiente en
+  `SVC_IMPUESTOS_CLIENT_SECRET`, el mismo en core-api/core-identity y en core-impuestos. El gRPC propio del servicio
+  (`flit.impuestos.v1.ImpuestosService`) todavía no tiene scope publicado aquí: no se expone hasta que se fije.
 
 - Cuando una llamada de servicio actúa por una empresa, envía la empresa en `X-Flit-Tenant-Id` (REST) o en la metadata `x-flit-tenant-id` (gRPC). El destino lo acepta **solo** con token de servicio válido y lo registra en la traza. Un token de usuario nunca puede usar esa cabecera.
 
@@ -293,6 +308,11 @@ Puertos nuevos, siguiendo el esquema actual (DEV y local `40xx`, QA `50xx`, PDN 
 | Comparendos (`frontend-comparendos`) | 4023 | 5023 | 6023 |
 | Diagnóstico (`frontend-diagnostico`) | 4024 | 5024 | 6024 |
 | `core-identity` | 4025 | 5025 | 6025 |
+| Impuestos (`frontend-impuestos`, HU #14694) | 4034 | 5034 | 6034 |
+| `core-impuestos` (interno, sin publicar; gRPC 8089) | 4033 | 5033 | 6033 |
+
+Los de Impuestos quedan fuera del bloque `x022`–`x025` porque estaba lleno; están **propuestos** (gate G-4 del plan de
+Impuestos) hasta que el líder los confirme en `docs/despliegue-y-puertos.md` §2.d.
 
 El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 

@@ -19,6 +19,9 @@ on:
       - 'services/core-diagnostico/Dockerfile'
       - 'services/core-diagnostico/src/Flit.Diagnostico.Api/ServicioSettings.cs'
       - 'frontend-diagnostico/Dockerfile'
+      - 'services/core-impuestos/Dockerfile'
+      - 'services/core-impuestos/src/Flit.Impuestos.Api/ServicioSettings.cs'
+      - 'frontend-impuestos/Dockerfile'
   pull_request:
     branches: [develop]
     paths:
@@ -33,6 +36,9 @@ on:
       - 'services/core-diagnostico/Dockerfile'
       - 'services/core-diagnostico/src/Flit.Diagnostico.Api/ServicioSettings.cs'
       - 'frontend-diagnostico/Dockerfile'
+      - 'services/core-impuestos/Dockerfile'
+      - 'services/core-impuestos/src/Flit.Impuestos.Api/ServicioSettings.cs'
+      - 'frontend-impuestos/Dockerfile'
 
 jobs:
   validar:
@@ -66,4 +72,10 @@ jobs:
           servicios=$(docker compose -f docker-compose.prod.yml --profile diagnostico config --services)
           for svc in core-diagnostico frontend-diagnostico; do
             echo "$servicios" | grep -qx "$svc" || { echo "::error::el perfil diagnostico no resuelve $svc"; exit 1; }
+          done
+          # HU #14694 (M20b): el perfil impuestos resuelve con sus dos servicios.
+          docker compose -f docker-compose.prod.yml --profile impuestos config --quiet
+          servicios=$(docker compose -f docker-compose.prod.yml --profile impuestos config --services)
+          for svc in core-impuestos frontend-impuestos; do
+            echo "$servicios" | grep -qx "$svc" || { echo "::error::el perfil impuestos no resuelve $svc"; exit 1; }
           done

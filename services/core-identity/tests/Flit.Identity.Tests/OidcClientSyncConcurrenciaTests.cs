@@ -53,6 +53,26 @@ public sealed class OidcClientSyncConcurrenciaTests : IClassFixture<OidcClientSy
         }
     }
 
+    /// <summary>
+    /// HU #14694 (plan §8): con <c>ProductCodes.Impuestos</c> en el catálogo, el arranque registra el cliente OIDC del
+    /// producto (<c>client_id</c> = <c>impuestos</c>) con su retorno <c>/auth/callback</c>.
+    /// </summary>
+    [Fact]
+    public async Task Sincronizacion_RegistraElClienteDelProductoImpuestos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sync = _host.Services.GetServices<IHostedService>().OfType<OidcClientSync>().Single();
+
+        await sync.StartAsync(ct);
+
+        await using var scope = _host.Services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        var app = await manager.FindByClientIdAsync("impuestos", ct);
+        app.Should().NotBeNull("el cliente del producto Impuestos queda registrado al sincronizar");
+        var retornos = await manager.GetRedirectUrisAsync(app!, ct);
+        retornos.Should().ContainSingle(u => new Uri(u).AbsolutePath == "/auth/callback");
+    }
+
     private async Task BorrarClienteAsync(string clientId, CancellationToken ct)
     {
         // El host también sincroniza este cliente al arrancar: si lo actualizó entre leer y borrar, se vuelve a leer y se reintenta.

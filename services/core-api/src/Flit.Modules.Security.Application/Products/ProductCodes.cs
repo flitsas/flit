@@ -29,7 +29,13 @@ public static class ProductCodes
     /// </summary>
     public const string Caja = "caja";
 
+    /// <summary>
+    /// Impuestos (<c>impuestos.flitsas.online</c>, HU #14694, ADR-0093): liquidación del impuesto vehicular por placa y
+    /// masiva. Su servicio es <c>core-impuestos</c> y es el único producto con aprovisionamiento en el proveedor.
+    /// </summary>
+    public const string Impuestos = "impuestos";
+
     /// <summary>Todos los códigos: los de v1 en el orden del contrato §1 y, al final, los agregados después.</summary>
     public static IReadOnlyList<string> All { get; } =
-        [Plataforma, Tramites, Comparendos, Diagnostico, Caja];
+        [Plataforma, Tramites, Comparendos, Diagnostico, Caja, Impuestos];
 }

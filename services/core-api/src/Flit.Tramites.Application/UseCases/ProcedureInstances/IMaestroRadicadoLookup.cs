@@ -72,18 +72,24 @@ public static class MaestroRadicadoFijo
 
         var radicado = instance.Attachments.FirstOrDefault(a => a.Id == id);
         if (radicado is not null)
-            return (true, Servir(radicado, ConsolidadoEntregaModos.RadicadoFijo, definitivo), null);
+            return (true, Servir(radicado, ConsolidadoEntregaModos.RadicadoFijo, definitivo, instance), null);
 
         var existente = ConsolidadoEntregaModos.Existente(instance, RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro);
         return existente is null
             ? (true, null, EntregarConsolidadoHandler.ConsolidadoNoGenerado)
-            : (true, Servir(existente, ConsolidadoEntregaModos.SoloLectura, definitivo), null);
+            : (true, Servir(existente, ConsolidadoEntregaModos.SoloLectura, definitivo, instance), null);
     }
 
     internal static GenerarConsolidadoResult Servir(
-        Domain.Entities.ProcedureInstanceAttachment adjunto, string modo, bool definitivo) =>
+        Domain.Entities.ProcedureInstanceAttachment adjunto,
+        string modo,
+        bool definitivo,
+        Domain.Entities.ProcedureInstance? instance = null) =>
         new(
-            new ConsolidadoDocumentDto(adjunto.Id, adjunto.Tipo, adjunto.Filename, adjunto.Sha256),
+            // Épica #14657 — con la instancia a mano, el nombre de entrega (generado por FLIT → con placa).
+            instance is null
+                ? new ConsolidadoDocumentDto(adjunto.Id, adjunto.Tipo, adjunto.Filename, adjunto.Sha256)
+                : Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaDocumento(adjunto, instance),
             Regenerado: false,
             DefinitivoPorEstadoFinal: definitivo,
             Modo: modo);

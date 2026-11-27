@@ -69,6 +69,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         Use(_client, "SuperAdmin", Guid.NewGuid());
 
+        // BLOQ-1 (a, HU #14694): `impuestos` nace inactivo en el catálogo; no sale hasta activarlo en el ambiente.
         (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
     }
 
@@ -86,7 +87,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
             where a.UserId == _adminId && a.TenantId == _tenantId && a.DeletedAt == null
             select r.Code).ToListAsync(TestContext.Current.CancellationToken);
 
-        roles.Should().BeEquivalentTo("AdminCompany", "admin_tramites", "admin_comparendos", "admin_diagnostico");
+        roles.Should().BeEquivalentTo("AdminCompany", "admin_tramites", "admin_comparendos", "admin_diagnostico", "admin_impuestos");
     }
 
     [Fact]
@@ -145,6 +146,8 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     [Theory]
     [InlineData("flotas", HttpStatusCode.NotFound, "PRODUCT_NOT_FOUND")]
     [InlineData("plataforma", HttpStatusCode.BadRequest, "PRODUCT_ALWAYS_ON")]
+    // BLOQ-1 (a, HU #14694): `impuestos` nace inactivo en el catálogo (DDL 205) hasta activarlo en el ambiente.
+    [InlineData("impuestos", HttpStatusCode.Conflict, "PRODUCT_INACTIVE")]
     public async Task SuperAdmin_ProductoInvalido_ErrorConCodigo(string product, HttpStatusCode status, string code)
     {
         Use(_client, "SuperAdmin", Guid.NewGuid());

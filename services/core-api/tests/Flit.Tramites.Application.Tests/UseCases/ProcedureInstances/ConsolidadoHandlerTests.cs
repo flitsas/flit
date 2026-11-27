@@ -620,6 +620,25 @@ public sealed class ConsolidadoHandlerTests
         await _repo.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("abc123", "consolidado_TRM-2026-000099_ABC123.pdf")]
+    [InlineData(null, "consolidado_TRM-2026-000099_SIN-PLACA.pdf")]
+    public async Task HU14735_Regenera_NombreEstandarTipoRadicadoPlaca(string? placa, string esperado)
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.Plate = placa;
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, userId: null, force: true, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Document.Filename.Should().Be(esperado);
+    }
+
     // ── HU #12158 (AC2) — un consolidado Source="user" no se sobrescribe con la regeneración
     // automática/del gestor, ni siquiera con force=true. Solo bypassSourceUserProtection=true (la
     // acción explícita "Limpiar consolidado" del admin, HU #12158 AC1) puede descartarlo. ──────────

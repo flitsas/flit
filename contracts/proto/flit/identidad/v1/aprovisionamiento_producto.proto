@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package flit.identidad.v1;
+
+option csharp_namespace = "Flit.Identidad.Grpc.V1";
+
+// Estado de aprovisionamiento de un producto por empresa que el servicio del producto reporta a la plataforma, para
+// que el admin de compañías lo muestre (ADR-0093, plan docs/impuestos/plan-implementacion.md §1.2 decisión R1). Lo
+// atiende core-identity, que lo guarda en platform.tenant_product_provisioning (DDL 205).
+//
+// Autenticación (ADR-0070, contrato §3):
+//   - authorization: token de servicio con aud=plataforma y scope platform.aprovisionamiento.reportar.
+//   - x-flit-tenant-id: OBLIGATORIA; la empresa del estado. Sin ella INVALID_ARGUMENT.
+//   - El producto sale del token (svc-<código> -> <código>), nunca del mensaje. Hoy solo svc-impuestos; otro sub ->
+//     PERMISSION_DENIED reason CLIENTE_NO_PERMITIDO. Un producto sin aprovisionamiento -> FAILED_PRECONDITION.
+// Errores con google.rpc.ErrorInfo (domain flitsas.com). Sin datos personales ni secretos en el mensaje.
+service AprovisionamientoProductoService {
+  // Idempotente por versión: solo guarda si `version` es mayor que la guardada. Una versión igual o menor no cambia
+  // nada y responde aplicado=false con la versión vigente (no es error).
+  rpc ReportarEstadoAprovisionamiento(ReportarEstadoAprovisionamientoRequest) returns (ReportarEstadoAprovisionamientoResponse);
+}
+
+message ReportarEstadoAprovisionamientoRequest {
+  // Estado del producto para la empresa. En impuestos: PENDIENTE, LISTO, LISTO_SIN_WEBHOOK, ERROR, INCIERTO,
+  // REQUIERE_CREDENCIALES, REQUIERE_REVISION_NIT o SUSPENDIDO (plan §3.1). Obligatorio, hasta 32 caracteres.
+  string estado = 1;
+  // Código estable del motivo (contracts/openapi/impuestos.v1.yaml, MotivoAprovisionamiento). Vacío = sin motivo.
+  string motivo_codigo = 2;
+  // Texto para el Super Admin, hasta 300 caracteres. Sin secretos ni datos personales. Vacío = sin mensaje.
+  string mensaje = 3;
+  // Acción disponible: REINTENTAR, CARGAR_SECRETO, CARGAR_CREDENCIALES o CORREGIR_NIT. Vacío = ninguna.
+  string accion = 4;
+  // Solo cuenta en LISTO: false mientras no llegue el primer webhook con firma válida («Firma sin confirmar»).
+  bool firma_confirmada = 5;
+  // Versión monotónica del estado en el servicio del producto. Mayor o igual a 1.
+  int64 version = 6;
+}
+
+message ReportarEstadoAprovisionamientoResponse {
+  // true si se guardó este reporte; false si ya había una versión igual o mayor.
+  bool aplicado = 1;
+  // Versión que queda guardada tras la llamada.
+  int64 version_guardada = 2;
+}

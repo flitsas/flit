@@ -8,6 +8,7 @@ using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Tests.Aislamiento;
@@ -270,6 +271,60 @@ public sealed class EjecutorCeldaImpuestoTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         (celda.Estado, celda.MotivoNa, celda.Payload).Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.DepartamentoNoSoportado, (string?)null));
         (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Select(i => i.TipoError).Should().Equal(["TIMEOUT"], "la N/A no deja otro intento ni consumo");
+    }
+
+    // Decisión del usuario 2026-11-26 — un vehículo de servicio público no paga impuesto: si al volver a publicar la celda el
+    // servicio del RUNT es «Público», queda N/A SERVICIO_PUBLICO sin otra llamada al proveedor ni otro intento.
+    [Fact]
+    public async Task Servicio_publico_al_republicar_queda_NA_SERVICIO_PUBLICO_sin_llamar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        var grpc = new ImpuestoGrpcFalso();
+        await using var api = await ArrancarAsync(b =>
+        {
+            b.Services.AddSingleton<TimeProvider>(reloj);
+            grpc.RegistrarAdaptadorReal(b);
+        }, ct);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
+        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1);
+        grpc.Falla = StatusCode.DeadlineExceeded;
+        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "el impuesto responde TIMEOUT y queda su reintento");
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.DiagnosticoId == lote, ct);
+            vehiculo.Servicio = "Público";
+            await db.SaveChangesAsync(ct);
+        }
+
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
+        await MotorRunt.ProcesarTodoAsync(procesador, ct);
+
+        grpc.Llamadas.Should().ContainSingle("la republicación de un vehículo público no llama al proveedor");
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
+        (celda.Estado, celda.MotivoNa, celda.TipoError, celda.Payload)
+            .Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.ServicioPublico, (string?)null, (string?)null));
+        (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Select(i => i.TipoError).Should().Equal(["TIMEOUT"], "la N/A no deja otro intento ni consumo");
+    }
+
+    // Decisión del usuario 2026-11-26 — servicio particular: la consulta sale igual que antes y lleva el servicio del RUNT.
+    [Fact]
+    public async Task Servicio_particular_sigue_consultando_al_proveedor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var grpc = new ImpuestoGrpcFalso();
+        await using var api = await ArrancarAsync(grpc.RegistrarAdaptadorReal, ct);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
+
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
+
+        grpc.Llamadas.Should().ContainSingle();
+        (await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct)).Estado.Should().Be(EstadoCelda.Completado);
     }
 
     // Decisión del usuario 2026-11-23 (la API decide la cobertura) — core-consultas responde OK con el chequeo

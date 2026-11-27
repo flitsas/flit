@@ -54,6 +54,14 @@ export function resolverFuenteMaestroOt(
   };
 }
 
+/**
+ * Épica #14657 — el nombre de un documento generado lo calcula el servidor
+ * (`{tipo}_{radicado}_{placa}.pdf`, `SIN-PLACA` si no hay) y llega en `document.filename` /
+ * `Content-Disposition`. Este genérico solo cubre el caso en que el cliente aún no conoce el
+ * adjunto (maestro radicado abierto por id): la descarga real usa el nombre del servidor.
+ */
+export const NOMBRE_GENERICO_CONSOLIDADO = 'consolidado.pdf';
+
 /** HU #12787 (AC2) — título del aviso de maestro radicado. */
 export const COPY_MAESTRO_RADICADO_TITULO = 'Versión radicada en Quipux';
 

@@ -36,6 +36,9 @@ env:
   # HU #13734 (F00.1-H8): Diagnóstico, API y app web (perfil «diagnostico» del compose).
   CORE_DIAGNOSTICO_IMAGE: ghcr.io/flitsas/flitdev/core-diagnostico
   FRONTEND_DIAGNOSTICO_IMAGE: ghcr.io/flitsas/flitdev/frontend-diagnostico
+  # HU #14694 (ADR-0093): Impuestos, API y app web (perfil «impuestos» del compose).
+  CORE_IMPUESTOS_IMAGE: ghcr.io/flitsas/flitdev/core-impuestos
+  FRONTEND_IMPUESTOS_IMAGE: ghcr.io/flitsas/flitdev/frontend-impuestos
 
 # runs-on: la variable de repo RUNNER (p. ej. flit-ci = runners propios de la 177) mueve estos jobs fuera de GitHub;
 # sin ella siguen en ubuntu-latest.
@@ -64,6 +67,8 @@ jobs:
       core_comparendos_port: ${{ steps.env.outputs.core_comparendos_port }}
       diagnostico_port: ${{ steps.env.outputs.diagnostico_port }}
       core_diagnostico_port: ${{ steps.env.outputs.core_diagnostico_port }}
+      impuestos_port: ${{ steps.env.outputs.impuestos_port }}
+      core_impuestos_port: ${{ steps.env.outputs.core_impuestos_port }}
       suite_env: ${{ steps.env.outputs.suite_env }}
       tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       personanatural_origin: ${{ steps.env.outputs.personanatural_origin }}
@@ -94,6 +99,7 @@ jobs:
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6022; identity_port=6025
               comparendos_port=6023; core_comparendos_port=6028
               diagnostico_port=6024; core_diagnostico_port=6032
+              impuestos_port=6034; core_impuestos_port=6033
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
               tramites_domain=tramites.flitsas.com
@@ -108,6 +114,7 @@ jobs:
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5022; identity_port=5025
               comparendos_port=5023; core_comparendos_port=5028
               diagnostico_port=5024; core_diagnostico_port=5032
+              impuestos_port=5034; core_impuestos_port=5033
               suite_env=qa
               tramites_domain=qa.tramites.flitsas.online
               personanatural_origin=https://qa.personas.flitsas.online
@@ -122,6 +129,7 @@ jobs:
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4022; identity_port=4025
               comparendos_port=4023; core_comparendos_port=4028
               diagnostico_port=4024; core_diagnostico_port=4032
+              impuestos_port=4034; core_impuestos_port=4033
               suite_env=dev
               tramites_domain=dev.tramites.flitsas.online
               personanatural_origin=https://dev.personas.flitsas.online
@@ -160,6 +168,8 @@ jobs:
             echo "core_comparendos_port=$core_comparendos_port"
             echo "diagnostico_port=$diagnostico_port"
             echo "core_diagnostico_port=$core_diagnostico_port"
+            echo "impuestos_port=$impuestos_port"
+            echo "core_impuestos_port=$core_impuestos_port"
             echo "suite_env=$suite_env"
             echo "tramites_domain=$tramites_domain"
             # Solo DEV y QA lo definen; en PDN queda vacío (sin dominio del portal todavía).
@@ -730,6 +740,97 @@ jobs:
           cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-diagnostico' || '' }}
           cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-diagnostico' || '' }}
 
+  # HU #14694 (ADR-0093): core-impuestos (perfil «impuestos»; ver docs/suite/servicio-nuevo.md).
+  build-core-impuestos:
+    name: Build & push core-impuestos (.NET) image
+    needs: setup
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
+          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
+          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_IMPUESTOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-impuestos
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Tramites.Grpc.Contracts
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            services/core-identity/src/Flit.Identidad.Grpc.Contracts
+            services/core-consultas/Directory.Build.props
+            services/core-consultas/Directory.Packages.props
+            services/core-consultas/src/Flit.Consultas.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-impuestos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_IMPUESTOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-impuestos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK de plataforma y sus contratos (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-impuestos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-impuestos' || '' }}
+          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-impuestos' || '' }}
+
 
   # Epic #13316 (HU #13353): core-notificaciones (perfil «notificaciones»; ver docs/suite/servicio-nuevo.md).
   build-core-notificaciones:
@@ -1182,6 +1283,91 @@ jobs:
           cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend-diagnostico' || '' }}
           cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend-diagnostico' || '' }}
 
+  # HU #14694 (ADR-0093): app web de Impuestos (misma receta que el hub: config en runtime, sin build-args).
+  build-frontend-impuestos:
+    name: Build & push frontend-impuestos image
+    needs: setup
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
+          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
+          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_IMPUESTOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-impuestos
+            packages/ui
+            packages/brand
+            packages/auth
+            packages/shell
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
+      - name: Extract metadata — frontend-impuestos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMPUESTOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-impuestos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-impuestos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend-impuestos' || '' }}
+          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend-impuestos' || '' }}
+
   # Epic #14021 (HU #14052): app web del portal Persona Natural (config en runtime, sin build-args).
   # Mismo criterio que core-personanatural: digest en GitOps solo si la kustomization ya lista la imagen.
   build-frontend-personanatural:
@@ -1442,7 +1628,7 @@ jobs:
   # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
   deploy-gitops:
     name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-core-diagnostico, build-frontend-diagnostico, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-core-diagnostico, build-frontend-diagnostico, build-core-impuestos, build-frontend-impuestos, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
@@ -1480,6 +1666,10 @@ jobs:
       D_CORE_DIAGNOSTICO: ${{ needs.build-core-diagnostico.outputs.digest }}
       R_FRONTEND_DIAGNOSTICO: ${{ needs.build-frontend-diagnostico.result }}
       D_FRONTEND_DIAGNOSTICO: ${{ needs.build-frontend-diagnostico.outputs.digest }}
+      R_CORE_IMPUESTOS: ${{ needs.build-core-impuestos.result }}
+      D_CORE_IMPUESTOS: ${{ needs.build-core-impuestos.outputs.digest }}
+      R_FRONTEND_IMPUESTOS: ${{ needs.build-frontend-impuestos.result }}
+      D_FRONTEND_IMPUESTOS: ${{ needs.build-frontend-impuestos.outputs.digest }}
       R_PYTHON_ML: ${{ needs.build-python-ml.result }}
       D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
@@ -1515,7 +1705,7 @@ jobs:
           FAILED=""
           MSG=""
           # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
-          # Persona Natural y Diagnóstico: si la imagen aún no está en la kustomization del ambiente (QA/PDN), se omite
+          # Persona Natural, Diagnóstico e Impuestos: si la imagen aún no está en la kustomization del ambiente, se omite
           # sin fallar — el producto se enciende por ambiente (DEV primero).
           for entry in \
               "core-api:${{ env.CORE_API_IMAGE }}:CORE_API" \
@@ -1531,6 +1721,8 @@ jobs:
               "frontend-personanatural:${{ env.FRONTEND_PERSONANATURAL_IMAGE }}:FRONTEND_PERSONANATURAL" \
               "core-diagnostico:${{ env.CORE_DIAGNOSTICO_IMAGE }}:CORE_DIAGNOSTICO" \
               "frontend-diagnostico:${{ env.FRONTEND_DIAGNOSTICO_IMAGE }}:FRONTEND_DIAGNOSTICO" \
+              "core-impuestos:${{ env.CORE_IMPUESTOS_IMAGE }}:CORE_IMPUESTOS" \
+              "frontend-impuestos:${{ env.FRONTEND_IMPUESTOS_IMAGE }}:FRONTEND_IMPUESTOS" \
               "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
             svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
             r="R_$var"; d="D_$var"
@@ -1541,7 +1733,7 @@ jobs:
             fi
             if ! yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null 2>&1; then
               case "$svc" in
-                core-personanatural|frontend-personanatural|core-diagnostico|frontend-diagnostico)
+                core-personanatural|frontend-personanatural|core-diagnostico|frontend-diagnostico|core-impuestos|frontend-impuestos)
                   echo "::notice::$svc: no listado en $K; omitido (producto no encendido en ${AMBIENTE})"
                   continue
                   ;;

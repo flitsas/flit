@@ -369,7 +369,9 @@ public sealed record IdentityCertificateData(
     string CompradorNombre,
     string CompradorDocumento,
     int Score,
-    string Resultado);
+    string Resultado,
+    // HU #14735 — placa del trámite para el nombre estándar {tipo}_{radicado}_{placa}.pdf (nulo → SIN-PLACA).
+    string? Placa = null);
 
 /// <summary>
 /// Contrato del generador del Certificado de validación de identidad. La implementación productiva es
@@ -422,7 +424,9 @@ public sealed record RuesCertificateData(
     IReadOnlyList<RuesActividad>? Actividades = null,
     // HU #11132 — jurisdicción de la cámara de comercio: la respuesta del RUES la trae y se descartaba.
     string? CamaraCiudad = null,
-    string? CamaraDepartamento = null);
+    string? CamaraDepartamento = null,
+    // HU #14735 — placa del trámite para el nombre estándar del archivo (nulo → SIN-PLACA).
+    string? Placa = null);
 
 /// <summary>
 /// Contrato del generador del Certificado RUES. La implementación productiva es
@@ -463,7 +467,9 @@ public sealed record RnmcCertificateData(
     Guid ProcedureInstanceId,
     string ReferenceNumber,
     DateTimeOffset ConsultadoEn,
-    IReadOnlyList<RnmcCertificateEntry> Entradas);
+    IReadOnlyList<RnmcCertificateEntry> Entradas,
+    // HU #14735 — placa del trámite para el nombre estándar del archivo (nulo → SIN-PLACA).
+    string? Placa = null);
 
 /// <summary>
 /// Contrato del generador del Certificado RNMC. La implementación productiva es

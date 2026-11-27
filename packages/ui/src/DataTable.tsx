@@ -67,6 +67,7 @@ export interface DataTableProps<T> {
    */
   allowHorizontalScroll?: boolean;
   pagination?: DataTablePagination;
+  /** Nombre de la tabla; también nombra la región desplazable que la envuelve (por defecto «Tabla desplazable»). */
   ariaLabel?: string;
   /** Contenido expandible bajo una fila (p. ej. permisos de un módulo RBAC). Si
    *  devuelve algo distinto de null, se renderiza como fila a todo el ancho. */
@@ -84,6 +85,12 @@ export interface DataTableProps<T> {
    */
   tarjeta?: boolean;
 }
+
+/** Nombre de la región desplazable cuando la pantalla no pasa `ariaLabel` (HU #14695). */
+const REGION_NOMBRE_DEFECTO = "Tabla desplazable";
+/** Foco visible del contenedor desplazable con el token de acción del kit (claro y oscuro). */
+const REGION_FOCO_CLS =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]";
 
 const ALIGN: Record<CellAlign, string> = {
   left: "text-left",
@@ -131,8 +138,14 @@ export function DataTable<T>({
         skeletonRows={6}
       >
         {/* Con scroll siempre: en una tabla `table-fixed` no cambia nada si cabe, y si un contenido no cabe se puede
-            desplazar en vez de quedar recortado. */}
-        <div className="overflow-x-auto overscroll-x-contain">
+            desplazar en vez de quedar recortado. HU #14695 (axe scrollable-region-focusable, WCAG 2.1.1): como se puede
+            desplazar, es región con nombre y parada de Tab, para que el teclado lo mueva con las flechas. */}
+        <div
+          role="region"
+          aria-label={ariaLabel ?? REGION_NOMBRE_DEFECTO}
+          tabIndex={0}
+          className={`overflow-x-auto overscroll-x-contain ${REGION_FOCO_CLS}`}
+        >
           {/* HU #14477 — la tabla del prototipo «Diseño Inteligente»: cabecera hundida, filas separadas 6px y, por
               debajo de 1024px (tableta y celular, como la media query del prototipo), cada fila se lee como una tarjeta
               en una rejilla de 300px: la cabecera queda para lectores de pantalla, la primera celda hace de título y

@@ -25,6 +25,13 @@ public sealed partial class PlatformMessagingOptions
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
+    /// Intentos fallidos de un mismo evento a partir de los cuales el publicador deja, en cada fallo, una advertencia con su
+    /// destino (exchange + llave de ruteo, sin el payload): señal de un destino detenido (permiso o exchange sin declarar),
+    /// no de una caída pasajera del broker.
+    /// </summary>
+    public int AttemptsWarningThreshold { get; set; } = 10;
+
+    /// <summary>
     /// Retención de las filas YA publicadas de la outbox (HU #13727, ADR-0072 R-2): con valor, una purga en segundo plano
     /// borra por lotes las publicadas antes de ahora − retención; las pendientes nunca se borran. Sin valor (por defecto)
     /// no hay purga y la outbox se conserva entera. La encienden los servicios cuyo payload lleva datos personales.
@@ -41,6 +48,8 @@ public sealed partial class PlatformMessagingOptions
             throw new InvalidOperationException($"{SectionName}: BatchSize y PollInterval deben ser positivos.");
         if (MaxRetryDelay < PollInterval)
             throw new InvalidOperationException($"{SectionName}:MaxRetryDelay no puede ser menor que PollInterval.");
+        if (AttemptsWarningThreshold < 1)
+            throw new InvalidOperationException($"{SectionName}:AttemptsWarningThreshold debe ser positivo.");
         if (RetencionPublicados <= TimeSpan.Zero)
             throw new InvalidOperationException($"{SectionName}:RetencionPublicados debe ser positiva (o no declararse para no purgar).");
     }
