@@ -70,7 +70,9 @@ public sealed class ReconciliadorTests
             politica.TtlMs.Should().Be(ttl, $"el TTL de {cola} y Diagnostico:Consultas:Reconciliador:TtlTrabajo deben coincidir");
             (politica.Texto("dead-letter-exchange"), politica.Texto("dead-letter-routing-key")).Should().Be(($"{cola}.reintentos", $"{cola}.dlq"));
             DefinicionesBroker.PoliticaDe($"{cola}.dlq")!.Nombre.Should().Be("dlq-7d", "la DLQ conserva su purga de 7 días (Ley 1581)");
-            DefinicionesBroker.PoliticasQueAlcanzan($"{cola}.retry.1").Should().BeEmpty("las colas de reintento ya tienen su propio TTL");
+            // HU #14752: la cola de resultados espera en .espera.n (tick de 15 s); las de core-consultas siguen en .retry.n.
+            var espera = cola == BrokerDePrueba.ColaResultados ? $"{cola}.espera.1" : $"{cola}.retry.1";
+            DefinicionesBroker.PoliticasQueAlcanzan(espera).Should().BeEmpty("las colas de espera ya tienen su propio TTL");
         }
     }
 

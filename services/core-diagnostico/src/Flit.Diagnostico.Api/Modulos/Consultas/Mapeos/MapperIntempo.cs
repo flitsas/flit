@@ -21,7 +21,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 /// informa transacción.</item>
 /// <item><c>NO_ENCONTRADO</c>: <see cref="TipoErrorFuente.EstadoNoOk"/> definitivo con <see cref="MensajeNoEncontrado"/> (G3=a).</item>
 /// <item><c>ERROR</c>: <c>TIMEOUT</c>→Timeout, <c>RED</c>→Red, <c>HTTP_NO_EXITOSO</c> ≥ 500 o sin status→Http5xx (transitorio) y
-/// el resto→EstadoNoOk, <c>AUTENTICACION</c>→Autenticacion, <c>RESPUESTA_INVALIDA</c>→RespuestaInvalida, otro→EstadoNoOk.</item>
+/// el resto→EstadoNoOk, <c>AUTENTICACION</c>→Autenticacion, <c>RESPUESTA_INVALIDA</c>→RespuestaInvalida,
+/// <c>LIMITE_PROVEEDOR</c>→LimiteProveedor (transitorio, HU #14752), otro→EstadoNoOk.</item>
 /// <item>JSON inválido, clave desconocida (la forma vieja con <c>codigoResultado</c>), resultado sin especificar o
 /// <c>ENCONTRADO</c> sin vehículo: <see cref="TipoErrorFuente.RespuestaInvalida"/>.</item>
 /// </list>
@@ -209,6 +210,7 @@ public static class MapperIntempo
                 ResultadoRunt.Fallo(TipoErrorFuente.EstadoNoOk, Prefijo + $"el proveedor rechazó la consulta (HTTP{Status(status)})."),
             TipoErrorIntempo.Autenticacion => ResultadoRunt.Fallo(TipoErrorFuente.Autenticacion, Prefijo + "el proveedor rechazó la autenticación."),
             TipoErrorIntempo.RespuestaInvalida => Invalida("la respuesta del proveedor no tiene la forma esperada"),
+            TipoErrorIntempo.LimiteProveedor => ResultadoRunt.Fallo(TipoErrorFuente.LimiteProveedor, Prefijo + "el proveedor limitó las peticiones; se reintenta en al menos un minuto."),
             _ => ResultadoRunt.Fallo(TipoErrorFuente.EstadoNoOk, Prefijo + "el proveedor devolvió un error."),
         };
     }

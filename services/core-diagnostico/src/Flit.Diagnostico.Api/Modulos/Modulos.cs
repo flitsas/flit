@@ -123,10 +123,11 @@ public static class Modulos
         configuration.GetSection(Consultas.Bus.OpcionesBus.Seccion).Bind(bus);
         if (bus.Errores() is { Count: > 0 } errores)
             throw new InvalidOperationException($"{Consultas.Bus.OpcionesBus.Seccion} tiene valores fuera de rango: {string.Join("; ", errores)}.");
-        // La espera de reintento fija el TTL de las colas .retry.n al declararlas; si la configuración es inválida el arranque falla
-        // igual (ValidateOnStart), así que aquí basta con no declarar colas con un TTL fuera de rango.
+        // HU #14752: la política fija CUÁNTAS colas .espera.n hay (todas con el tick fijo de 15 s, así que su TTL nunca cambia). Si la
+        // configuración es inválida el arranque falla igual (ValidateOnStart); aquí las claves inválidas toman su valor por defecto.
         var consultas = configuration.GetSection(Consultas.OpcionesConsultas.Seccion).Get<Consultas.OpcionesConsultas>() ?? new();
-        var esperaReintento = consultas.EsValida() ? consultas.EsperaReintento : Domain.Consultas.PoliticaReintentos.EsperaPorDefecto;
+        var politica = Consultas.Bus.ProgramadorReintentos.PoliticaDe(consultas);
+        services.TryAddSingleton<Consultas.Bus.AzarReintentos>();
         if (bus.ConsumidorHabilitado)
         {
             services.AddFlitConsumer<Persistence.DiagnosticoDb, Consultas.Bus.ConsumidorResultados, Consultas.Bus.ResultadoConsultaDiagnostico>(
@@ -136,9 +137,11 @@ public static class Modulos
                     o.Prefetch = bus.Prefetch;
                     // Q3 = 3a: solo core-consultas (user_id validado por el broker) publica los resultados.
                     o.ProductoresPermitidos.Add(Consultas.Bus.OpcionesBus.Productor);
-                    // Q4 (U2 = a) y Punto 3: la espera del resultado demorado es la de PoliticaReintentos (fija, EsperaReintento).
+                    // Q4 (U2 = a) y HU #14752: el resultado demorado espera en diagnostico.consultas-resultados.espera.n (tick de 15 s)
+                    // hasta que vence el disponible_desde que fijó PoliticaReintentos.
+                    o.RetryQueueSuffix = Consultas.Bus.ProgramadorReintentos.SufijoCola;
                     o.RetryDelays.Clear();
-                    foreach (var espera in Consultas.Bus.ProgramadorReintentos.EsperasDe(esperaReintento))
+                    foreach (var espera in Consultas.Bus.ProgramadorReintentos.EsperasDe(politica))
                         o.RetryDelays.Add(espera);
                 });
             // D3 (6r-i, U4 = a): la red de seguridad de los trabajos perdidos corre con el consumidor.
