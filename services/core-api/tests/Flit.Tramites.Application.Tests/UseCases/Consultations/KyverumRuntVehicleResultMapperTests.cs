@@ -109,6 +109,8 @@ public sealed class KyverumRuntVehicleResultMapperTests
     [InlineData("E", "CE")]
     [InlineData("T", "TI")]
     [InlineData("P", "PAS")]
+    [InlineData("Y", "PPT")]
+    [InlineData("PPT", "PPT")]
     public void TipoDocPropietario_SeMapeaACodigoFlit(string runtCode, string flitCode)
     {
         var response = new KyverumRuntVehicleResponse
@@ -122,9 +124,9 @@ public sealed class KyverumRuntVehicleResultMapperTests
         Field(result, "owner_document_type").Should().Be(flitCode);
     }
 
-    // 'Y' (código RUNT sin equivalente FLIT) o vacío ⇒ no se siembra owner_document_type.
+    // Código RUNT sin equivalente en ActorDocumentType (p. ej. 'D' carné diplomático) o vacío ⇒ no se siembra.
     [Theory]
-    [InlineData("Y")]
+    [InlineData("D")]
     [InlineData("")]
     [InlineData(null)]
     public void TipoDocPropietario_SinEquivalenteFlit_NoSiembraTipo(string? runtCode)
