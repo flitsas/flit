@@ -27,7 +27,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.6.2\"", "HU #14582 sube a 1.6.0 (propietario actual declarado); 1.6.2 cambia el texto de SERVICIO_PUBLICO");
+        info.Should().Contain("version: \"1.6.3\"", "HU #14582 sube a 1.6.0 (propietario actual declarado); 1.6.2 cambia el texto de SERVICIO_PUBLICO");
         info.Should().Contain("Versión 1.6.2").And.Contain("SERVICIO_PUBLICO").And.Contain("«Vehículo de servicio público: no paga impuesto vehicular»");
         Yaml.Value.Should().NotContain("esta consulta no aplica", "el ejemplo de motivo_na_etiqueta usa el texto nuevo")
             .And.Contain("example: \"Vehículo de servicio público: no paga impuesto vehicular\"");
@@ -187,7 +187,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void BE0_version_1_5_0_con_rutas_esquemas_y_codigos_de_estadisticas_y_reportes()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.2\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
+        info.Should().Contain("version: \"1.6.3\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
         var paths = Bloque("paths:", sangria: 0).Split('\n');
         foreach (var ruta in RutasEstadisticasYReportes)
             paths.Should().Contain("  /api/v1/diagnostico" + ruta, $"el contrato declara {ruta}");
@@ -276,7 +276,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU14582_version_1_6_0_propietario_declarado_y_cambio_propietario()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.2\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
+        info.Should().Contain("version: \"1.6.3\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
 
         var fila = Bloque("FilaVehiculo:", sangria: 4);
         fila.Should().Contain("required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, cambio_propietario]");
@@ -306,7 +306,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU14587_usuarios_de_Diagnostico_en_la_version_1_6_0()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.2\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
+        info.Should().Contain("version: \"1.6.3\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
 
         string[] rutas =
         [
@@ -365,7 +365,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU2_version_1_6_1_redaccion_en_cola_requerido_en_el_dictamen()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.2\"").And.Contain("Versión 1.6.1").And.Contain("redaccion_en_cola");
+        info.Should().Contain("version: \"1.6.3\"").And.Contain("Versión 1.6.1").And.Contain("redaccion_en_cola");
         foreach (var esquema in new[] { "DictamenVehiculo:", "DictamenVehiculoBackoffice:" })
         {
             var bloque = Bloque(esquema, sangria: 4);
@@ -373,6 +373,20 @@ public sealed class OpenApiDiagnosticoContratoTests
             requeridos.Should().Contain("redaccion_en_cola", esquema);
             bloque.Should().Contain("redaccion_en_cola:").And.NotContain("intentos:").And.NotContain("lease_hasta:").And.NotContain("disponible_desde:", esquema);
         }
+    }
+
+    // HU #14752 (contrato-excel §4) — 1.6.3: el Excel del lote documenta la v4 (ID del vehículo, columnas nuevas, datos personales EN
+    // CLARO solo de D3, cola sin fuente, aviso D4, plantilla 4) y las cabeceras Pragma y X-Content-Type-Options (SP-8).
+    [Fact]
+    public void HU14752_version_1_6_3_excel_del_lote_v4_con_cabeceras()
+    {
+        Bloque("info:", sangria: 0).Should().Contain("version: \"1.6.3\"");
+        var excel = Bloque("/api/v1/diagnostico/diagnosticos/{id}/excel:", sangria: 2);
+        excel.Should().Contain("operationId: descargarExcelLote");
+        excel.Should().ContainAll(
+            "ID del vehículo", "(EN CLARO, ADR-0076 enmienda 2026-11-27", "Detalle de comparendos del locatario", "Estado del impuesto (VIGENTE, CON DEUDA, NO DISPONIBLE",
+            "Tomador póliza RC y Análisis de saneamiento", "Datos personales (Ley 1581)", "Versión de plantilla 4",
+            "la huella nunca lleva datos personales en claro", "Pragma:", "description: no-cache", "X-Content-Type-Options:", "description: nosniff");
     }
 
     private static string Bloque(string cabecera, int sangria, string? desde = null)

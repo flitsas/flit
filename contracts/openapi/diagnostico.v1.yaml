@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.6.2"
+  version: "1.6.3"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -75,6 +75,8 @@ info:
     predicado de la toma de la cola. Al agotar los reintentos la cola deja la fecha nula y el campo pasa a false.
     No se exponen intentos, lease ni fecha de toma.
 
+    Versión 1.6.3 (HU #14752, 2026-11-27): el Excel del lote pasa a la plantilla 4 (columnas del reporte v1, datos personales de
+    D3 en claro, ADR-0076 enmienda) y la descarga suma las cabeceras Pragma y X-Content-Type-Options; sin cambio de forma.
     Versión 1.6.2 (decisión del usuario 2026-11-26): sin cambio de forma. Un vehículo de servicio público no paga impuesto:
     la celda IMPUESTO_DEPARTAMENTAL queda en NA con motivo_na SERVICIO_PUBLICO (código sin cambios) también al volver a
     publicarse o al reprocesarse, sin consultar al proveedor. Su motivo_na_etiqueta pasa a
@@ -1451,26 +1453,44 @@ paths:
         emite con el lote EN_PROCESO, COMPLETADO o INCOMPLETO (lo no terminado sale con su estado). Hojas, en este orden:
         «Vehículos»: una fila por vehículo en el orden de la carga. Columnas fijas Orden, Identificador, Tipo de identificador
         (código, p. ej. PLACA_CARRO), Placa, VIN, Propietario actual declarado («TIPO ****1234» o vacío), Cambio de propietario
-        (Sí, No o vacío; HU #14582) y Estado del vehículo (Terminado, En proceso o Con error). Luego, por cada fuente
+        (Sí, No o vacío; HU #14582), Estado del vehículo (Terminado, En proceso o Con error) e ID del vehículo (uuid interno).
+        Luego, por cada fuente
         del alcance en el orden de la grilla, «{fuente} — Estado» (Completado, Pendiente, «No aplica: {motivo}» o «Consulta no
         disponible», sin código de error ni causa) y sus columnas de dato, que solo se llenan con la fuente Completado (catálogo
         ColumnasExcel): RUNT → Servicio, Clase, Organismo de tránsito, Marca, Línea, Modelo, Propietarios (cantidad), Locatarios
-        (cantidad); SIMIT vehículo → Semáforo, Comparendos, Valor total; RUNT propietarios / RUNT locatarios → Personas
+        (cantidad), Tipo y Número de documento del propietario, Tipo y Número de documento del locatario y Nombre del locatario
+        (EN CLARO, ADR-0076 enmienda 2026-11-27; el locatario solo si lo informó el RUNT), Estado SOAT, Vencimiento SOAT, Estado
+        RTM (SI/NO), Vencimiento RTM, Garantías mobiliarias y Garantías a favor de (acreedor y documento EN CLARO), Limitaciones a
+        la propiedad, Accidentalidad, Blindaje, Nivel de blindaje, Fecha de matrícula, Cilindraje, Clasificación, Color, Estado
+        del vehículo en el RUNT, N.º de chasis, N.º de motor, Tiene gravámenes (SI/NO), Tipo de carrocería, Tipo de combustible
+        (fechas dd/MM/yyyy como texto); SIMIT vehículo → Semáforo, Comparendos, Valor total, Cantidad de resoluciones, Estado de
+        la placa (Sin multas / Con multas), Números de comparendo, Fechas de comparendo, Valores a pagar (separados por «; »,
+        «…» si el SIMIT trajo más de los listados) y Total de infracciones; RUNT propietarios / RUNT locatarios → Personas
         consultadas, Personas con error, Documentos («TIPO ****1234» separados por «; »; los locatarios son solo los del RUNT: las
         personas históricas declaradas por el cliente no se pintan, HU #14582); SIMIT propietarios / SIMIT locatarios → las mismas más Comparendos y Valor total sumados de las
-        personas; Avalúo → Valor sugerido, Fuente principal, Sin valor comercial (Sí/No); Impuesto departamental → Total adeudado (número,
-        pesos enteros) y Vigencias pendientes (cantidad de vigencias no pagadas), HU #13864.
+        personas, y en SIMIT locatarios además Detalle de comparendos del locatario («[TIPO-DOCUMENTO EN CLARO] Número: … | Fecha:
+        … | Valor: $ …» separados por «; ») y Total de comparendos del locatario; Avalúo → Valor sugerido, Fuente principal, Sin
+        valor comercial (Sí/No); Impuesto departamental → Total adeudado (número, pesos enteros), Vigencias pendientes (cantidad
+        de vigencias no pagadas), HU #13864, y Estado del impuesto (VIGENTE, CON DEUDA, NO DISPONIBLE o vacío). Al final, siempre
+        y vacías (sin fuente): Tipo de locatario, Normalización / saneamiento, N.º de serie, Licencia de tránsito de importación,
+        Empresa transportadora, Tomador póliza RC y Análisis de saneamiento.
+        Datos personales (Ley 1581): el archivo trae EN CLARO solo el número de documento del propietario, el tipo, número y
+        nombre del locatario y los acreedores de las garantías (también los de persona natural); el resto de documentos sigue
+        enmascarado. Lo descifra el servidor al generar; el archivo se descarga con el mismo permiso.
         El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
         «al menos N». «Diagnóstico»: ID del diagnóstico, nombre del lote, empresa (claim company_name), usuario creador («No
         disponible» si Identidad no responde), fecha de creación (hora Colombia) y tipo de análisis («Diagnóstico Simple» o
-        «Diagnóstico Con análisis — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
+        «Diagnóstico Con análisis — TRÁMITE»), y la fila Aviso «Algunas consultas son anteriores al detalle completo de la
+        fuente: sus columnas ampliadas pueden ir vacías» si algún RUNT completado no tiene la respuesta completa guardada.
+        «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
         configuración del lote y el lote COMPLETADO o INCOMPLETO; fuente, consultas estimadas, consultas consumidas y
         «al menos» si el estimado es mínimo (el mismo cálculo de la grilla). Sin origen, usuario manual, proveedor ni transacción
         (R-20): una celda llenada a mano produce la misma fila que una de API. Toda celda de texto que empiece por =, +, -, @,
         tabulador o retorno de carro se escribe como texto literal (sin fórmula, con quotePrefix). Mientras no cambie ninguna
         entrada (celdas, versión del tablero, nombres del encabezado, documentos enmascarados, estado del lote, lo que muestra
-        el libro), la descarga devuelve los mismos bytes ya guardados; si cambió, genera un Excel nuevo e invalida el anterior
-        (se conserva).
+        el libro; la huella nunca lleva datos personales en claro), la descarga devuelve los mismos bytes ya guardados; si
+        cambió, genera un Excel nuevo e invalida el anterior (se conserva). Versión de plantilla 4: los Excel anteriores se
+        regeneran en la próxima descarga.
       responses:
         "200":
           description: El Excel del lote.
@@ -1481,6 +1501,14 @@ paths:
                 type: string
             Cache-Control:
               description: no-store
+              schema:
+                type: string
+            Pragma:
+              description: no-cache
+              schema:
+                type: string
+            X-Content-Type-Options:
+              description: nosniff
               schema:
                 type: string
           content:
