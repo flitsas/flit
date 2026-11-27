@@ -59,11 +59,17 @@ export interface UseUiPreferencesResult {
 }
 
 /** Solo pares clave → número finito > 0; cualquier otra cosa del valor guardado se descarta. */
+/** Igual a `COLUMN_RESIZE_MAX_PX` del tirador; vive aquí para no acoplar el hook al componente. */
+const MAX_SAVED_COLUMN_WIDTH_PX = 640;
+
 function sanitizeWidths(raw: unknown): Record<string, number> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.round(v);
+    // Tope al cargar: un valor guardado enorme no debe romper el layout (mismo máximo que el arrastre).
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+      out[k] = Math.min(Math.round(v), MAX_SAVED_COLUMN_WIDTH_PX);
+    }
   }
   return out;
 }
@@ -291,7 +297,10 @@ export function useUiPreferences(
       // Defensa adicional (el selector ya lo impide en la UI): nunca cero columnas visibles.
       if (next.length === 0) return;
       const faltan = next.filter((k) => !orderRef.current.includes(k));
-      persist(next, [...orderRef.current, ...faltan]);
+      const fullOrder = [...orderRef.current, ...faltan];
+      // Las visibles siguen el orden del usuario aunque el caller las entregue en orden de catálogo:
+      // marcar o desmarcar una columna no debe deshacer el orden que la persona eligió.
+      persist(fullOrder.filter((k) => next.includes(k)), fullOrder);
     },
     [persist],
   );

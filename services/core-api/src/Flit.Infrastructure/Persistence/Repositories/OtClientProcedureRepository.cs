@@ -1980,11 +1980,6 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             ConsolidadoVigencia.Derivar(MaestroSource, MaestroVigente, MaestroGeneradoEn, TramiteEstado.EsFinal(Status), IsMigrated);
     }
 
-    /// <summary>
-    /// Todos los <c>field_values</c> de la instancia en una sola lectura. La última repetición de una
-    /// clave gana, que es el criterio que ya aplicaban las subconsultas con <c>FirstOrDefault</c>
-    /// sobre una tabla sin orden garantizado; en la práctica la clave es única por instancia.
-    /// </summary>
     /// <summary>HU #14743 — Ruta Corta: la placa del trámite vino de la consulta al RUNT.</summary>
     private Task<bool> IsPlateFromConsultationAsync(Guid procedureInstanceId, CancellationToken cancellationToken) =>
         _context.ProcedureInstanceFieldValues
@@ -1994,6 +1989,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 && f.Source == PlateSourceConsultation
                 && f.ValueText != null && f.ValueText != "", cancellationToken);
 
+    /// <summary>
+    /// Todos los <c>field_values</c> de la instancia en una sola lectura. La última repetición de una
+    /// clave gana, que es el criterio que ya aplicaban las subconsultas con <c>FirstOrDefault</c>
+    /// sobre una tabla sin orden garantizado; en la práctica la clave es única por instancia.
+    /// </summary>
     private async Task<Dictionary<string, string?>> LoadFieldValuesAsync(
         Guid procedureInstanceId,
         CancellationToken cancellationToken)
