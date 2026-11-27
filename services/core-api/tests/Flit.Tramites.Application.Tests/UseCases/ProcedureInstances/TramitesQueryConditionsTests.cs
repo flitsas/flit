@@ -1,6 +1,7 @@
 using Flit.Queries.Domain;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Enums;
 using FluentAssertions;
 using Xunit;
 
@@ -71,13 +72,14 @@ public sealed class TramitesQueryConditionsTests
     }
 
     [Fact]
-    public void ContieneConVariosValores_SeRechaza()
+    public void ContieneConVariosValores_SeAcepta()
     {
-        // Con dos textos el resultado dependería de cuál se eligiera: mejor decirlo que decidir por él.
+        // HU #14747 — la bandeja del gestor activa ContieneAdmiteVarios: «contiene» con varios valores
+        // trae los trámites que contengan cualquiera (OR). Consultas y reportes siguen con uno solo.
         var error = TramitesQueryConditions.Validate(
             [Cond(TramitesQueryFieldCatalog.Placa, QueryOperator.Contiene, "AB", "XY")]);
 
-        error.Should().NotBeNull().And.Contain("un solo valor");
+        error.Should().BeNull();
     }
 
     [Fact]
@@ -101,8 +103,9 @@ public sealed class TramitesQueryConditionsTests
     [Fact]
     public void ListaEnCampoQueNoLaAdmite_SeRechaza()
     {
+        // Fuente no admite lista. Gestor sí la admite desde la HU #14747.
         var error = TramitesQueryConditions.Validate(
-            [Cond(TramitesQueryFieldCatalog.Gestor, QueryOperator.EsAlguno, "Ana", "Luis")]);
+            [Cond(TramitesQueryFieldCatalog.Fuente, QueryOperator.EsAlguno, TramiteFuente.Dashboard, TramiteFuente.Integracion)]);
 
         error.Should().NotBeNull().And.Contain("un solo valor");
     }
