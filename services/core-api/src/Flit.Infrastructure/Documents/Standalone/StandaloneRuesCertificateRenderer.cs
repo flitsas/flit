@@ -62,7 +62,16 @@ internal sealed class StandaloneRuesCertificateRenderer : IStandaloneRuesCertifi
 
         var doc = _generator.GenerateRuesCertificate(data);
 
-        return new RenderedStandaloneDocument(doc.Filename, doc.Mimetype, doc.Content);
+        // Épica #14657 — el certificado standalone NO tiene trámite ni placa: conserva su nombre anterior
+        // (`certificado_rues_{ref}.pdf`) y no el estándar `{tipo}_{radicado}_{placa}.pdf` del certificado de trámite.
+        return new RenderedStandaloneDocument(NombreAnterior(referenceNumber), doc.Mimetype, doc.Content);
+    }
+
+    /// <summary>Nombre previo a la Épica #14657: <c>certificado_rues_{ref}.pdf</c> (con <c>/</c> → <c>-</c>; vacío → <c>-</c>).</summary>
+    internal static string NombreAnterior(string? referenceNumber)
+    {
+        var safeRef = string.IsNullOrWhiteSpace(referenceNumber) ? "-" : referenceNumber.Trim().Replace('/', '-');
+        return $"certificado_rues_{safeRef}.pdf";
     }
 
     private static string? Val(IReadOnlyDictionary<string, string?> fields, string key) =>

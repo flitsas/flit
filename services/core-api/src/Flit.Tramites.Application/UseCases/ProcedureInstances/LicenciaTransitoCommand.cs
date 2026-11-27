@@ -252,7 +252,10 @@ public sealed class DescargarConsolidadoHandler(
         if (stream is null)
             return (null, "file_missing");
 
-        var filename = string.IsNullOrWhiteSpace(consolidado.Filename) ? "consolidado.pdf" : consolidado.Filename;
+        // HU #14736 — nombre de entrega con la placa actual si lo generó FLIT (no si lo subió el SuperAdmin).
+        var filename = Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaAdjunto(consolidado, instance);
+        if (string.IsNullOrWhiteSpace(filename))
+            filename = "consolidado.pdf";
         var mime = string.IsNullOrWhiteSpace(consolidado.Mimetype) ? "application/pdf" : consolidado.Mimetype;
         return (new AttachmentDownload(stream, mime, filename), null);
     }

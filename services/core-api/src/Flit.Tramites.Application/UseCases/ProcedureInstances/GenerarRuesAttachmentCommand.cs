@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -69,8 +70,7 @@ public sealed class GenerarRuesAttachmentHandler(
         if (pdfBytes.Length == 0)
             return (null, "provider_error");
 
-        var safeRef = instance.ReferenceNumber.Replace('/', '-');
-        var filename = $"rues_{safeRef}.pdf";
+        var filename = NombreDocumentoTramite.Generar("rues", instance);
 
         var (uploaded, uploadError) = await uploadHandler.HandleAsync(
             id,

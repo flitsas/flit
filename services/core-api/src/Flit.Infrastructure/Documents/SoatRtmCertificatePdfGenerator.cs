@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -66,8 +67,7 @@ public sealed class SoatRtmCertificatePdfGenerator : ISoatRtmCertificateGenerato
             });
         }).GeneratePdf();
 
-        var safeRef = Ref(data.ReferenceNumber);
-        return new GeneratedDocument("certificado_soat_rtm", $"certificado_soat_rtm_{safeRef}.pdf", "application/pdf", bytes);
+        return new GeneratedDocument("certificado_soat_rtm", NombreDocumentoTramite.Generar("certificado_soat_rtm", data.ReferenceNumber, data.Placa), "application/pdf", bytes);
     }
 
     private static string Intro(SoatRtmCertificateData data)
@@ -173,8 +173,4 @@ public sealed class SoatRtmCertificatePdfGenerator : ISoatRtmCertificateGenerato
 
     // Regla de negocio (HU #10856): valor ausente en la consulta → EN BLANCO (no marcador).
     private static string Disp(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
-
-    // Solo para el nombre de archivo: fallback no vacío para no romper la ruta de storage.
-    private static string Ref(string? reference) =>
-        string.IsNullOrWhiteSpace(reference) ? "sin-referencia" : reference.Trim().Replace('/', '-');
 }

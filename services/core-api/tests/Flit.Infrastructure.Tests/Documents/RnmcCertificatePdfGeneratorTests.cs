@@ -28,7 +28,16 @@ public sealed class RnmcCertificatePdfGeneratorTests
         Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
         doc.Mimetype.Should().Be("application/pdf");
         doc.Tipo.Should().Be("certificado_rnmc");
-        doc.Filename.Should().Be("certificado_rnmc_TRM-2026-000123.pdf");
+        doc.Filename.Should().Be("certificado_rnmc_TRM-2026-000123_SIN-PLACA.pdf");
+    }
+
+    [Fact]
+    public void Generate_ConPlaca_NombreEstandarConPlaca()
+    {
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf con la placa saneada a mayúsculas.
+        var doc = new RnmcCertificatePdfGenerator().GenerateRnmcCertificate(FullData() with { Placa = "abc-123" });
+
+        doc.Filename.Should().Be("certificado_rnmc_TRM-2026-000123_ABC123.pdf");
     }
 
     [Fact]
@@ -39,7 +48,7 @@ public sealed class RnmcCertificatePdfGeneratorTests
 
         var doc = new RnmcCertificatePdfGenerator().GenerateRnmcCertificate(data);
 
-        doc.Filename.Should().Be("certificado_rnmc_TRM-2026-000123.pdf").And.NotContain("/");
+        doc.Filename.Should().Be("certificado_rnmc_TRM2026000123_SIN-PLACA.pdf").And.NotContain("/");
     }
 
     [Fact]
@@ -66,7 +75,7 @@ public sealed class RnmcCertificatePdfGeneratorTests
         var act = () => doc = new RnmcCertificatePdfGenerator().GenerateRnmcCertificate(data);
 
         act.Should().NotThrow();
-        doc!.Filename.Should().Be("certificado_rnmc_-.pdf");
+        doc!.Filename.Should().Be("certificado_rnmc_SIN-RADICADO_SIN-PLACA.pdf");
         Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
     }
 

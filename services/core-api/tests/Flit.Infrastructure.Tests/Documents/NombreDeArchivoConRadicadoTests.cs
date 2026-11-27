@@ -1,36 +1,32 @@
-using System.Reflection;
-using Flit.Infrastructure.Documents;
-using Flit.Infrastructure.Documents.Fur;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using FluentAssertions;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Documents;
 
 /// <summary>
-/// HU #12371 AC8 — los documentos se llaman por el radicado nuevo, y TODOS igual:
-/// <c>mandato_FT1-0000012.pdf</c>, no <c>mandato_FT1_0000012.pdf</c>.
-///
-/// <para>Cada generador limpia el radicado con su propio <c>SafeRef</c> antes de ponerlo en el
-/// nombre. Con el número pelado daba igual; con <c>FT1-0000012</c> dos de ellos convertían el
-/// guion en <c>_</c> y el mismo trámite tenía un nombre en el FUR y otro en el mandato. Esta prueba
-/// fija que el guion sobrevive en todos.</para>
+/// HU #12371 AC8 + HU #14735 — todos los documentos que FLIT genera se llaman igual:
+/// <c>{tipo}_{radicado}_{placa}.pdf</c>, con el guion del radicado intacto (<c>FT1-0000012</c>, no
+/// <c>FT1_0000012</c>). El armado vive en un único punto (<see cref="NombreDocumentoTramite"/>) y los
+/// generadores no limpian el radicado por su cuenta.
 /// </summary>
 public sealed class NombreDeArchivoConRadicadoTests
 {
-    public static TheoryData<Type> Generadores() =>
-    [
-        typeof(MandatoPdfGenerator),
-        typeof(SolicitudVirtualPdfGenerator),
-        typeof(FurOverlayDocumentGenerator),
-    ];
-
     [Theory]
-    [MemberData(nameof(Generadores))]
-    public void SafeRef_ConservaElRadicadoTalCual(Type generador)
+    [InlineData("mandato")]
+    [InlineData("tramite_virtual")]
+    [InlineData("fur")]
+    [InlineData("compraventa")]
+    public void Generar_ConservaElGuionDelRadicado(string tipo)
     {
-        var safeRef = generador.GetMethod("SafeRef", BindingFlags.NonPublic | BindingFlags.Static);
-        safeRef.Should().NotBeNull($"{generador.Name} limpia el radicado con un SafeRef privado");
+        NombreDocumentoTramite.Generar(tipo, "FT1-0000012", "abc123")
+            .Should().Be($"{tipo}_FT1-0000012_ABC123.pdf");
+    }
 
-        safeRef!.Invoke(null, ["FT1-0000012"]).Should().Be("FT1-0000012");
+    [Fact]
+    public void Generar_SinPlaca_UsaSinPlaca()
+    {
+        NombreDocumentoTramite.Generar("mandato", "FT1-0000012", null)
+            .Should().Be("mandato_FT1-0000012_SIN-PLACA.pdf");
     }
 }

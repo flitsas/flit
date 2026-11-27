@@ -1020,6 +1020,70 @@ public sealed class FurHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
+    [Theory]
+    [InlineData("comprador", "certificado_rues", "aaa111", "AAA111")]
+    [InlineData("vendedor", "certificado_rues_vendedor", "aaa111", "AAA111")]
+    [InlineData("vendedor", "certificado_rues_vendedor", null, "SIN-PLACA")]
+    public async Task Epica14657_CertificadoRues_LlevaLaPlacaYConTipoDeRolConservaElNombreEstandar(
+        string rol, string tipoEsperado, string? placa, string placaEnNombre)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.Plate = placa;
+        WithOrganismo(instance);
+        var actor = ActorJuridico(instance);
+        actor.ActorType = rol;
+        instance.Actors.Add(actor);
+        AddFieldValue(instance, "rues_nit", "900123456");
+        AddFieldValue(instance, "rues_razon_social", "EMPRESA DEMO S.A.S.");
+        AddFieldValue(instance, "rues_matricula_mercantil", "MM-778899");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        // El generador real arma el nombre con NombreDocumentoTramite a partir de data.Placa; aquí se reproduce.
+        _ruesGenerator.GenerateRuesCertificate(Arg.Any<RuesCertificateData>())
+            .Returns(ci =>
+            {
+                var d = ci.Arg<RuesCertificateData>();
+                return new GeneratedDocument("certificado_rues",
+                    Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoTramite.Generar(
+                        "certificado_rues", d.ReferenceNumber, d.Placa),
+                    "application/pdf", Encoding.UTF8.GetBytes("RUES"));
+            });
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        result!.Documents.Should().ContainSingle(d => d.Tipo == tipoEsperado)
+            .Which.Filename.Should().Be($"{tipoEsperado}_TRM-2026-000001_{placaEnNombre}.pdf");
+    }
+
+    [Theory]
+    [InlineData("bbb222", "bbb222")]
+    [InlineData(null, "ccc333")]
+    public async Task Epica14657_CertificadoRnmc_RecibeLaPlacaDelTramite_PlateOFieldValue(string? plate, string? fieldValue)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.Plate = plate;
+        WithOrganismo(instance);
+        if (plate is null)
+            AddFieldValue(instance, "plate", fieldValue!);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "DANIEL AMADO", "1193552679"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.GetLatestPreflightAsync(id, tenant, ct).Returns(Snapshot(
+            instance, DateTimeOffset.UtcNow,
+            new PreflightCheckDto("rnmc_comprador_medidas_correctivas", "Medidas correctivas (Policía)",
+                "ok", "verifik_rnmc", null)));
+
+        var (_, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        CapturedRnmcData!.Placa.Should().Be(fieldValue);
+    }
+
     [Fact]
     public async Task Generar_ConActorPersonaJuridica_GeneraCertificadoRuesSystem()
     {

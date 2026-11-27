@@ -57,7 +57,8 @@ public static class ConsolidadoLoteNombres
     /// <summary>Placa en mayúsculas con solo <c>[A-Z0-9]</c>; vacía si no queda nada.</summary>
     public static string SanearPlaca(string? placa) => Filtrar(placa, permitirGuion: false);
 
-    private static string Filtrar(string? valor, bool permitirGuion)
+    /// <summary>Filtra a <c>[A-Z0-9]</c> (y opcionalmente guion) en mayúsculas. Reutilizado por HU #14734.</summary>
+    internal static string Filtrar(string? valor, bool permitirGuion)
     {
         if (string.IsNullOrEmpty(valor))
             return string.Empty;

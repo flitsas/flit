@@ -23,6 +23,7 @@ import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
 import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
 import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
 import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
+import { NOMBRE_GENERICO_CONSOLIDADO } from '@/lib/tramites/consolidado-entrega-ot';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
 import { soloHistoricos, soloVigentes } from '@/lib/documents/vigencia';
 
@@ -241,7 +242,7 @@ export function useAttachmentPreview(
    * visor muestra el error (sin botón de descarga: no hay adjunto que bajar).
    */
   const openConsolidado = useCallback(
-    async (filename = 'expediente-consolidado.pdf') => {
+    async (filename = NOMBRE_GENERICO_CONSOLIDADO) => {
       if (!instanceId) return;
       revoke();
       setEntrega(null);
