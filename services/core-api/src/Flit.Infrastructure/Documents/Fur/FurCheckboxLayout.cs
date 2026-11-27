@@ -1,41 +1,37 @@
 namespace Flit.Infrastructure.Documents.Fur;
 
+public readonly record struct FurXPlacement(double FontSize, double LeftX, double BaselineY);
+
 /// <summary>
-/// Apila las X de tipo de documento dentro del recuadro del blank (Size del manifiesto).
-/// Con 2–4 copropietarios el cuerpo y el paso se reducen para no pisar Dirección.
+/// Centra las X de tipo de documento dentro de la casilla del blank (Size del manifiesto).
+/// Con 2–4 copropietarios la altura se divide en franjas iguales, una X por franja.
 /// </summary>
 public static class FurCheckboxLayout
 {
-    /// <summary>Descenso estimado de la “X” bajo la línea base (fracción del cuerpo).</summary>
-    public const double DescentRatio = 0.12;
+    public const double GlyphWidthRatio = 0.771;
 
-    /// <summary>Subida visual pedida sobre el recuadro (Y crece hacia abajo).</summary>
-    public const double VisualLift = 4;
+    public const double CapHeightRatio = 0.729;
 
-    /// <summary>Incremento de cuerpo sobre el tamaño que cabe en el recuadro.</summary>
-    public const double FontBump = 2;
+    private const double StripFill = 0.9;
 
-    public static (double FontSize, double FirstBaseline, double Step) Stack(
-        double fieldY,
-        double boxH,
-        int count,
-        double singleFontSize)
+    public static IReadOnlyList<FurXPlacement> Place(double x, double y, double size, int count, double singleFontSize)
     {
         var n = Math.Clamp(count, 1, 4);
-        var h = boxH > 0 ? boxH : 9;
-        if (n == 1)
-            return (singleFontSize + FontBump, fieldY + h * 0.85 - VisualLift, 0);
+        var s = size > 0 ? size : 9;
+        var strip = s / n;
 
-        var fontSize = Math.Max(1.8, h / (n * 1.08));
-        var step = fontSize * 0.92;
-        var first = fieldY + fontSize * 0.78;
-        var lastBottom = first + step * (n - 1) + fontSize * DescentRatio;
-        var overflow = lastBottom - (fieldY + h);
-        if (overflow > 0)
-            first -= overflow;
-        if (first < fieldY + fontSize * 0.55)
-            first = fieldY + fontSize * 0.55;
+        var fontSize = n == 1
+            ? singleFontSize
+            : Math.Min(strip * StripFill / CapHeightRatio, s * StripFill / GlyphWidthRatio);
 
-        return (fontSize + FontBump, first - VisualLift, step);
+        var left = x + s / 2 - GlyphWidthRatio * fontSize / 2;
+        var result = new FurXPlacement[n];
+        for (var i = 0; i < n; i++)
+        {
+            var centerY = y + strip * (i + 0.5);
+            result[i] = new FurXPlacement(fontSize, left, centerY + CapHeightRatio * fontSize / 2);
+        }
+
+        return result;
     }
 }
