@@ -24,7 +24,7 @@ public sealed class ProcedureSyncItemMapperTests
     [
         "id", "radicado", "consecutivo", "syncVersion", "fechaUltimoCambio", "eliminado", "estado", "tramite",
         "fechaCreacion", "fechaRadicacion", "fechaAprobacion", "vehiculo", "organismo", "compradores", "factura",
-        "companiaGestora",
+        "companiaGestora", "nombreGestor", "correoGestor",
     ];
 
     private static readonly string[] ClavesVehiculo =
@@ -40,6 +40,20 @@ public sealed class ProcedureSyncItemMapperTests
         "ordinal", "porcentajeParticipacion", "rolActor", "tipoPersona", "tipoDocumento", "numeroDocumento",
         "nombreCompleto", "direccion", "ciudad", "celular", "correo",
     ];
+
+    [Fact]
+    public void Gestor_SeEntregaPlanoYSinDatoVaEnNullNuncaVacio()
+    {
+        var con = ProcedureSyncItemMapper.Map(Fila() with { ManagerName = "  Gestora Ejemplo ", ManagerEmail = "gestora@ejemplo.test" }, Servicios);
+        var sin = ProcedureSyncItemMapper.Map(Fila() with { ManagerName = " ", ManagerEmail = null }, Servicios);
+
+        con.NombreGestor.Should().Be("Gestora Ejemplo");
+        con.CorreoGestor.Should().Be("gestora@ejemplo.test");
+        sin.NombreGestor.Should().BeNull();
+        sin.CorreoGestor.Should().BeNull();
+        JsonSerializer.SerializeToElement(sin, ComoElContrato).GetProperty("nombreGestor").ValueKind
+            .Should().Be(JsonValueKind.Null, "la clave siempre va presente");
+    }
 
     [Fact]
     public void AC1_ElItemTraeTodasLasClavesDelContratoConNulosExplicitos()
