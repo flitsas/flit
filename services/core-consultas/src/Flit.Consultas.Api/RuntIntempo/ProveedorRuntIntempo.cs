@@ -67,8 +67,9 @@ internal sealed record IntempoOpciones(
 /// </para>
 /// <para>
 /// HU #14752 (D5 = a): cada petición pasa por el <see cref="LimitadorIntempo"/>. Un 200 con el texto del límite de Intempo
-/// («Excedio el límite de peticiones…») es <c>LIMITE_PROVEEDOR</c> (transitorio, lo reprograma diagnóstico con al menos 60 s);
-/// otro 200 que no es JSON se reintenta UNA vez a los <see cref="EsperaReintentoNoJson"/>. Como mucho 2 peticiones por llamada.
+/// («Excedio el límite de peticiones…») o un HTTP 429 es <c>LIMITE_PROVEEDOR</c> (transitorio, lo reprograma diagnóstico con al
+/// menos 60 s); otro 200 que no es JSON se reintenta UNA vez a los <see cref="EsperaReintentoNoJson"/>. Como mucho 2 peticiones por
+/// llamada. <c>duracion_ms</c> incluye la espera en el limitador (y la del reintento del no-JSON), no solo el tiempo de Intempo.
 /// </para>
 /// </summary>
 internal sealed partial class ProveedorRuntIntempo(
@@ -128,6 +129,13 @@ internal sealed partial class ProveedorRuntIntempo(
 
                     var cuerpo = await respuesta.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     var bytes = Encoding.UTF8.GetByteCount(cuerpo);
+                    if (respuesta.StatusCode == HttpStatusCode.TooManyRequests)
+                    {
+                        // Como el 200 del límite: sin reintento aquí, lo programa diagnóstico con un mínimo de 60 s.
+                        LogRespuesta(log, codigo, tipoContenido, bytes, operacion, "LIMITE_PROVEEDOR", intento);
+                        return Error(TipoErrorFuente.LimiteProveedor, $"Intempo limitó las peticiones de la consulta (HTTP {codigo}).", codigo, cronometro);
+                    }
+
                     if (!respuesta.IsSuccessStatusCode)
                     {
                         LogRespuesta(log, codigo, tipoContenido, bytes, operacion, "HTTP_NO_EXITOSO", intento);

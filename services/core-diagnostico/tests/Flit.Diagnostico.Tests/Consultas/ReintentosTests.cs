@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
@@ -143,9 +145,6 @@ public sealed class ReintentosTests
     [Fact]
     public void Segundo_y_tercer_reintento_a_2_y_4_minutos()
     {
-        PoliticaReintentosEspera(1).Should().Be(TimeSpan.FromMinutes(1));
-        PoliticaReintentosEspera(2).Should().Be(TimeSpan.FromMinutes(2));
-        PoliticaReintentosEspera(3).Should().Be(TimeSpan.FromMinutes(4));
         ApiDePrueba.Configuracion("sin-base")["Diagnostico:Consultas:FactorAleatorio"].Should().Be("0", "las pruebas del motor corren sin azar");
         var ahora = DateTimeOffset.UnixEpoch;
         var tres = new PoliticaReintentos(3, PoliticaReintentos.EsperaPorDefecto, 0, PoliticaReintentos.EsperaMinimaLimitePorDefecto);
@@ -217,6 +216,86 @@ public sealed class ReintentosTests
         var error = await FluentActions.Awaiting(() => ApiDePrueba.SinBaseAsync(configurar: b => b.Configuration[$"Diagnostico:Consultas:{clave}"] = valor))
             .Should().ThrowAsync<OptionsValidationException>();
         error.Which.Message.Should().Contain($"Diagnostico:Consultas:{clave}");
+    }
+
+    // HU #14752 (I-1) — EsperaReintento y MaxReintentos no pueden dar más de 64 colas de espera de 15 s (espera máxima efectiva
+    // ≤ 15 min): con 3 reintentos y ±20 % la base llega hasta 187,5 s (900 s → 60 + 4 = 64 colas); por encima es un error.
+    [Fact]
+    public void Mas_de_64_colas_de_espera_es_un_error_que_nombra_EsperaReintento_MaxReintentos_y_el_maximo()
+    {
+        var limite = new OpcionesConsultas { EsperaReintento = TimeSpan.FromMilliseconds(187_500), UmbralPegada = TimeSpan.FromDays(1) };
+        ProgramadorReintentos.EsperasDe(limite.Politica()).Should().HaveCount(64);
+        limite.Errores().Should().BeEmpty();
+
+        var pasada = new OpcionesConsultas { EsperaReintento = TimeSpan.FromMilliseconds(187_600), UmbralPegada = TimeSpan.FromDays(1) };
+        ProgramadorReintentos.EsperasDe(pasada.Politica()).Should().HaveCount(65);
+        pasada.Errores().Should().ContainSingle().Which.Should()
+            .Contain(nameof(OpcionesConsultas.EsperaReintento)).And.Contain(nameof(OpcionesConsultas.MaxReintentos)).And.Contain("65").And.Contain("64");
+        OpcionesConsultas.MensajeFueraDeRango.Should().Contain("colas de espera").And.Contain("64");
+    }
+
+    // HU #14752 (I-1) — fuera del tope de colas el servicio no arranca; la configuración por defecto (24 colas) sí.
+    [Fact]
+    public async Task Mas_de_64_colas_de_espera_impide_arrancar()
+    {
+        var error = await FluentActions.Awaiting(() => ApiDePrueba.SinBaseAsync(configurar: b =>
+        {
+            b.Configuration["Diagnostico:Consultas:EsperaReintento"] = "00:20:00";
+            b.Configuration["Diagnostico:Consultas:UmbralPegada"] = "1.00:00:00";
+        })).Should().ThrowAsync<OptionsValidationException>();
+        error.Which.Message.Should().Contain("Diagnostico:Consultas:EsperaReintento").And.Contain("Diagnostico:Consultas:MaxReintentos")
+            .And.Contain("colas de espera").And.Contain("64");
+    }
+
+    [Fact]
+    public async Task La_configuracion_por_defecto_arranca_con_24_colas_de_espera()
+    {
+        await using var api = await ApiDePrueba.SinBaseAsync(configurar: b =>
+        {
+            b.Configuration["Diagnostico:Consultas:MaxReintentos"] = "3";
+            b.Configuration["Diagnostico:Consultas:EsperaReintento"] = "00:01:00";
+            b.Configuration["Diagnostico:Consultas:FactorAleatorio"] = "0.2";
+            b.Configuration["Diagnostico:Consultas:EsperaMinimaLimiteProveedor"] = "00:01:00";
+        });
+        var opciones = api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value;
+        ProgramadorReintentos.EsperasDe(opciones.Politica()).Should().HaveCount(24);
+        ProgramadorReintentos.EsperasDe(new OpcionesConsultas().Politica()).Should().HaveCount(24);
+    }
+
+    // HU #14752 (M-6) — un LIMITE_PROVEEDOR que pasa por el consumidor de resultados deja la celda PENDIENTE con
+    // disponible_desde ≥ fin + 60 s aunque la base del backoff sea de 5 s (manda el mínimo del límite).
+    [Fact]
+    public async Task LIMITE_PROVEEDOR_por_el_consumidor_fija_disponible_desde_al_menos_60_segundos_despues_del_fin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        await using var api = await MotorRunt.ArrancarAsync(b =>
+        {
+            b.Configuration["Diagnostico:Consultas:EsperaReintento"] = "00:00:05";
+            b.Services.AddSingleton<TimeProvider>(reloj);
+            b.Services.AddSingleton<IFuenteRunt>(new FuenteRuntConLimite());
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST007")], ct);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
+
+        await MotorRunt.ProcesarTodoAsync(procesador, ct);
+
+        var intento = (await IntentosAsync(api, empresa, id, ct)).Should().ContainSingle().Subject;
+        intento.TipoError.Should().Be(PoliticaReintentos.CodigoLimite);
+        var runt = (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Single(c => c.Fuente == Fuente.Runt);
+        runt.Estado.Should().Be(EstadoCelda.Pendiente, "el límite es transitorio y queda un reintento");
+        runt.IntentosAuto.Should().Be(1);
+        runt.DisponibleDesde.Should().BeOnOrAfter(intento.Fin + TimeSpan.FromSeconds(60), "un LIMITE_PROVEEDOR espera al menos 60 s");
+        (await procesador.ProcesarLoteAsync(ct)).Should().Be(0, "antes de los 60 s no se toma");
+    }
+
+    /// <summary>Fuente RUNT que siempre responde que el proveedor limitó las peticiones (HU #14752).</summary>
+    private sealed class FuenteRuntConLimite : IFuenteRunt
+    {
+        public Task<ResultadoRunt> ConsultarVehiculoAsync(Guid empresa, IdentificadorVehiculo identificador, CancellationToken ct) =>
+            Task.FromResult(ResultadoRunt.Fallo(TipoErrorFuente.LimiteProveedor, "El proveedor limitó las peticiones."));
     }
 
     /// <summary>Espera del reintento n con el backoff de la política y factor 0 (configuración de las pruebas): 1, 2 y 4 min.</summary>

@@ -352,6 +352,45 @@ public sealed class RuntIntempoProveedorTests
         r.Vehiculo.Should().BeNull();
     }
 
+    // HU #14752 (I-2): el texto del límite se reconoce sin tildes ni mayúsculas; «límite de crédito» o un JSON de vehículo no.
+    [Theory]
+    [InlineData(TextoLimite, true)]
+    [InlineData("EXCEDIO EL LÍMITE DE PETICIONES", true)]
+    [InlineData("limite de peticiones", true)]
+    [InlineData("Excedio el límite de crédito", false)]
+    [InlineData(CrudoTst301, false)]
+    public void HU14752_EsLimite_reconoce_el_texto_del_limite(string cuerpo, bool esperado) =>
+        ProveedorRuntIntempo.EsLimite(cuerpo).Should().Be(esperado);
+
+    // HU #14752 (I-2): el límite no depende del Content-Type con que Intempo lo mande.
+    [Theory]
+    [InlineData("application/json")]
+    [InlineData("text/html")]
+    public async Task HU14752_200_con_el_limite_es_LIMITE_PROVEEDOR_con_cualquier_Content_Type(string tipo)
+    {
+        var (p, intempo, _, _) = Armar(Texto(HttpStatusCode.OK, TextoLimite, tipo));
+
+        var r = await p.ConsultarPorPlacaAsync("TST301", Ct);
+
+        (r.Resultado, r.TipoError, r.HttpStatus).Should().Be((ResultadoRuntIntempo.Error, TipoErrorFuente.LimiteProveedor, 200));
+        intempo.Pedidos.Should().HaveCount(1);
+    }
+
+    // HU #14752 (M-1): un HTTP 429 de Intempo es LIMITE_PROVEEDOR (transitorio), no HTTP_NO_EXITOSO.
+    [Fact]
+    public async Task HU14752_429_es_LIMITE_PROVEEDOR_con_una_sola_llamada()
+    {
+        var (p, intempo, log, reloj) = Armar(Texto(HttpStatusCode.TooManyRequests, "Too Many Requests", "text/plain"));
+
+        var r = await p.ConsultarPorPlacaAsync("TST301", Ct);
+
+        (r.Resultado, r.TipoError, r.HttpStatus).Should().Be((ResultadoRuntIntempo.Error, TipoErrorFuente.LimiteProveedor, 429));
+        r.Errores.Should().ContainSingle().Which.Code.Should().Be(429);
+        intempo.Pedidos.Should().HaveCount(1, "el límite no se reintenta aquí");
+        reloj.Esperas.Should().BeEmpty();
+        log.Textos.Should().Contain("Clasificacion=LIMITE_PROVEEDOR").And.Contain("Status=429");
+    }
+
     [Fact]
     public async Task HU14752_200_HTML_y_luego_JSON_valido_es_ENCONTRADO_con_dos_llamadas()
     {
