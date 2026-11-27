@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Queries.Domain;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -45,9 +46,12 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
     private readonly FlitDbContext _context;
     private readonly SuperAdminTenantScope _superAdminScope;
 
-    public CompanyQueryRepository(FlitDbContext context)
+    private readonly ITramiteFirmaEvaluator _firma;
+
+    public CompanyQueryRepository(FlitDbContext context, ITramiteFirmaEvaluator? firma = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _firma = firma ?? new TramiteFirmaEvaluator(new ProcedureInstanceRepository(_context));
         _superAdminScope = new SuperAdminTenantScope(_context);
     }
 
@@ -109,6 +113,14 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
         var rows = await LoadRowsAsync(tenantIds, definition, request.AllowedFamilies, cancellationToken).ConfigureAwait(false);
 
+        // HU #14699 — «Firmado por todas»: la regla vive en ITramiteFirmaEvaluator (en memoria, ADR-0092) y
+        // se calcula UNA vez por fila del universo, así filtro, contador, periodo anterior y export coinciden.
+        var filtraFirma = definition.Condiciones.Any(c => c.FieldId == CompanyQueryFieldCatalog.FirmadoPorTodas);
+        if (filtraFirma)
+        {
+            rows = await ConFirmaAsync(rows, tenantIds, cancellationToken).ConfigureAwait(false);
+        }
+
         var condiciones = definition.Condiciones
             .Select(c => (Condition: c, Predicate: Engine.BuildPredicate(c)))
             .ToList();
@@ -135,6 +147,14 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             .Take(pageSize)
             .ToList();
 
+        // Sin filtro de firma, la columna solo se calcula para la página visible (y solo si se pidió).
+        if (!filtraFirma && PideColumnaFirma(definition) && ordered.Count > 0)
+        {
+            var conFirma = (await ConFirmaAsync(ordered, tenantIds, cancellationToken).ConfigureAwait(false))
+                .ToDictionary(r => r.Instance.Id);
+            ordered = ordered.Select(r => conFirma[r.Instance.Id]).ToList();
+        }
+
         // Validación de identidad por persona: se arma para TODO el filtro (no solo la página) porque
         // el máximo de actores por rol define el ancho del Excel y tiene que ser el mismo en todas las
         // partes de un export por lotes.
@@ -157,6 +177,45 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             Filas: ordered.Select(r => ToDto(r, empresas, actoresPorTramite)).ToList(),
             Cobertura: cobertura,
             MaxActoresPorRol: maxActores);
+    }
+
+    private static bool PideColumnaFirma(QueryDefinition definition) =>
+        definition.Columnas.Any(c =>
+            c == CompanyQueryFieldCatalog.FaltaFirmar || c == CompanyQueryFieldCatalog.FirmadoPorTodas
+            || c == CompanyQueryFieldCatalog.FirmaVendedor || c == CompanyQueryFieldCatalog.FirmaComprador);
+
+    /// <summary>
+    /// Carga el grafo de los trámites (tipo, actores, validaciones; siempre acotado a los tenants de la
+    /// consulta) y evalúa la firma con el criterio único de <see cref="ITramiteFirmaEvaluator"/>.
+    /// </summary>
+    private async Task<List<CompanyRow>> ConFirmaAsync(
+        IReadOnlyList<CompanyRow> filas, IReadOnlyList<Guid> tenantIds, CancellationToken cancellationToken)
+    {
+        if (filas.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = filas.Select(f => f.Instance.Id).ToList();
+        var tramites = await _context.ProcedureInstances
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(p => p.ProcedureType)
+            .Include(p => p.Actors)
+            .Include(p => p.BiometricValidations)
+            .Where(p => p.DeletedAt == null && tenantIds.Contains(p.TenantId) && ids.Contains(p.Id))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var ahora = DateTimeOffset.UtcNow;
+        var contexto = await _firma.CargarContextoAsync(tramites, ahora, cancellationToken).ConfigureAwait(false);
+        var porId = tramites.ToDictionary(t => t.Id);
+
+        return filas
+            .Select(f => porId.TryGetValue(f.Instance.Id, out var t)
+                ? f with { Firma = _firma.Evaluar(t, contexto, ahora) }
+                : f)
+            .ToList();
     }
 
     // ── Carga ─────────────────────────────────────────────────────────────────────────────────
@@ -509,6 +568,8 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         CompanyQueryFieldCatalog.LicenciaTransito => r => [Bool(r.TieneLicencia)],
         CompanyQueryFieldCatalog.Transformaciones => r => r.Transformaciones,
         CompanyQueryFieldCatalog.Leasing => r => [Bool(r.EsLeasing)],
+        // Sin evaluación (no debería llegar aquí sin filtro) cuenta como «No»: nunca como firmado.
+        CompanyQueryFieldCatalog.FirmadoPorTodas => r => [r.Firma?.ValorFiltro ?? "false"],
         CompanyQueryFieldCatalog.MetodoPago => r => Single(r.MetodoPago),
         // En matrícula inicial no hay traspaso que clasificar: devolver «bilateral» ahí haría que un
         // filtro por bilateral arrastrara todas las matrículas.
@@ -605,7 +666,11 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 : null,
             DiasEnOrganismo: row.DiasEnOrganismo,
             Devoluciones: row.Devoluciones,
-            Actores: actores.GetValueOrDefault(row.Instance.Id) ?? []);
+            Actores: FirmaDtoMapper.ConFirma(actores.GetValueOrDefault(row.Instance.Id) ?? [], row.Firma),
+            FirmadoPorTodas: row.Firma?.FirmadoPorTodas,
+            FaltaFirmar: row.Firma?.TextoPendientes,
+            FirmasResumen: row.Firma?.TextoResumen,
+            FirmasPersonas: FirmaDtoMapper.Personas(row.Firma));
 
     // ── Validación de identidad por persona ───────────────────────────────────────────────────
 
@@ -1002,5 +1067,6 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         double? DiasEnOrganismo,
         int Devoluciones,
         IReadOnlyList<string> Comprador,
-        IReadOnlyList<string> Vendedor);
+        IReadOnlyList<string> Vendedor,
+        TramiteFirmaResultado? Firma = null);
 }

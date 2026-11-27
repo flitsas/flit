@@ -340,10 +340,12 @@ public sealed class CompanyQueryRepositoryTests
             [CompanyQueryFieldCatalog.MetodoPago] = "Efectivo",
             [CompanyQueryFieldCatalog.TipoTraspaso] = CompanyQueryFieldCatalog.TraspasoUnilateral,
             [CompanyQueryFieldCatalog.Compania] = Empresa.ToString(),
+            // HU #14699: sin identidades aprobadas el trámite no está firmado por todas las partes.
+            [CompanyQueryFieldCatalog.FirmadoPorTodas] = "false",
         };
 
         esperado.Keys.Should().BeEquivalentTo(
-            CompanyQueryFieldCatalog.Fields.Select(f => f.Id),
+            CompanyQueryFieldCatalog.Fields.Where(f => f.Operators.Count > 0).Select(f => f.Id), // «Falta firmar» es solo columna
             "cada campo del catálogo necesita su traducción y su caso aquí");
 
         foreach (var (fieldId, valor) in esperado)

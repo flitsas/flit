@@ -5,6 +5,7 @@
 // es lo que hace que agregar un campo consultable sea tocar un archivo del servidor y verlo
 // aparecer en el constructor sin desplegar frontend.
 import { apiFetch } from "./client";
+import type { FirmaPersona } from "./company-queries";
 
 const base = "/api/v1/admin/ot/queries";
 // El modelo de la consulta es COMPARTIDO con las consultas de la empresa gestora (`./queries`).
@@ -79,6 +80,12 @@ export interface OtQueryRow {
   diasEnOrganismo: number | null;
   devoluciones: number;
   causalesUltimoRechazo: string[];
+  firmadoPorTodas?: boolean | null;
+  faltaFirmar?: string | null;
+  /** «2 de 3 · Faltan firmas»; ausente/`null` si la consulta no calculó la firma. */
+  firmasResumen?: string | null;
+  /** Una entrada por persona que debe firmar; ausente/`null` si no se calculó. */
+  firmasPersonas?: FirmaPersona[] | null;
 }
 
 export type OtQueryResult = SharedResult<OtQueryRow>;

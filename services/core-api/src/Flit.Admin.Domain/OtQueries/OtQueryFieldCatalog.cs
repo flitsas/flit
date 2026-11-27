@@ -36,6 +36,18 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
     public const string LicenciaTransito = "licencia_transito";
     public const string Revisor = "revisor";
 
+    /// <summary>Épica #14666 / HU #14700 (A3): ¿firmaron todas las partes? Filtro «es» Sí/No. Mismo id que el del gestor.</summary>
+    public const string FirmadoPorTodas = "firmado_por_todas";
+
+    /// <summary>Épica #14666 / HU #14700 (A3): quién falta por firmar. Solo columna, sin filtro.</summary>
+    public const string FaltaFirmar = "falta_firmar";
+
+    /// <summary>Estado de firma por vendedor (una columna por persona en el Excel). Solo columna.</summary>
+    public const string FirmaVendedor = "firma_vendedor";
+
+    /// <summary>Estado de firma por comprador (una columna por persona en el Excel). Solo columna.</summary>
+    public const string FirmaComprador = "firma_comprador";
+
     public const string GrupoVehiculo = "Vehículo";
     public const string GrupoPersonas = "Personas";
     public const string GrupoTramite = "Trámite";
@@ -74,6 +86,13 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         new("revocado", "Revocado"),
     ];
 
+    private static readonly QueryFieldOptionDto[] FirmasOptions =
+    [
+        new("true", "Completas"),
+        new("false", "Faltan firmas"),
+        new("sin_partes", "Sin partes que firmen"),
+    ];
+
     private static readonly QueryFieldOptionDto[] SiNoOptions =
     [
         new("true", "Sí"),
@@ -87,6 +106,31 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
         [QueryOperator.EsAlguno, QueryOperator.NoEsNinguno];
 
     private static readonly string[] BooleanoOperators = [QueryOperator.EsAlguno];
+
+    /// <summary>Ayudas del campo «Firmado por todas las partes»: IDÉNTICAS a las de las consultas del gestor.</summary>
+    public const string FirmadoPorTodasHint =
+        "Completas: todas las partes que deben firmar ya firmaron. Faltan firmas: falta al menos una. Sin partes que firmen: el trámite no tiene a nadie que firme.";
+
+    /// <summary>Ayuda del campo «Falta firmar»: idéntica a la de las consultas del gestor.</summary>
+    public const string FaltaFirmarHint =
+        "Nombre y rol de quien aún no ha firmado. Vacío si ya firmaron todos.";
+
+    /// <summary>
+    /// Los dos campos de firma (HU #14700). Los comparten Consultas y la bandeja del organismo: una
+    /// sola definición evita que las dos pantallas —o el gestor— acaben explicando distinto lo mismo.
+    /// </summary>
+    internal static QueryFieldDto[] CamposFirma { get; } =
+    [
+        new(FirmadoPorTodas, "Firmas", QueryFieldKind.Booleano, GrupoPersonas,
+            BooleanoOperators, FirmasOptions, FirmadoPorTodasHint, AdmiteLista: false),
+        // Sin operadores = solo columna: el normalizador descarta cualquier condición sobre él.
+        new(FaltaFirmar, "Falta firmar", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            FaltaFirmarHint, AdmiteLista: false),
+        new(FirmaVendedor, "Firma vendedor", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Firmó, Pendiente o Rechazada, por cada vendedor.", AdmiteLista: false),
+        new(FirmaComprador, "Firma comprador", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Firmó, Pendiente o Rechazada, por cada comprador.", AdmiteLista: false),
+    ];
 
     private static readonly QueryFieldDto[] All =
     [
@@ -130,6 +174,9 @@ public sealed class OtQueryFieldCatalog : IQueryFieldCatalog
             OpcionOperators, TransformacionOptions,
             "«No es ninguna» sobre las tres devuelve los trámites sin transformaciones.",
             AdmiteLista: true),
+
+        // HU #14700 — firma de las partes (ITramiteFirmaEvaluator, en memoria; nunca SQL).
+        .. CamposFirma,
     ];
 
     // ── IQueryFieldCatalog ────────────────────────────────────────────────────────────────────

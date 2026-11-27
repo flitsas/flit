@@ -61,6 +61,8 @@ internal static class OtQueryReportColumns
         ["transformaciones"] = new("Transformaciones", 26, r => TextOrEmpty(r.Transformaciones.Count == 0
             ? null
             : string.Join(" · ", r.Transformaciones.Select(t => Label(TransformacionLabel, t))))),
+        ["firmado_por_todas"] = new("Firmas", 26, r => TextOrEmpty(r.FirmasResumen)),
+        ["falta_firmar"] = new("Falta firmar", 40, r => TextOrEmpty(r.FaltaFirmar)),
         ["radicado_en"] = new("Radicado", 14, r => DateCellOrEmpty(r.RadicadoEn)),
         ["decidido_en"] = new("Decidido", 14, r => DateCellOrEmpty(r.DecididoEn)),
         ["aprobado_en"] = new("Aprobado", 14, r => DateCellOrEmpty(r.AprobadoEn)),
@@ -79,9 +81,9 @@ internal static class OtQueryReportColumns
         string sheetName, IReadOnlyList<string> columnIds, IReadOnlyList<OtQueryRowDto> rows)
     {
         var ids = columnIds.Count == 0 ? DefaultColumns : columnIds;
-        var columns = ids.Where(Definitions.ContainsKey).Select(id => Definitions[id]).ToList();
+        var columns = ids.SelectMany(id => Expandir(id, rows)).ToList();
         if (columns.Count == 0)
-            columns = DefaultColumns.Select(id => Definitions[id]).ToList();
+            columns = DefaultColumns.SelectMany(id => Expandir(id, rows)).ToList();
 
         var sheetColumns = columns
             .Select(c => new TabularWorkbookWriter.Column(c.Header, c.Width))
@@ -92,6 +94,40 @@ internal static class OtQueryReportColumns
 
         return new TabularWorkbookWriter.Sheet(sheetName, sheetColumns, dataRows);
     }
+
+    /// <summary>
+    /// Una columna del catálogo; <c>firma_vendedor</c>/<c>firma_comprador</c> se expanden a UNA columna por persona
+    /// («Firma vendedor», «Firma vendedor 2»…), mínimo 1, con el máximo de personas de las filas del informe.
+    /// </summary>
+    private static IEnumerable<ColumnDef> Expandir(string id, IReadOnlyList<OtQueryRowDto> rows)
+    {
+        if (id is FirmaVendedor or FirmaComprador)
+        {
+            var rol = id == FirmaVendedor ? "Vendedor" : "Comprador";
+            var etiqueta = rol.ToLowerInvariant();
+            var ancho = Math.Max(1, rows.Max(r => (int?)PersonasDelRol(r, rol).Count) ?? 1);
+            for (var n = 1; n <= ancho; n++)
+            {
+                var idx = n - 1;
+                yield return new ColumnDef(n == 1 ? $"Firma {etiqueta}" : $"Firma {etiqueta} {n}", 16, r =>
+                {
+                    var delRol = PersonasDelRol(r, rol);
+                    return idx < delRol.Count ? TextOrEmpty(delRol[idx].Estado) : TabularWorkbookWriter.Cell.Empty;
+                });
+            }
+
+            yield break;
+        }
+
+        if (Definitions.TryGetValue(id, out var def))
+            yield return def;
+    }
+
+    private const string FirmaVendedor = "firma_vendedor";
+    private const string FirmaComprador = "firma_comprador";
+
+    private static List<Flit.Queries.Domain.FirmaPersonaDto> PersonasDelRol(OtQueryRowDto r, string rol) =>
+        (r.FirmasPersonas ?? []).Where(p => p.Rol == rol).OrderBy(p => p.Ordinal).ToList();
 
     private static string Label(Dictionary<string, string> map, string value) =>
         map.TryGetValue(value, out var label) ? label : value;
