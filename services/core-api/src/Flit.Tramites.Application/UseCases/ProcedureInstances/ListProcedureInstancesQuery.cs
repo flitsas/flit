@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -123,7 +124,16 @@ public sealed record InstanceSummaryDto(
                                               // "rechazado" | "aprobado"; null = el trámite no va por Quipux. Aditivo.
     string? QuipuxEstado = null,
                                               // Id del ÚLTIMO envío Quipux del trámite (para enlazar a la trazabilidad); null si no tiene envíos o no va por Quipux.
-    Guid? QuipuxEnvioId = null);
+    Guid? QuipuxEnvioId = null,
+                                              // HU #14743 (Épica #14503) — preferencia de placa de la matrícula inicial, derivada de los
+                                              // field_values que el grafo ya carga (sin consultas extra). null en cualquier otro trámite.
+                                              // PlateDigitoPreferido: dígito pedido (null si no indicó); PlateDigitoDeclarado: el gestor
+                                              // decidió explícitamente (true) o no (false/null); Clase: vehicle_class; PlacaRutaCorta: la
+                                              // placa vino del RUNT (source 'consultation'), aunque ya tenga placa.
+    string? PlateDigitoPreferido = null,
+    bool? PlateDigitoDeclarado = null,
+    string? Clase = null,
+    bool? PlacaRutaCorta = null);
 
 /// <summary>
 /// ADR-0053 — un propietario de un lado en el listado: su nombre y cómo está acreditado
@@ -360,6 +370,7 @@ public sealed class ListProcedureInstancesHandler(
         var seller = sellers.FirstOrDefault();
 
         var modalidad = e.Family;
+        var preferenciaPlaca = PreferenciaPlacaListado.Desde(modalidad, e.FieldValues);
         var modalidadCode = ProcedureFamilyCodes.ToCode(modalidad);
 
         // ADR-0051 — quién valida identidad y quién firma lo declara el TIPO (`biometricActors` /
@@ -431,7 +442,11 @@ public sealed class ListProcedureInstancesHandler(
             CompradoresActores: ActoresListado(e, partesIdentidad, BuyerActorType, buyers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
             MultiplesPropietarios: sellers.Count > 1 || buyers.Count > 1,
             QuipuxEstado: quipuxMarca?.Estado,
-            QuipuxEnvioId: quipuxMarca?.EnvioId);
+            QuipuxEnvioId: quipuxMarca?.EnvioId,
+            PlateDigitoPreferido: preferenciaPlaca.Digito,
+            PlateDigitoDeclarado: preferenciaPlaca.Declarado,
+            Clase: preferenciaPlaca.Clase,
+            PlacaRutaCorta: preferenciaPlaca.RutaCorta);
     }
 
     /// <summary>

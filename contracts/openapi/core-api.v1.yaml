@@ -21858,6 +21858,31 @@ components:
       properties:
         id: { type: string, format: uuid }
         referenceNumber: { type: string, description: Radicado del trámite. }
+        plateDigitoPreferido:
+          type: string
+          nullable: true
+          description: >
+            HU #14743 (Épica #14503) — dígito (0-9) de preferencia de placa que el gestor pidió al radicar
+            (`plate_preferred_last_digit`). Solo en matrícula inicial; null en cualquier otro trámite o si el
+            gestor declaró «sin preferencia». Aditivo.
+        plateDigitoDeclarado:
+          type: boolean
+          nullable: true
+          description: >
+            HU #14743 — el gestor decidió explícitamente el dígito, incluido «sin preferencia»
+            (`plate_preferred_last_digit_declared`). Solo en matrícula inicial; null en otros trámites o si
+            nunca se registró la decisión. Aditivo.
+        clase:
+          type: string
+          nullable: true
+          description: HU #14743 — `vehicle_class` crudo. Solo en matrícula inicial; null en otros trámites. Aditivo.
+        placaRutaCorta:
+          type: boolean
+          nullable: true
+          description: >
+            HU #14743 — Ruta Corta: la placa vino de la consulta al RUNT (field_value `plate` con
+            `source = consultation`), aunque el trámite ya tenga placa. Solo en matrícula inicial
+            (true/false); null en otros trámites. Aditivo.
         modalidad: { type: string, description: "Familia: matriculas | traspaso | otros." }
         estado: { type: string, example: entregado }
         tipoNombre: { type: string, nullable: true, description: Nombre del tipo concreto de trámite. }
@@ -22073,6 +22098,16 @@ components:
           nullable: true
           description: >
             Caso C 2026-11-09 — `vehicle_class` crudo del trámite (sin normalizar), en la lista y en el detalle.
+        platePreferredLastDigitDeclared:
+          type: boolean
+          description: >
+            HU #14743 — el gestor decidió explícitamente el dígito de preferencia, incluido «sin preferencia»
+            (`plate_preferred_last_digit_declared` = 'true'). En la lista y en el detalle. Aditivo.
+        placaRutaCorta:
+          type: boolean
+          description: >
+            HU #14743 — Ruta Corta: la placa vino de la consulta al RUNT (`plate` con `source = consultation`),
+            aunque el trámite ya tenga placa. En la lista y en el detalle. Aditivo.
         grupoPlaca:
           type: string
           nullable: true
