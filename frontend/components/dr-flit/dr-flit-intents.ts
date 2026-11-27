@@ -98,6 +98,13 @@ export const DR_FLIT_SUPPORT_PHONE: string | null = envOrNull(
  */
 export const DR_FLIT_CHAT_ENABLED = process.env.NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED?.trim() !== "false";
 
+/**
+ * HU #14770 — interruptor de la UI completa de DR. FLIT (FAB + panel). Se hornea en build con
+ * `NEXT_PUBLIC_DR_FLIT_UI_ENABLED`. Apagado por defecto; solo con `"true"` se monta el asistente.
+ * Fase 2 (HU #14772) sustituirá/complementará este flag con un setting de plataforma.
+ */
+export const DR_FLIT_UI_ENABLED = process.env.NEXT_PUBLIC_DR_FLIT_UI_ENABLED?.trim() === "true";
+
 export function getIntentById(id: DrFlitIntentId): DrFlitIntent | undefined {
   return DR_FLIT_GESTION_INTENTS.find((i) => i.id === id);
 }

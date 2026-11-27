@@ -297,6 +297,14 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
   });
 });
 
+describe("Shell — DR. FLIT UI (HU #14770)", () => {
+  it("AC1 — por defecto no muestra el FAB ni el panel del asistente", () => {
+    renderShell();
+    expect(screen.queryByRole("button", { name: "Abrir DR. FLIT" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /DR\. FLIT/i })).not.toBeInTheDocument();
+  });
+});
+
 describe("Shell — barra y menú de cuenta", () => {
   it("sin campana de notificaciones en la barra", () => {
     renderShell();
