@@ -7947,7 +7947,7 @@ components:
             desde: { type: string, format: date }
             hasta: { type: string, format: date }
             granularidad: { type: string, enum: [DIA, SEMANA, MES], description: "DIA hasta 62 días, SEMANA (cubeta desde el lunes) hasta 183, si no MES." }
-        generado_en: { type: string, format: date-time, description: ISO 8601 con offset (-05:00). }
+        generado_en: { type: string, format: date-time, description: "ISO 8601 con offset (-05:00)." }
         resumen: { $ref: "#/components/schemas/ResumenEstadisticas" }
         serie:
           type: array
