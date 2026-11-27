@@ -168,6 +168,12 @@ public static class PlatformEndpoints
                 };
                 return Problem(status, ex.Code, ex.Message, TituloDe(ex.Code));
             }
+            catch (DbUpdateConcurrencyException)
+            {
+                // HU #14711: el trabajador del alta reservó la fila de aprovisionamiento entre la lectura y el guardado.
+                return Problem(StatusCodes.Status409Conflict, "CONCURRENT_UPDATE",
+                    "La compañía se actualizó al mismo tiempo. Vuelve a intentarlo.");
+            }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("SetTenantProduct");
 
         // HU #14694 (platform.v1 1.1.0, plan §1.3 P1) GET /admin/tenants/{tenantId}/products/{productCode}/alta-previa —

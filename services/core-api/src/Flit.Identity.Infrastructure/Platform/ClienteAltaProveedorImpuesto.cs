@@ -209,14 +209,16 @@ public static class ClienteAltaProveedorImpuestoExtensions
     }
 
     /// <summary>
-    /// El trabajador del alta automática de <c>diagnostico</c>, solo en core-identity. Se apaga con
-    /// <see cref="TrabajadorAltaCredencialDiagnostico.ActivoKey"/>=false.
+    /// El trabajador del alta automática de <c>diagnostico</c>, solo en core-identity. APAGADO por defecto: se enciende con
+    /// <see cref="TrabajadorAltaCredencialDiagnostico.ActivoKey"/>=true. Encendido y con el proveedor configurado, el alta
+    /// puede reemplazar la llave cargada a mano de una empresa que ya usa Diagnóstico (<c>api_key_rotated</c>), así que cada
+    /// ambiente lo decide explícitamente. Apagado, las filas quedan en <c>PENDIENTE</c> hasta encenderlo o usar el botón.
     /// </summary>
     public static IServiceCollection AddTrabajadorAltaCredencialDiagnostico(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         services.TryAddSingleton(TimeProvider.System);
-        if (configuration.GetValue(TrabajadorAltaCredencialDiagnostico.ActivoKey, true))
+        if (configuration.GetValue(TrabajadorAltaCredencialDiagnostico.ActivoKey, false))
             services.AddHostedService<TrabajadorAltaCredencialDiagnostico>();
         return services;
     }

@@ -25,7 +25,7 @@ Fusionar construye las imágenes, pero no levanta nada.
 |---|---|---|---|---|
 | DEV | 4034 | 4033 | 8089 | `dev.impuestos.flitsas.online` |
 | QA | 5034 | 5033 | 8089 | `qa.impuestos.flitsas.online` |
-| PDN | 6034 | 6033 | 8089 | `impuestos.flitsas.online` |
+| PDN | 6034 | 6033 | 8089 | `impuestos.flitsas.com` (la raíz de PDN es `Suite__Hosts__Root=flitsas.com`) |
 
 La API y el gRPC no se publican: viven en la red de Docker. Los puertos los exporta el CD por ambiente
 ([despliegue-y-puertos.md](../despliegue-y-puertos.md) §2.d). El host lo arma el hub con `Suite:Hosts`
