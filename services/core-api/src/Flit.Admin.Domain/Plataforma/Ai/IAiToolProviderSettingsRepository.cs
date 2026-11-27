@@ -35,6 +35,17 @@ public interface IAiToolProviderSettingsRepository
         string? detail,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Regreso automático al proveedor principal (<c>auto_return_to_primary</c>): actualiza
+    /// <c>active_provider</c> e inserta transición <c>reason=auto_return</c>. No crea alerta: la bandeja
+    /// es de failovers, y el failover que originó el cambio sigue ahí hasta que alguien lo lea.
+    /// </summary>
+    Task RecordAutoReturnAsync(
+        string toolCode,
+        string fromProvider,
+        string toProvider,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Historial paginado de transiciones por tool (HU #13512), <c>occurred_at DESC</c>.</summary>
     Task<(IReadOnlyList<AiProviderTransition> Items, long TotalCount)> ListTransitionsAsync(
         string toolCode,
