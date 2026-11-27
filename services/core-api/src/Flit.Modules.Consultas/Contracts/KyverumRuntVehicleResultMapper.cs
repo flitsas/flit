@@ -329,8 +329,8 @@ public static class KyverumRuntVehicleResultMapper
             fields.Add(new HydratedField(key, value, null));
     }
 
-    // Inverso de KyverumRuntDocType.Normalize: código RUNT del propietario → tipo de documento FLIT
-    // (ActorDocumentType: CC/CE/NIT/PAS/TI). 'Y' u otros sin equivalente FLIT ⇒ null (no se siembra).
+    // Inverso de KyverumRuntDocType: código RUNT del propietario → tipo de documento FLIT
+    // (ActorDocumentType: CC/CE/NIT/PAS/TI/PPT). Otros códigos sin equivalente FLIT ⇒ null (no se siembra).
     private static string? MapOwnerDocType(string? tipoDocPropietario) =>
         tipoDocPropietario?.Trim().ToUpperInvariant() switch
         {
@@ -339,6 +339,7 @@ public static class KyverumRuntVehicleResultMapper
             "E" => "CE",
             "T" => "TI",
             "P" => "PAS",
+            "Y" or "PPT" => "PPT",
             _ => null,
         };
 
