@@ -284,6 +284,23 @@ describe("Pegar listas", () => {
       ]);
     });
   });
+
+  it("en Consultas «contiene» sigue siendo de un solo valor y «es» admite varios", async () => {
+    renderTab();
+    await screen.findByTestId("ot-query-total");
+
+    await userEvent.click(screen.getByTestId("ot-query-agregar-filtro"));
+    await userEvent.click(within(screen.getByTestId("ot-query-campos")).getByText("Placa"));
+
+    const textarea = await screen.findByTestId("ot-query-valores-placa");
+    expect(textarea).toHaveAttribute("placeholder", "Varios valores separados por coma, o uno por línea");
+    await userEvent.type(textarea, "AB, CD");
+    expect(screen.getByText("2 valores")).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Operador"), "contiene");
+    expect(textarea).toHaveAttribute("placeholder", "Parte del texto…");
+    expect(screen.queryByText("2 valores")).not.toBeInTheDocument();
+  });
 });
 
 describe("Consultas guardadas", () => {

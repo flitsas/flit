@@ -1698,7 +1698,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               }
               search={search}
               onSearchChange={setSearch}
-              searchPlaceholder="Radicado, placa o VIN · varios separados por coma"
+              searchPlaceholder="Radicado, placa o VIN · varios con coma"
               searchAriaLabel="Buscar en la bandeja de trámites"
               onAplicar={applyFilters}
               onEmpezarDeCero={clearFilters}

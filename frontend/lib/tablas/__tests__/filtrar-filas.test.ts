@@ -107,3 +107,23 @@ describe("condicionesAParams", () => {
     });
   });
 });
+
+describe("texto con varios valores separados por coma", () => {
+  const COLS: ColumnaFiltro[] = [{ id: "nombre", label: "Nombre", tipo: "texto" }];
+  it("cliente: la fila cumple si contiene cualquiera de los valores", () => {
+    const r = filtrarFilas(
+      FILAS,
+      [{ columnaId: "nombre", tipo: "texto", texto: "beta, gamma" }],
+      "",
+      ACC,
+    );
+    expect(r.map((f) => f.nombre)).toEqual(["Beta Ltda", "Gamma"]);
+  });
+  it("servidor: envía todos los valores limpios unidos por coma", () => {
+    const p = condicionesAParams(
+      [{ columnaId: "nombre", tipo: "texto", texto: "AAA111;\nBBB222 , AAA111" }],
+      COLS,
+    );
+    expect(p.nombre).toBe("AAA111,BBB222");
+  });
+});

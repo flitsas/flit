@@ -7,7 +7,7 @@
  * - `ColumnaFiltro`: lo que una tabla DECLARA de cada columna filtrable.
  * - `CondicionFiltro`: lo que el usuario APLICÓ (una por columna; unión discriminada por `tipo`).
  * - `filtrarFilas`: modo CLIENTE. Combina todo con AND.
- *     texto     -> «contiene», sin mayúsculas, tildes, puntos, guiones, guiones bajos ni espacios.
+ *     texto     -> «contiene» (varios separados por coma = cualquiera), sin mayúsculas, tildes, puntos, guiones, guiones bajos ni espacios.
  *     seleccion -> el valor de la fila pertenece a `valores` (varias opciones = OR dentro de la columna).
  *     fecha     -> rango inclusivo en FECHA LOCAL (`yyyy-mm-dd`); nunca `toISOString()`.
  * - `condicionesAParams`: modo SERVIDOR. Convierte lo aplicado en `{ [param]: valor }`.
@@ -75,6 +75,21 @@ export function aFechaLocal(v: ValorCelda): string | null {
   return `${d.getFullYear()}-${dosDigitos(d.getMonth() + 1)}-${dosDigitos(d.getDate())}`;
 }
 
+/**
+ * Parte un texto en valores: coma, punto y coma, salto de línea o tabulador (mismo criterio que
+ * `parseValueList` del panel Filtros). Sin vacíos ni repetidos.
+ */
+export function partirValores(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(/[\n\r,;\t]+/)
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 /** ¿La condición aporta algo? Las vacías nunca se agregan ni se aplican. */
 export function condicionEsValida(c: CondicionFiltro): boolean {
   switch (c.tipo) {
@@ -98,8 +113,13 @@ function cumple<T>(fila: T, c: CondicionFiltro, accesores: AccesoresFiltro<T>): 
   const valores = aLista(acceso(fila));
   switch (c.tipo) {
     case "texto": {
-      const buscado = normalizarTexto(c.texto);
-      return valores.some((v) => normalizarTexto(v).includes(buscado));
+      // Varios valores separados por coma: basta con que la celda contenga cualquiera (OR).
+      const buscados = partirValores(c.texto).map(normalizarTexto).filter(Boolean);
+      if (buscados.length === 0) return true;
+      return valores.some((v) => {
+        const celda = normalizarTexto(v);
+        return buscados.some((b) => celda.includes(b));
+      });
     }
     case "seleccion":
       return valores.some((v) => v !== null && v !== undefined && c.valores.includes(String(v)));
@@ -158,7 +178,7 @@ export function condicionesAParams(
     const col = columnas.find((x) => x.id === c.columnaId);
     if (!col) continue;
     const param = col.param ?? col.id;
-    if (c.tipo === "texto") params[param] = c.texto.trim();
+    if (c.tipo === "texto") params[param] = partirValores(c.texto).join(",");
     else if (c.tipo === "seleccion") params[param] = c.valores.join(",");
     else {
       if (c.desde) params[col.paramDesde ?? `${param}From`] = c.desde;
