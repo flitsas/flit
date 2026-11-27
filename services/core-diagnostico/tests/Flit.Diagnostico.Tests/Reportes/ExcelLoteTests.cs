@@ -4,9 +4,11 @@ using System.Text.Json;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Infraestructura.Excel;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Modulos.Reportes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Plataforma;
@@ -56,17 +58,55 @@ public sealed class ExcelLoteTests
     private const string PayloadAvaluo =
         """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":48500000,"muestras":3,"fecha":"2026-10-22"}]}""";
 
+    // HU #14752 (Excel v4, contrato-excel §1): «ID del vehículo» al final de las fijas.
     private static readonly string[] Fijas =
-        ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Propietario actual declarado", "Cambio de propietario", "Estado del vehículo"];
+    [
+        "Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Propietario actual declarado", "Cambio de propietario", "Estado del vehículo",
+        "ID del vehículo",
+    ];
+
+    /// <summary>Los 25 rótulos nuevos del RUNT (columnas-excel-v1.md, aprobados), en el orden del contrato §2.1.</summary>
+    internal static readonly string[] NuevasRunt =
+    [
+        "Tipo de documento del propietario", "Número de documento del propietario", "Tipo de documento del locatario",
+        "Número de documento del locatario", "Nombre del locatario", "Estado SOAT", "Vencimiento SOAT", "Estado RTM", "Vencimiento RTM",
+        "Garantías mobiliarias", "Garantías a favor de", "Limitaciones a la propiedad", "Accidentalidad", "Blindaje", "Nivel de blindaje",
+        "Fecha de matrícula", "Cilindraje", "Clasificación", "Color", "Estado del vehículo en el RUNT", "N.º de chasis", "N.º de motor",
+        "Tiene gravámenes", "Tipo de carrocería", "Tipo de combustible",
+    ];
+
+    internal static readonly string[] NuevasSimitVehiculo =
+        ["Cantidad de resoluciones", "Estado de la placa", "Números de comparendo", "Fechas de comparendo", "Valores a pagar", "Total de infracciones"];
+
+    internal static readonly string[] NuevasSimitLocatario = ["Detalle de comparendos del locatario", "Total de comparendos del locatario"];
+
+    /// <summary>La cola sin fuente (D2), siempre presente y vacía, en el orden de v1.</summary>
+    internal static readonly string[] SinFuente =
+    [
+        "Tipo de locatario", "Normalización / saneamiento", "N.º de serie", "Licencia de tránsito de importación", "Empresa transportadora",
+        "Tomador póliza RC", "Análisis de saneamiento",
+    ];
 
     private static readonly string[] DeRunt =
     [
         "RUNT — Estado", "RUNT — Servicio", "RUNT — Clase", "RUNT — Organismo de tránsito", "RUNT — Marca", "RUNT — Línea", "RUNT — Modelo",
-        "RUNT — Propietarios", "RUNT — Locatarios",
+        "RUNT — Propietarios", "RUNT — Locatarios", .. NuevasRunt.Select(r => "RUNT — " + r),
     ];
 
     private static readonly string[] DeSimitVehiculo =
-        ["SIMIT vehículo — Estado", "SIMIT vehículo — Semáforo", "SIMIT vehículo — Comparendos", "SIMIT vehículo — Valor total"];
+    [
+        "SIMIT vehículo — Estado", "SIMIT vehículo — Semáforo", "SIMIT vehículo — Comparendos", "SIMIT vehículo — Valor total",
+        .. NuevasSimitVehiculo.Select(r => "SIMIT vehículo — " + r),
+    ];
+
+    private static readonly string[] DeImpuesto =
+    [
+        "Impuesto departamental — Estado", "Impuesto departamental — Total adeudado", "Impuesto departamental — Vigencias pendientes",
+        "Impuesto departamental — Estado del impuesto",
+    ];
+
+    /// <summary>Aviso D4 de la hoja «Diagnóstico» (literal exacto, decisiones.md D4).</summary>
+    internal const string AvisoD4 = "Algunas consultas son anteriores al detalle completo de la fuente: sus columnas ampliadas pueden ir vacías";
 
     private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
 
@@ -106,7 +146,7 @@ public sealed class ExcelLoteTests
 
         libro.Hojas.Keys.Should().Equal(["Vehículos", "Diagnóstico"], "sin AL_FINALIZAR no hay hoja «Consultas»");
         var vehiculos = libro.Hojas["Vehículos"];
-        vehiculos[0].Should().Equal([.. Fijas, .. DeRunt, .. DeSimitVehiculo], "solo las columnas de RUNT y SIMIT_VEHICULO, en el orden de la grilla");
+        vehiculos[0].Should().Equal([.. Fijas, .. DeRunt, .. DeSimitVehiculo, .. SinFuente], "solo las columnas de RUNT y SIMIT_VEHICULO, en el orden de la grilla, y la cola sin fuente");
         vehiculos.Should().HaveCount(4, "encabezado + una fila por vehículo");
         vehiculos.Skip(1).Select(f => f[1]).Should().Equal(placas, "en el orden de la carga");
         var fila = libro.Fila("Vehículos", "TST401");
@@ -128,9 +168,10 @@ public sealed class ExcelLoteTests
         libro.Texto.Should().NotContainAny(["48500000", "fasecolda", "Avalúo"], "AVALUO no está en el alcance");
 
         var diagnostico = libro.Hojas["Diagnóstico"];
-        diagnostico.Select(f => f[0]).Should().Equal(["Campo", "ID del diagnóstico", "Nombre del lote", "Empresa", "Usuario creador", "Fecha de creación", "Tipo de análisis"]);
+        // HU #14752 D4: los RUNT completados sin respuesta guardada (celdas anteriores a #14087) traen la fila «Aviso».
+        diagnostico.Select(f => f[0]).Should().Equal(["Campo", "ID del diagnóstico", "Nombre del lote", "Empresa", "Usuario creador", "Fecha de creación", "Tipo de análisis", "Aviso"]);
         diagnostico.Skip(1).Select(f => f[1]).Should().Equal(
-            [lote.Id.ToString(), "Flota octubre", "Empresa de prueba", "Ana Prueba", lote.Cabecera.CreadoEn.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " (hora Colombia)", "Diagnóstico Simple"]);
+            [lote.Id.ToString(), "Flota octubre", "Empresa de prueba", "Ana Prueba", lote.Cabecera.CreadoEn.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " (hora Colombia)", "Diagnóstico Simple", AvisoD4]);
     }
 
     // AC2 (F07-C5) — lote EN_PROCESO: el vehículo terminado trae sus datos; el de celdas PENDIENTE trae solo el estado de cada fuente
@@ -231,7 +272,9 @@ public sealed class ExcelLoteTests
 
         var deApi = libro.Hojas["Vehículos"][libro.Fila("Vehículos", "TST431")];
         var aMano = libro.Hojas["Vehículos"][libro.Fila("Vehículos", "TST432")];
-        aMano.Skip(5).Should().Equal(deApi.Skip(5), "salvo orden, identificador, tipo, placa y VIN, la fila manual es la de API");
+        var id = Array.IndexOf(libro.Hojas["Vehículos"][0], "ID del vehículo");
+        aMano.Where((_, i) => i != id).Skip(5).Should().Equal(deApi.Where((_, i) => i != id).Skip(5),
+            "salvo orden, identificador, tipo, placa, VIN e ID del vehículo, la fila manual es la de API");
         libro.Valor("Vehículos", libro.Fila("Vehículos", "TST432"), "Avalúo — Valor sugerido").Should().Be("48500000");
         libro.Texto.Should().NotContain(manual.UsuarioManualId!.Value.ToString());
         libro.Texto.Should().NotContainEquivalentOf("manual");
@@ -493,7 +536,7 @@ public sealed class ExcelLoteTests
         var libro = await ExcelDePrueba.LibroOkAsync(api, token, conImpuesto.Id, ct);
 
         libro.Hojas["Vehículos"][0].Should().Equal(
-            [.. Fijas, .. DeRunt, "Impuesto departamental — Estado", "Impuesto departamental — Total adeudado", "Impuesto departamental — Vigencias pendientes"],
+            [.. Fijas, .. DeRunt, .. DeImpuesto, .. SinFuente],
             "las columnas del impuesto van después de RUNT, en el orden de la grilla");
         var completado = libro.Fila("Vehículos", "TST471");
         libro.Valor("Vehículos", completado, "Impuesto departamental — Estado").Should().Be("Completado");
@@ -516,8 +559,360 @@ public sealed class ExcelLoteTests
 
         var sinLibro = await ExcelDePrueba.LibroOkAsync(api, token, sinImpuesto.Id, ct);
 
-        sinLibro.Hojas["Vehículos"][0].Should().Equal([.. Fijas, .. DeRunt], "sin el impuesto en el alcance no hay columnas del impuesto");
+        sinLibro.Hojas["Vehículos"][0].Should().Equal([.. Fijas, .. DeRunt, .. SinFuente], "sin el impuesto en el alcance no hay columnas del impuesto");
         sinLibro.Texto.Should().NotContainAny(["Impuesto departamental", "Total adeudado", "Vigencias pendientes", "350000"]);
+    }
+
+    // HU #14752 AC1 / SP-11 (contrato-excel §1, columnas-excel-v1.md) — snapshot de los rótulos v4: fijas con «ID del vehículo», los
+    // nuevos de cada fuente al final de su lista, la cola sin fuente al final y la lista EN CLARO cerrada (6 columnas, D3).
+    [Fact]
+    public void HU14752_rotulos_v4_contra_columnas_v1_y_lista_en_claro_cerrada()
+    {
+        ColumnasExcel.Fijas.Should().Equal(Fijas);
+        ColumnasExcel.DatosDe("RUNT").Skip(8).Should().Equal(NuevasRunt);
+        ColumnasExcel.DatosDe("SIMIT_VEHICULO").Skip(3).Should().Equal(NuevasSimitVehiculo);
+        ColumnasExcel.DatosDe("SIMIT_LOCATARIO").Skip(5).Should().Equal(NuevasSimitLocatario);
+        ColumnasExcel.DatosDe("SIMIT_PROPIETARIO").Should().Equal(["Personas consultadas", "Personas con error", "Documentos", "Comparendos", "Valor total"]);
+        ColumnasExcel.DatosDe("IMPUESTO_DEPARTAMENTAL").Should().Equal(["Total adeudado", "Vigencias pendientes", "Estado del impuesto"]);
+        ColumnasExcel.DatosDe("RUNT_LOCATARIO").Should().Equal(["Personas consultadas", "Personas con error", "Documentos"]);
+        ColumnasExcel.DatosDe("AVALUO").Should().Equal(["Valor sugerido", "Fuente principal", "Sin valor comercial"]);
+        ColumnasExcel.SinFuente.Should().Equal(SinFuente);
+        var nuevas = NuevasRunt.Concat(NuevasSimitVehiculo).Concat(NuevasSimitLocatario).Append("Estado del impuesto").Concat(SinFuente).Append("ID del vehículo").ToList();
+        nuevas.Should().HaveCount(42, "42 columnas nuevas (1 fija + 25 + 6 + 2 + 1 + 7)").And.OnlyHaveUniqueItems();
+        ColumnasExcel.EnClaro.Should().BeEquivalentTo(
+            ["Número de documento del propietario", "Número de documento del locatario", "Nombre del locatario", "Garantías a favor de",
+                "Garantías mobiliarias", "Detalle de comparendos del locatario"],
+            "SP-11: solo los datos de D3 salen en claro");
+        ColumnasExcel.Encabezados(["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"]).Should().Equal([.. Fijas, .. DeRunt, .. DeSimitVehiculo, .. DeImpuesto, .. SinFuente]);
+    }
+
+    // HU #14752 AC1/AC2/AC3 (contrato-excel §2) — cada columna nueva con su origen y su formato: RUNT en claro (documentos, nombre del
+    // locatario, garantías y acreedores), fechas dd/MM/yyyy, SI/NO, listas «; », SIMIT con «; …» si viene truncado, detalle de comparendos
+    // del locatario con el documento en claro y pesos «$ 468.500», «Estado del impuesto», «ID del vehículo» y la cola sin fuente vacía.
+    // Sin fuente Completado sus columnas quedan vacías (salvo «Estado del impuesto» NO DISPONIBLE). Sin el detalle del RUNT: 1-4 sí, 5-25 no,
+    // y la hoja «Diagnóstico» trae el aviso D4.
+    [Fact]
+    public void HU14752_columnas_nuevas_con_su_origen_y_formato()
+    {
+        var completo = Guid.Parse("0199f000-0000-7000-8000-00000000e001");
+        var pendiente = Guid.Parse("0199f000-0000-7000-8000-00000000e002");
+        var sinDetalle = Guid.Parse("0199f000-0000-7000-8000-00000000e003");
+        var runt = DatosRuntExcel.Desde(RespuestaExcel("TST4A1"))!;
+        var excel = new DatosExcelVehiculo("CC", PropietarioPrueba, "CC", LocatarioPrueba, NombreLocatarioPrueba, runt, RuntSinDetalle: false);
+        var lote = new ContenidoReporteLote(
+            new EncabezadoLoteReporte(completo, "Lote v4", "Empresa", "Ana", Dato, "Diagnóstico Simple"),
+            [
+                new VehiculoReporte(completo, 1, "TST4A1", "PLACA_CARRO", "TST4A1", null,
+                    [RuntCompletado("TST4A1"), SimitVehiculo(), SimitLocatario(), Impuesto(EstadoSeccion.Completado, tieneDeuda: true)], Excel: excel),
+                new VehiculoReporte(pendiente, 2, "TST4A2", "PLACA_CARRO", "TST4A2", null,
+                    [Pendiente("RUNT"), Pendiente("SIMIT_VEHICULO"), Pendiente("SIMIT_LOCATARIO"), Impuesto(EstadoSeccion.NoDisponible)],
+                    Excel: excel with { Runt = null }),
+                new VehiculoReporte(sinDetalle, 3, "TST4A3", "PLACA_CARRO", "TST4A3", null,
+                    [RuntCompletado("TST4A3"), Pendiente("SIMIT_VEHICULO"), Pendiente("SIMIT_LOCATARIO"), Impuesto(EstadoSeccion.Completado, tieneDeuda: false)],
+                    Excel: new DatosExcelVehiculo("NIT", "900111222", null, null, null, null, RuntSinDetalle: true)),
+            ]);
+
+        var libro = ExcelDePrueba.Leer(TabularWorkbookWriter.Write(ExcelLote.Hojas(lote, new Dictionary<Guid, DatosTecnicosVehiculo>(), null)));
+
+        var hoja = libro.Hojas["Vehículos"];
+        hoja[0].Should().Equal([.. Fijas, .. DeRunt, .. DeSimitVehiculo, "SIMIT locatarios — Estado", "SIMIT locatarios — Personas consultadas",
+            "SIMIT locatarios — Personas con error", "SIMIT locatarios — Documentos", "SIMIT locatarios — Comparendos", "SIMIT locatarios — Valor total",
+            .. NuevasSimitLocatario.Select(r => "SIMIT locatarios — " + r), .. DeImpuesto, .. SinFuente]);
+        var fila = libro.Fila("Vehículos", "TST4A1");
+        var esperado = new Dictionary<string, string>
+        {
+            ["ID del vehículo"] = completo.ToString("D"),
+            ["RUNT — Tipo de documento del propietario"] = "CC",
+            ["RUNT — Número de documento del propietario"] = PropietarioPrueba,
+            ["RUNT — Tipo de documento del locatario"] = "CC",
+            ["RUNT — Número de documento del locatario"] = LocatarioPrueba,
+            ["RUNT — Nombre del locatario"] = NombreLocatarioPrueba,
+            ["RUNT — Estado SOAT"] = "VIGENTE",
+            ["RUNT — Vencimiento SOAT"] = "31/05/2027",
+            ["RUNT — Estado RTM"] = "SI",
+            ["RUNT — Vencimiento RTM"] = "01/02/2027",
+            ["RUNT — Garantías mobiliarias"] = "BANCO PRUEBA SA (NIT 900123456) - VIGENTE - 10/05/2021; ACREEDOR NATURAL FICTICIO (CC 1011122233) - 11/06/2022",
+            ["RUNT — Garantías a favor de"] = "BANCO PRUEBA SA (NIT 900123456); PERSONA NATURAL FICTICIA (CC 1012345678)",
+            ["RUNT — Limitaciones a la propiedad"] = "EMBARGO - JUZGADO PRUEBA - 01/02/2024",
+            ["RUNT — Accidentalidad"] = "Fecha: 02/02/2025; Gravedad: CON HERIDOS",
+            ["RUNT — Blindaje"] = "SI",
+            ["RUNT — Nivel de blindaje"] = "3",
+            ["RUNT — Fecha de matrícula"] = "15/03/2020",
+            ["RUNT — Cilindraje"] = "1598",
+            ["RUNT — Clasificación"] = "AUTOMOVIL",
+            ["RUNT — Color"] = "BLANCO",
+            ["RUNT — Estado del vehículo en el RUNT"] = "ACTIVO",
+            ["RUNT — N.º de chasis"] = "CHASISPRUEBA0123",
+            ["RUNT — N.º de motor"] = "MOTORPRUEBA123",
+            ["RUNT — Tiene gravámenes"] = "SI",
+            ["RUNT — Tipo de carrocería"] = "SEDAN",
+            ["RUNT — Tipo de combustible"] = "GASOLINA",
+            ["SIMIT vehículo — Valor total"] = "al menos 1804100.00", // columna existente, sin cambio (suma decimal invariante)
+            ["SIMIT vehículo — Cantidad de resoluciones"] = "1",
+            ["SIMIT vehículo — Estado de la placa"] = "Con multas",
+            ["SIMIT vehículo — Números de comparendo"] = "TST-C-0701; TST-C-0702; …",
+            ["SIMIT vehículo — Fechas de comparendo"] = "30/09/2026 10:15:00; 01/10/2026; …",
+            ["SIMIT vehículo — Valores a pagar"] = "604100; 1200000; …",
+            ["SIMIT vehículo — Total de infracciones"] = "3",
+            ["SIMIT locatarios — Documentos"] = "CC ****5432; NIT ****3456; CC ****0000",
+            ["SIMIT locatarios — Detalle de comparendos del locatario"] =
+                $"[CC-{LocatarioPrueba}] Número: TST-C-0709 | Fecha: 30/09/2026 | Valor: $ 468.500; [NIT-900123456] Sin comparendos",
+            ["SIMIT locatarios — Total de comparendos del locatario"] = "1",
+            ["Impuesto departamental — Estado del impuesto"] = "CON DEUDA",
+        };
+        foreach (var (columna, valor) in esperado)
+            libro.Valor("Vehículos", fila, columna).Should().Be(valor, columna);
+        libro.Texto.Should().NotContain("1077788899", "SP-11: el documento del demandante de la limitación no está en D3");
+        libro.Texto.Should().NotContain(DetalleRuntGarantia.PersonaNatural, "en el Excel el acreedor sale en claro, sin la sustitución del PDF");
+
+        var vacia = libro.Fila("Vehículos", "TST4A2");
+        foreach (var columna in DeRunt.Skip(1).Concat(DeSimitVehiculo.Skip(1)).Concat(NuevasSimitLocatario.Select(r => "SIMIT locatarios — " + r)))
+            libro.Valor("Vehículos", vacia, columna).Should().BeEmpty($"una fuente no Completado deja vacías sus columnas ({columna})");
+        libro.Valor("Vehículos", vacia, "Impuesto departamental — Estado").Should().Be("No confirmado");
+        libro.Valor("Vehículos", vacia, "Impuesto departamental — Total adeudado").Should().BeEmpty();
+        libro.Valor("Vehículos", vacia, "Impuesto departamental — Vigencias pendientes").Should().BeEmpty();
+        libro.Valor("Vehículos", vacia, "Impuesto departamental — Estado del impuesto").Should().Be("NO DISPONIBLE", "la única excepción a la regla de vacío");
+        libro.Valor("Vehículos", vacia, "ID del vehículo").Should().Be(pendiente.ToString("D"));
+
+        var viejo = libro.Fila("Vehículos", "TST4A3");
+        libro.Valor("Vehículos", viejo, "RUNT — Tipo de documento del propietario").Should().Be("NIT", "1-4 salen del vehículo aunque falte la respuesta");
+        libro.Valor("Vehículos", viejo, "RUNT — Número de documento del propietario").Should().Be("900111222");
+        foreach (var columna in NuevasRunt.Skip(4).Select(r => "RUNT — " + r))
+            libro.Valor("Vehículos", viejo, columna).Should().BeEmpty($"sin la respuesta del RUNT, {columna} va vacía");
+        libro.Valor("Vehículos", viejo, "Impuesto departamental — Estado del impuesto").Should().Be("VIGENTE");
+
+        foreach (var placa in new[] { "TST4A1", "TST4A2", "TST4A3" })
+        {
+            foreach (var columna in SinFuente)
+                libro.Valor("Vehículos", libro.Fila("Vehículos", placa), columna).Should().BeEmpty($"{columna} no tiene fuente (D2)");
+        }
+
+        libro.Hojas["Diagnóstico"].Should().ContainSingle(f => f[0] == "Aviso").Which[1].Should().Be(AvisoD4);
+        libro.Hojas["Diagnóstico"].FindIndex(f => f[0] == "Aviso").Should().Be(libro.Hojas["Diagnóstico"].FindIndex(f => f[0] == "Tipo de análisis") + 1);
+        var sinAviso = new ContenidoReporteLote(lote.Encabezado, [lote.Vehiculos[0]]);
+        ExcelLote.Hojas(sinAviso, new Dictionary<Guid, DatosTecnicosVehiculo>(), null)[1].Rows
+            .Should().NotContain(f => f[0] == TabularWorkbookWriter.Cell.Of("Aviso"), "sin RUNT completado sin detalle no hay aviso");
+    }
+
+    // HU #14752 AC2 — el nombre del locatario: el del RUNT cuyo tipo (texto de Intempo → código) y número (sin espacios) casan con el
+    // locatario del vehículo; primero lessee[] (name o los nombres unidos) y luego propietarios_actuales[].locatarios[]; si no casa, null.
+    [Fact]
+    public void HU14752_nombre_del_locatario_casa_por_tipo_y_numero()
+    {
+        var runt = DatosRuntExcel.Desde(RespuestaExcel("TST4A4"))!;
+
+        DatosExcelVehiculo.NombreDelLocatario(runt, "CC", LocatarioPrueba).Should().Be(NombreLocatarioPrueba, "lessee[] con los nombres unidos");
+        DatosExcelVehiculo.NombreDelLocatario(runt, "CC", " 1098 765432 ").Should().Be(NombreLocatarioPrueba, "el número se compara sin espacios");
+        DatosExcelVehiculo.NombreDelLocatario(runt, "NIT", "900777888").Should().Be("LEASING FICTICIO SA", "propietarios_actuales[].locatarios[]");
+        DatosExcelVehiculo.NombreDelLocatario(runt, "NIT", LocatarioPrueba).Should().BeNull("el tipo no casa");
+        DatosExcelVehiculo.NombreDelLocatario(runt, "CC", "1000000001").Should().BeNull("el número no casa");
+        DatosExcelVehiculo.NombreDelLocatario(runt, null, null).Should().BeNull();
+        DatosExcelVehiculo.NombreDelLocatario(null, "CC", LocatarioPrueba).Should().BeNull("sin respuesta del RUNT");
+        DatosRuntExcel.Desde(new Flit.Consultas.Grpc.V1.ConsultarVehiculoIntempoResponse { Resultado = Flit.Consultas.Grpc.V1.ResultadoRuntIntempo.NoEncontrado })
+            .Should().BeNull();
+        runt.ToString().Should().NotContainAny([LocatarioPrueba, NombreLocatarioPrueba, "1012345678"], "SP-7: los records no imprimen sus datos");
+        new DatosExcelVehiculo("CC", PropietarioPrueba, "CC", LocatarioPrueba, NombreLocatarioPrueba, runt, false).ToString()
+            .Should().NotContainAny([PropietarioPrueba, LocatarioPrueba, NombreLocatarioPrueba]);
+    }
+
+    // HU #14752 SP-10 — el nombre del locatario y el acreedor vienen de la fuente: un «=HYPERLINK(…)» o «+…» inicial queda como texto
+    // literal (quotePrefix) y el libro no tiene fórmulas.
+    [Fact]
+    public void HU14752_SP10_nombre_que_parece_formula_queda_literal()
+    {
+        var id = Guid.Parse("0199f000-0000-7000-8000-00000000e004");
+        var respuesta = RespuestaExcel("TST4A5");
+        respuesta.Vehiculo.GarantiasFavorDe[0].Acreedor = "+ACREEDOR FORMULA";
+        const string nombre = "=HYPERLINK(\"x\")";
+        var excel = new DatosExcelVehiculo("CC", PropietarioPrueba, "CC", LocatarioPrueba, nombre, DatosRuntExcel.Desde(respuesta), false);
+        var lote = new ContenidoReporteLote(new EncabezadoLoteReporte(id, "Lote", "Empresa", "Ana", Dato, "Diagnóstico Simple"),
+            [new VehiculoReporte(id, 1, "TST4A5", "PLACA_CARRO", "TST4A5", null, [RuntCompletado("TST4A5")], Excel: excel)]);
+
+        var libro = ExcelDePrueba.Leer(TabularWorkbookWriter.Write(ExcelLote.Hojas(lote, new Dictionary<Guid, DatosTecnicosVehiculo>(), null)));
+
+        var fila = libro.Fila("Vehículos", "TST4A5");
+        libro.Formulas.Should().Be(0);
+        libro.Valor("Vehículos", fila, "RUNT — Nombre del locatario").Should().Be(nombre);
+        libro.ComoTextoLiteral("Vehículos", fila, "RUNT — Nombre del locatario").Should().BeTrue();
+        libro.Valor("Vehículos", fila, "RUNT — Garantías a favor de").Should().StartWith("+ACREEDOR FORMULA");
+        libro.ComoTextoLiteral("Vehículos", fila, "RUNT — Garantías a favor de").Should().BeTrue();
+    }
+
+    // HU #14752 AC2 / SP-1 (integración, Postgres real) — el lector descifra al generar: número del propietario y del locatario (solo si lo
+    // informó el RUNT) en claro y el nombre del locatario desde la respuesta RUNT cifrada sembrada; el vehículo sin respuesta guardada
+    // trae 1-4 (sin el locatario declarado por el cliente), deja 5-25 vacías y la hoja «Diagnóstico» lleva el aviso D4.
+    [Fact]
+    public async Task HU14752_SP1_documentos_y_nombre_del_locatario_en_claro_desde_la_respuesta_cifrada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        Flit.Diagnostico.Tests.Tablero.CeldaSembrada[] runt = [new(Fuente.Runt, EstadoCelda.Pendiente, 1)];
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt], vehiculos: [new("TST4B1", runt), new("TST4B2", runt)]);
+        foreach (var placa in new[] { "TST4B1", "TST4B2" })
+            await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Runt), PayloadRunt.Replace("TST401", placa, StringComparison.Ordinal), ct);
+        await Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests.GuardarCifradaAsync(api, lote.Celda("TST4B1", Fuente.Runt).Id,
+            Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests.Cifrar(api, ContenidoReporteTests.ProtoJson(RespuestaExcel("TST4B1"))), ct);
+        await DocumentosDelVehiculoAsync(api, empresa, lote.Vehiculos.Single(v => v.Placa == "TST4B1").Id, "CC", PropietarioPrueba, "CC", LocatarioPrueba, OrigenDocumento.Proveedor, ct);
+        await DocumentosDelVehiculoAsync(api, empresa, lote.Vehiculos.Single(v => v.Placa == "TST4B2").Id, "NIT", "900111222", "CC", "1033344455", OrigenDocumento.DeclaradoCliente, ct);
+
+        var libro = await ExcelDePrueba.LibroOkAsync(api, ExcelDePrueba.Token(api, empresa.Id), lote.Id, ct);
+
+        var conRespuesta = libro.Fila("Vehículos", "TST4B1");
+        libro.Valor("Vehículos", conRespuesta, "RUNT — Número de documento del propietario").Should().Be(PropietarioPrueba, "SP-1: el número sembrado completo");
+        libro.Valor("Vehículos", conRespuesta, "RUNT — Tipo de documento del locatario").Should().Be("CC");
+        libro.Valor("Vehículos", conRespuesta, "RUNT — Número de documento del locatario").Should().Be(LocatarioPrueba);
+        libro.Valor("Vehículos", conRespuesta, "RUNT — Nombre del locatario").Should().Be(NombreLocatarioPrueba, "sale de la respuesta RUNT cifrada");
+        libro.Valor("Vehículos", conRespuesta, "RUNT — Estado SOAT").Should().Be("VIGENTE");
+        libro.Valor("Vehículos", conRespuesta, "RUNT — Garantías a favor de").Should().Contain("PERSONA NATURAL FICTICIA (CC 1012345678)");
+        libro.Valor("Vehículos", conRespuesta, "ID del vehículo").Should().Be(lote.Vehiculos.Single(v => v.Placa == "TST4B1").Id.ToString("D"));
+        var sinRespuesta = libro.Fila("Vehículos", "TST4B2");
+        libro.Valor("Vehículos", sinRespuesta, "RUNT — Tipo de documento del propietario").Should().Be("NIT");
+        libro.Valor("Vehículos", sinRespuesta, "RUNT — Número de documento del propietario").Should().Be("900111222");
+        libro.Valor("Vehículos", sinRespuesta, "RUNT — Tipo de documento del locatario").Should().BeEmpty("el declarado por el cliente no sale");
+        libro.Valor("Vehículos", sinRespuesta, "RUNT — Número de documento del locatario").Should().BeEmpty();
+        libro.Valor("Vehículos", sinRespuesta, "RUNT — Estado SOAT").Should().BeEmpty("sin respuesta guardada");
+        libro.Texto.Should().NotContain("1033344455");
+        libro.Hojas["Diagnóstico"].Should().ContainSingle(f => f[0] == "Aviso").Which[1].Should().Be(AvisoD4);
+    }
+
+    // HU #14752 AC4 / SP-4 (integración) — VersionPlantilla = 4; una evidencia anterior (huella de v3 sembrada) se reemplaza en la próxima
+    // descarga: queda una sola vigente, la anterior se conserva no vigente.
+    [Fact]
+    public async Task HU14752_SP4_version_4_y_una_evidencia_anterior_deja_una_sola_vigente()
+    {
+        ExcelLote.VersionPlantilla.Should().Be(4);
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteSimitAsync(empresa, "TST4C1", ct);
+        var cliente = api.Cliente(ExcelDePrueba.Token(api, empresa.Id));
+        await ExcelDePrueba.BytesOkAsync(cliente, lote.Id, ct);
+        var deV3 = new string('3', 64);
+        await using (var db = empresa.Db())
+            await db.Set<Evidencia>().Where(e => e.DiagnosticoId == lote.Id).ExecuteUpdateAsync(s => s.SetProperty(e => e.Huella, deV3), ct);
+
+        var libro = ExcelDePrueba.Leer(await ExcelDePrueba.BytesOkAsync(cliente, lote.Id, ct));
+
+        libro.Hojas["Vehículos"][0].Should().Contain("ID del vehículo", "el archivo nuevo es v4");
+        var todas = await EvidenciasAsync(empresa, lote.Id, ct);
+        todas.Should().HaveCount(2, "la anterior se conserva");
+        todas.Should().ContainSingle(e => e.Vigente).Which.Huella.Should().NotBe(deV3);
+        todas.Single(e => e.Huella == deV3).Vigente.Should().BeFalse();
+    }
+
+    private const string PropietarioPrueba = "1055566677";
+
+    private const string LocatarioPrueba = "1098765432";
+
+    private const string NombreLocatarioPrueba = "LOCATARIO FICTICIO UNO";
+
+    /// <summary>
+    /// Respuesta RUNT ENCONTRADO para el Excel v4 (datos ficticios): la de <see cref="ContenidoReporteTests.RespuestaRunt"/> más locatario
+    /// (lessee[] y locatarios de propietarios_actuales), garantías mobiliarias, blindaje, limitación, accidentalidad y gravámenes.
+    /// </summary>
+    internal static Flit.Consultas.Grpc.V1.ConsultarVehiculoIntempoResponse RespuestaExcel(
+        string placa, string locatario = LocatarioPrueba, string nombre = NombreLocatarioPrueba)
+    {
+        var partes = nombre.Split(' ', 3);
+        var respuesta = ContenidoReporteTests.RespuestaRunt(placa);
+        var v = respuesta.Vehiculo;
+        v.InformacionGeneral.TieneGravamenes = "S";
+        v.Lessee.Add(new Flit.Consultas.Grpc.V1.PersonaIntempo
+        {
+            DocumentType = "Cédula de ciudadanía",
+            DocumentNumber = locatario,
+            FirstName = partes[0],
+            FirstLastName = partes.ElementAtOrDefault(1) ?? string.Empty,
+            SecondLastName = partes.ElementAtOrDefault(2) ?? string.Empty,
+        });
+        v.PropietariosActuales[0].Locatarios.Add(new Flit.Consultas.Grpc.V1.LocatarioIntempo { Tdoc = "NIT", Ndoc = "900777888", NombreRazonSocial = "LEASING FICTICIO SA" });
+        v.GarantiasMobiliarias.Add(new Flit.Consultas.Grpc.V1.GarantiaMobiliariaIntempo
+        {
+            Entidad = "BANCO PRUEBA SA",
+            TipoDocumentoEntidad = "NIT",
+            NumeroDocumentoEntidad = "900123456",
+            Estado = "VIGENTE",
+            FechaRegistro = "2021-05-10",
+        });
+        v.GarantiasMobiliarias.Add(new Flit.Consultas.Grpc.V1.GarantiaMobiliariaIntempo
+        {
+            Entidad = "ACREEDOR NATURAL FICTICIO",
+            TipoDocumentoEntidad = "Cédula de ciudadanía",
+            NumeroDocumentoEntidad = "1011122233",
+            FechaRegistro = "11/06/2022",
+        });
+        v.InformacionBlindaje = new Flit.Consultas.Grpc.V1.InformacionBlindajeIntempo { Blindado = "SI", NivelBlindaje = "NIVEL III", NivelBlindajeNumero = "3" };
+        v.LimitacionPropiedad.Add(new Flit.Consultas.Grpc.V1.LimitacionPropiedadIntempo
+        {
+            TipoLimitacion = "EMBARGO",
+            EntidadJuridica = "JUZGADO PRUEBA",
+            FechaExpedicion = "2024-02-01",
+            TipoDocumentoDemandante = "CC",
+            NoDocumentoDemandante = "1077788899",
+        });
+        v.AccidentRate.Clear();
+        v.AccidentRate.Add(new Flit.Consultas.Grpc.V1.AccidenteIntempo { Campos = { ["fecha"] = "02/02/2025", ["gravedad"] = "CON HERIDOS" } });
+        return respuesta;
+    }
+
+    private static SeccionReporte RuntCompletado(string placa) => new(
+        "RUNT", "VEHICULO", EstadoSeccion.Completado, null, null, Dato,
+        new ResultadoRuntDetalle(placa, null, "PARTICULAR", "AUTOMOVIL", "STRIA PRUEBA", [new PropietarioRuntDetalle("C", "PROPIA")], 1), null);
+
+    private static SeccionReporte SimitVehiculo() => new(
+        "SIMIT_VEHICULO", "VEHICULO", EstadoSeccion.Completado, null, null, Dato,
+        new ResultadoSimitDetalle("ROJO", 2,
+            [new ComparendoDetalle("TST-C-0701", "2026-09-30T10:15:00", "604100.00", "PENDIENTE", null), new ComparendoDetalle("TST-C-0702", "2026-10-01", "1200000", "PENDIENTE", null)],
+            ComparendosTruncados: true, CantidadResoluciones: 1),
+        null);
+
+    private static SeccionReporte SimitLocatario() => new(
+        "SIMIT_LOCATARIO", "LOCATARIO", EstadoSeccion.Completado, null, null, Dato, null,
+        [
+            new PersonaReporte(1, "LOCATARIO", "CC", "****5432", false, null, "SIMIT", EstadoPersonaReporte.Ok, Dato,
+                new ResultadoSimitDetalle("ROJO", 1, [new ComparendoDetalle("TST-C-0709", "2026-09-30", "468500.00", "PENDIENTE", null)], false), LocatarioPrueba),
+            new PersonaReporte(2, "LOCATARIO", "NIT", "****3456", false, null, "SIMIT", EstadoPersonaReporte.Ok, Dato,
+                new ResultadoSimitDetalle("VERDE", 0, [], false), "900123456"),
+            new PersonaReporte(3, "LOCATARIO", "CC", "****0000", false, null, "SIMIT", EstadoPersonaReporte.NoDisponible, null, null, "1000000000"),
+        ]);
+
+    private static SeccionReporte Impuesto(EstadoSeccion estado, bool tieneDeuda = false) => new(
+        "IMPUESTO_DEPARTAMENTAL", "VEHICULO", estado, null, estado == EstadoSeccion.NoDisponible ? SeccionReporte.ConsultaNoDisponible : null, Dato,
+        estado == EstadoSeccion.Completado ? new ResultadoImpuestoDetalle(tieneDeuda ? 350000 : 0, [new VigenciaImpuestoDetalle(2026, 350000, !tieneDeuda)], tieneDeuda) : null,
+        null);
+
+    private static SeccionReporte Pendiente(string fuente) => new(fuente, "VEHICULO", EstadoSeccion.Pendiente, null, null, null, null, fuente.EndsWith("LOCATARIO", StringComparison.Ordinal) ? [] : null);
+
+    /// <summary>
+    /// Escenario de fuga del Excel (SP-9): el vehículo de la celda RUNT con <paramref name="documento"/> como propietario y locatario del RUNT
+    /// (cifrados) y la respuesta RUNT cifrada con ese locatario llamado <paramref name="nombre"/>.
+    /// </summary>
+    internal static async Task SembrarLocatarioEnClaroAsync(EmpresaDePrueba empresa, CeldaConsulta celda, string documento, string nombre, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(empresa);
+        ArgumentNullException.ThrowIfNull(celda);
+        await Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests.GuardarCifradaAsync(empresa.Api, celda.Id,
+            Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests.Cifrar(empresa.Api, ContenidoReporteTests.ProtoJson(RespuestaExcel("TST906", documento, nombre))), ct);
+        await DocumentosDelVehiculoAsync(empresa.Api, empresa, celda.VehiculoId, "CC", documento, "CC", documento, OrigenDocumento.Proveedor, ct);
+    }
+
+    /// <summary>Documentos del vehículo (propietario del RUNT y locatario con su origen), cifrados como en producción.</summary>
+    private static async Task DocumentosDelVehiculoAsync(
+        ApiDePrueba api, EmpresaDePrueba empresa, Guid vehiculo, string tipoPropietario, string propietario, string tipoLocatario, string locatario,
+        OrigenDocumento origen, CancellationToken ct)
+    {
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        await using var db = empresa.Db();
+        var fila = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == vehiculo, ct);
+        fila.PropietarioDocTipo = tipoPropietario;
+        fila.PropietarioDocCifrado = protector.Proteger(propietario);
+        fila.LocatarioDocTipo = tipoLocatario;
+        fila.LocatarioDocCifrado = protector.Proteger(locatario);
+        fila.LocatarioDocOrigen = origen;
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Lote con un vehículo con RUNT y SIMIT_VEHICULO COMPLETADO.</summary>
