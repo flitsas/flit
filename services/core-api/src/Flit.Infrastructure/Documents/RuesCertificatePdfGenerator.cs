@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -68,8 +69,7 @@ public sealed class RuesCertificatePdfGenerator : IRuesCertificateGenerator
             });
         }).GeneratePdf();
 
-        var safeRef = Val(data.ReferenceNumber).Replace('/', '-');
-        return new GeneratedDocument("certificado_rues", $"certificado_rues_{safeRef}.pdf", "application/pdf", bytes);
+        return new GeneratedDocument("certificado_rues", NombreDocumentoTramite.Generar("certificado_rues", data.ReferenceNumber, data.Placa), "application/pdf", bytes);
     }
 
     // Barra de sección a ancho completo: celda azul con las 4 esquinas redondeadas y título blanco centrado.

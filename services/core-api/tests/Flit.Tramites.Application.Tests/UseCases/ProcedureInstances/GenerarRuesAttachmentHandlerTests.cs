@@ -179,6 +179,8 @@ public sealed class GenerarRuesAttachmentHandlerTests
         result!.Radicado.Should().Be("RUES-0001");
         _client.LastRequest!.Nit.Should().Be("900123456");
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "rues");
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf (sin placa en el trámite → SIN-PLACA)
+        instance.Attachments.Single(a => a.Tipo == "rues").Filename.Should().Be("rues_TRM-2026-000010_SIN-PLACA.pdf");
     }
 
     [Fact]

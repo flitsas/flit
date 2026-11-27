@@ -1,6 +1,6 @@
 using System.Linq;
-using System.Text.RegularExpressions;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -68,7 +68,7 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
         var p1 = FurOverlayRenderer.RenderPage1(p1Template, assets.Manifest, values, _logger, data.ReferenceNumber);
         var pdf = FurOverlayRenderer.MergePages(p1, p2Template);
 
-        return new GeneratedDocument("fur", $"fur_{SafeRef(data.ReferenceNumber)}.pdf", "application/pdf", pdf);
+        return new GeneratedDocument("fur", NombreDocumentoTramite.Generar("fur", data.ReferenceNumber, data.Placa), "application/pdf", pdf);
     }
 
     public GeneratedDocument GenerateFurFillAll(FurTemplateFormat format = FurTemplateFormat.Automotor)
@@ -96,7 +96,7 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
         var bytes = FurCompraventaDocumentGenerator.Generate(data);
         return new GeneratedDocument(
             "compraventa",
-            $"compraventa_{SafeRef(data.ReferenceNumber)}.pdf",
+            NombreDocumentoTramite.Generar("compraventa", data.ReferenceNumber, data.Placa),
             "application/pdf",
             bytes);
     }
@@ -130,9 +130,6 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
         {
             _ => FurFieldMapper.Map,
         };
-
-    private static string SafeRef(string reference) =>
-        Regex.Replace(reference, @"[^\w\-.]", "-");
 
     private sealed record FurFormatAssets(
         FurFieldManifest Manifest,

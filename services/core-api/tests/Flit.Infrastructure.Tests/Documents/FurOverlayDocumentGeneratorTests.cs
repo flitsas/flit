@@ -92,6 +92,18 @@ public sealed class FurOverlayDocumentGeneratorTests
 
         var doc = CreateGenerator().GenerateFur(TraspasoData());
         CountPages(doc.Content).Should().Be(2);
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf
+        doc.Filename.Should().Be("fur_TRM-2026-000001_IWL38D.pdf");
+    }
+
+    [Fact]
+    public void GenerateFur_SinPlaca_UsaSinPlaca()
+    {
+        if (!TemplatesExist()) return;
+
+        var data = TraspasoData() with { Vehiculo = TraspasoData().Vehiculo with { Placa = null } };
+
+        CreateGenerator().GenerateFur(data).Filename.Should().Be("fur_TRM-2026-000001_SIN-PLACA.pdf");
     }
 
     [Fact]
@@ -127,6 +139,8 @@ public sealed class FurOverlayDocumentGeneratorTests
         var doc = CreateGenerator().GenerateCompraventa(TraspasoData());
         Encoding.ASCII.GetString(doc.Content, 0, 4).Should().Be("%PDF");
         doc.Tipo.Should().Be("compraventa");
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf
+        doc.Filename.Should().Be("compraventa_TRM-2026-000001_IWL38D.pdf");
     }
 
     [Fact]

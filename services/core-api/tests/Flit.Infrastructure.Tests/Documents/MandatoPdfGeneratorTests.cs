@@ -67,7 +67,8 @@ public sealed class MandatoPdfGeneratorTests
         var pn = Generator.GenerateMandato(Mandato(Natural(), template, mandatario: firmante));
         pn.Tipo.Should().Be("mandato");
         pn.Mimetype.Should().Be("application/pdf");
-        pn.Filename.Should().StartWith("mandato_");
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf (radicado conserva el guion; placa en mayúsculas).
+        pn.Filename.Should().Be("mandato_REF-2026-1_ABC123.pdf");
         pn.Content.Should().NotBeEmpty();
         // Cabecera de un PDF válido.
         System.Text.Encoding.ASCII.GetString(pn.Content, 0, 4).Should().Be("%PDF");

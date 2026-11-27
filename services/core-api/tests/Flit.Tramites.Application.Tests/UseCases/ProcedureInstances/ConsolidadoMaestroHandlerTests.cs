@@ -76,6 +76,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000099",
+            Plate = "abc123",
             Status = TramiteEstado.Borrador,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -177,7 +178,8 @@ public sealed class ConsolidadoMaestroHandlerTests
         error.Should().BeNull();
         result.Should().NotBeNull();
         result!.Document.Tipo.Should().Be("consolidado_maestro");
-        result.Document.Filename.Should().StartWith("consolidado_maestro_");
+        // HU #14735 — {tipo}_{radicado}_{placa}.pdf
+        result.Document.Filename.Should().Be("consolidado_maestro_TRM-2026-000099_ABC123.pdf");
         _storage.Saved.Should().ContainSingle();
         await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

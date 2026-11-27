@@ -1,4 +1,5 @@
 using Flit.Modules.Improntas.Domain;
+using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -124,8 +125,7 @@ public sealed class GenerarImprontaAttachmentHandler(
         }
 
         var pdfBytes = ImprontaPdfDecoder.Decode(providerResult.PdfDataUri);
-        var safeRef = instance.ReferenceNumber.Replace('/', '-');
-        var filename = $"impronta_{safeRef}.pdf";
+        var filename = NombreDocumentoTramite.Generar("impronta", instance);
 
         var (uploaded, uploadError) = await uploadHandler.HandleAsync(
             id,
