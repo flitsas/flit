@@ -1650,7 +1650,7 @@ public sealed class GenerarFurHandler(
                 // HU #11132 — jurisdicción de la cámara de comercio.
                 CamaraCiudad: Val(datos, "rues_camara_ciudad"),
                 CamaraDepartamento: Val(datos, "rues_camara_departamento"),
-                Placa: PlacaDe(instance));
+                Placa: NombreDocumentoTramite.PlacaDe(instance));
 
             docs.Add(ConTipoDeRol(ruesGenerator.GenerateRuesCertificate(data), actor.ActorType));
         }
@@ -1801,7 +1801,7 @@ public sealed class GenerarFurHandler(
                 instance.ReferenceNumber,
                 consultadoAt,
                 entradas,
-                PlacaDe(instance));
+                NombreDocumentoTramite.PlacaDe(instance));
 
             return (rnmcGenerator.GenerateRnmcCertificate(data), true);
         }
@@ -1909,12 +1909,6 @@ public sealed class GenerarFurHandler(
             instance.TenantId, subject.TipoDocumento.Trim(), doc, DateTimeOffset.UtcNow, ct);
         return source is not null && EsKyverumConId(source) ? source : null;
     }
-
-    /// <summary>HU #14735 — placa del trámite (Plate o field value plate) para el nombre estándar de los documentos.</summary>
-    private static string? PlacaDe(ProcedureInstance instance) =>
-        string.IsNullOrWhiteSpace(instance.Plate)
-            ? instance.FieldValues.FirstOrDefault(f => string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase))?.ValueText
-            : instance.Plate;
 
     /// <summary>
     /// Descarga el certificado Kyverum de un actor. Tipo de adjunto vía

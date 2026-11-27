@@ -222,7 +222,7 @@ public sealed class GenerarConsolidadoHandler(
         // mismo read que decidiría generar, así que una generación simultánea no produce un segundo PDF.
         if (soloSiNoExiste && ConsolidadoEntregaModos.Existente(instance, "consolidado") is { } yaExiste)
         {
-            var existenteDto = new ConsolidadoDocumentDto(yaExiste.Id, yaExiste.Tipo, yaExiste.Filename, yaExiste.Sha256);
+            var existenteDto = NombreDocumentoEntrega.ParaDocumento(yaExiste, instance);
             return (new GenerarConsolidadoResult(existenteDto, Regenerado: false), null);
         }
 
@@ -236,8 +236,7 @@ public sealed class GenerarConsolidadoHandler(
             && consolidadoVigente is not null
             && string.Equals(consolidadoVigente.Source, "user", StringComparison.OrdinalIgnoreCase))
         {
-            var protegidoDto = new ConsolidadoDocumentDto(
-                consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
+            var protegidoDto = NombreDocumentoEntrega.ParaDocumento(consolidadoVigente, instance);
             return (new GenerarConsolidadoResult(protegidoDto, Regenerado: false), null);
         }
 
@@ -260,8 +259,7 @@ public sealed class GenerarConsolidadoHandler(
         var furDesactualizado = FurVigenciaExpediente.FurDesactualizado(instance);
         if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null && !furDesactualizado)
         {
-            var vigenteDto = new ConsolidadoDocumentDto(
-                consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
+            var vigenteDto = NombreDocumentoEntrega.ParaDocumento(consolidadoVigente, instance);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
 

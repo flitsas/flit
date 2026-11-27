@@ -62,6 +62,24 @@ public sealed class EntregarConsolidadoHandlerTests
         _storage.Saved.Should().ContainSingle();
     }
 
+    [Theory]
+    [MemberData(nameof(AmbosPdf))]
+    public async Task Epica14657_Regenerado_SaleConNombreNuevo_TipoRadicadoPlaca(ConsolidadoEntregaTipo tipo)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia(TramiteEstado.Entregado);
+        instance.Plate = "aaa111";
+        AddAttachment(instance, TipoAdjunto(tipo), "nombre_viejo.pdf", "system");
+        SetBandera(instance, tipo, false);
+        Wire(instance);
+
+        var (result, error) = await _handler.HandleAsync(new EntregarConsolidadoRequest(instance.Id, instance.TenantId, tipo), ct);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        result.Document.Filename.Should().Be($"{TipoAdjunto(tipo)}_TRM-2026-012785_AAA111.pdf");
+    }
+
     [Fact]
     public async Task AC1_Contrato_LaEntregaDelegaEnElGenerador_EventoConsolidadoGenerado()
     {
