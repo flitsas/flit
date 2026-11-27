@@ -6,6 +6,7 @@ import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
   marcasLabel,
+  digitoPlacaLabelDeFila,
   runtConfirmadoLabel,
   stepLabel,
   tramiteLabel,
@@ -59,6 +60,12 @@ export interface TramitesColumnDef {
    * cliente sin jerarquía el catálogo efectivo es el mismo de siempre (AC1).
    */
   networkOnly?: boolean;
+  /**
+   * HU #14744 — columna que SOLO existe en la vista de matrícula inicial (familia MATRICULAS). Fuera
+   * de ella no se pinta ni se ofrece en «Columnas», pero la preferencia guardada NO se toca: al volver
+   * a la pestaña reaparece según lo que el usuario dejó. Nunca va en el default.
+   */
+  matriculaOnly?: boolean;
 }
 
 const GRUPO_BASE = 'Listado';
@@ -129,6 +136,8 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // "Marca / modelo" es además lo que de verdad pinta: marca + línea.
   { key: 'vin', label: COPY.A02Vin, minPx: 168, fixed: true, group: GRUPO_DESGLOSE },
   { key: 'vehiculo', label: 'Marca / modelo', minPx: 140, group: GRUPO_DESGLOSE },
+  // HU #14744 — preferencia de dígito de la placa; solo matrícula inicial y no visible por defecto.
+  { key: 'digitoPlaca', label: 'Dígito de placa', minPx: 140, fixed: true, group: GRUPO_DESGLOSE, matriculaOnly: true },
   { key: 'estado', label: 'Estado', minPx: 150, group: GRUPO_DESGLOSE },
   // Fijas: "3/5" con el nombre del paso, y dos fechas de formato constante.
   { key: 'paso', label: 'Paso', minPx: 130, fixed: true, group: GRUPO_DESGLOSE },
@@ -152,6 +161,23 @@ export const TRAMITES_NETWORK_ONLY_KEYS: readonly string[] = TRAMITES_COLUMNS.fi
 export const TRAMITES_SELECTABLE_COLUMNS: readonly TramitesColumnDef[] = TRAMITES_COLUMNS.filter(
   (c) => !c.networkOnly,
 );
+
+/** HU #14744 — claves que solo existen en la vista de matrícula inicial. */
+export const TRAMITES_MATRICULA_ONLY_KEYS: readonly string[] = TRAMITES_COLUMNS.filter(
+  (c) => c.matriculaOnly,
+).map((c) => c.key);
+
+/** HU #14744 — quita (sin tocar la preferencia) las columnas de matrícula fuera de esa vista. */
+export function applyMatriculaColumns(visible: readonly string[], esMatricula: boolean): string[] {
+  return esMatricula ? [...visible] : visible.filter((k) => !TRAMITES_MATRICULA_ONLY_KEYS.includes(k));
+}
+
+/** HU #14744 — catálogo del selector «Columnas» según la vista. */
+export function selectableColumnsFor(esMatricula: boolean): readonly TramitesColumnDef[] {
+  return esMatricula
+    ? TRAMITES_SELECTABLE_COLUMNS
+    : TRAMITES_SELECTABLE_COLUMNS.filter((c) => !c.matriculaOnly);
+}
 
 /**
  * HU #12363 — columnas efectivas según el alcance: con la red activa se añade `cliente` (en su
@@ -578,6 +604,7 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
   ],
   vin: [CAMPO_VIN],
   vehiculo: [CAMPO_VEHICULO],
+  digitoPlaca: [campoTexto('digitoPlaca', 'Dígito de placa', (row) => digitoPlacaLabelDeFila(row), 18)],
   estado: [CAMPO_ESTADO],
   paso: [CAMPO_PASO, CAMPO_PASO_NOMBRE],
   fechaCreacion: [CAMPO_FECHA_CREACION],

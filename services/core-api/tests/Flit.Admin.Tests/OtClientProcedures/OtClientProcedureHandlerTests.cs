@@ -1715,6 +1715,49 @@ public sealed class OtClientProcedureHandlerTests
         result.Data.Single(p => p.Id == sinDigito).PlatePreferredLastDigit.Should().BeNull();
     }
 
+    /// <summary>HU #14743 (AC6) — la bandeja del OT trae la marca de Ruta Corta y la de dígito declarado.</summary>
+    [Fact]
+    public async Task List_ProyectaRutaCortaYDigitoDeclarado()
+    {
+        var db = NewDbName();
+        var rutaCorta = Guid.NewGuid();
+        var rutaLarga = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedProcedure(seed, rutaCorta, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion, "REF-RC");
+            SeedProcedure(seed, rutaLarga, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion, "REF-RL");
+            void Campo(Guid id, string key, string value, string source = "user") =>
+                seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+                {
+                    Id = Guid.NewGuid(), ProcedureInstanceId = id, TenantId = ClientTenant,
+                    FieldKey = key, ValueText = value, Source = source,
+                });
+            Campo(rutaCorta, "plate", "ABC123", "consultation");
+            Campo(rutaLarga, "plate_preferred_last_digit", "", "user");
+            Campo(rutaLarga, "plate_preferred_last_digit_declared", "true", "user");
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+        var result = await handler.HandleAsync(new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Status = "preasignacion,asignado,entregado",
+        }, TestContext.Current.CancellationToken);
+
+        var corta = result.Data.Single(p => p.Id == rutaCorta);
+        corta.PlacaRutaCorta.Should().BeTrue();
+        corta.PlatePreferredLastDigitDeclared.Should().BeFalse();
+
+        var larga = result.Data.Single(p => p.Id == rutaLarga);
+        larga.PlacaRutaCorta.Should().BeFalse();
+        larga.PlatePreferredLastDigitDeclared.Should().BeTrue();
+    }
+
     [Fact] // OT aprueba vía handler un trámite entregado con placa de rango (ruta de placa).
     public async Task Approve_RutaPlaca_ViaHandler_DesdeEntregadoSinHitoSintetico()
     {

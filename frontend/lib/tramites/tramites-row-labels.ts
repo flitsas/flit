@@ -19,6 +19,7 @@ import type {
   TramiteCanal,
   TramiteFuente,
 } from '@/lib/api/types/procedure-runtime';
+import { digitoEsPrimerNumero } from '@/lib/tramites/plate-format';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 export function vehiculo(item: InstanceSummary): string {
@@ -238,4 +239,33 @@ export const RUNT_CONFIRMED_LABEL: Record<RuntConfirmedValue, string> = {
 
 export function runtConfirmadoLabel(item: InstanceSummary): string {
   return item.runtConfirmed ? RUNT_CONFIRMED_LABEL[item.runtConfirmed] : '';
+}
+
+/** Datos mínimos para leer el dígito de placa; los comparten el listado del gestor y la bandeja del OT. */
+export interface DigitoPlacaDatos {
+  digito?: string | null;
+  declarado?: boolean | null;
+  clase?: string | null;
+  rutaCorta?: boolean | null;
+}
+
+/**
+ * Epic #14503 (HU #14744) — texto de la columna «Dígito de placa» (celda y Excel). Ruta corta (placa
+ * del RUNT) y no decidido → «—»; con dígito → «Inicia en N» (moto y motocarro) o «Termina en N»;
+ * declarado sin dígito → «Sin preferencia».
+ */
+export function digitoPlacaLabel(d: DigitoPlacaDatos): string {
+  if (d.rutaCorta === true) return '—';
+  const digito = d.digito?.trim();
+  if (digito) return `${digitoEsPrimerNumero(d.clase) ? 'Inicia' : 'Termina'} en ${digito}`;
+  return d.declarado === true ? 'Sin preferencia' : '—';
+}
+
+export function digitoPlacaLabelDeFila(item: InstanceSummary): string {
+  return digitoPlacaLabel({
+    digito: item.plateDigitoPreferido,
+    declarado: item.plateDigitoDeclarado,
+    clase: item.clase,
+    rutaCorta: item.placaRutaCorta,
+  });
 }

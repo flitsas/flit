@@ -82,6 +82,10 @@ export interface OtClientProcedure {
    * Dígito de preferencia de placa (0-9) indicado al radicar sin placa. Guía para el OT.
    */
   platePreferredLastDigit?: string | null;
+  /** HU #14744 — `true` si el gestor decidió el dígito (también «sin preferencia»); `false` = no decidido. */
+  platePreferredLastDigitDeclared?: boolean;
+  /** HU #14744 — `true` = la placa vino del RUNT (ruta corta): no hay preferencia que mostrar. */
+  placaRutaCorta?: boolean;
   /** Check opcional del gestor al «Enviar al OT»; badge en bandeja OT en `entregado`. */
   soatPagado?: boolean;
   /** Check opcional del gestor al «Enviar al OT»; badge en bandeja OT en `entregado`. */
