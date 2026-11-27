@@ -93,7 +93,7 @@ public sealed class IdentidadManualActivacionTests
         v.ActivarFlujoManual(User, Now, Hash);
 
         v.TokenHash.Should().Be(Hash);
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
         BiometricRules.TokenTtlHoras.Should().Be(24);
         v.ManualActivatedBy.Should().Be(User);
         v.ManualActivatedAt.Should().Be(Now);

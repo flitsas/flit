@@ -130,6 +130,13 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 reviewerName = reviewerInfo.Name;
             }
 
+            ReviewerInfo? activatorInfo = null;
+            if (v.ManualActivatedBy is { } activatorId)
+            {
+                var resolvedActivator = await ReviewerDirectory.ResolveCoreAsync(db, [activatorId], ct).ConfigureAwait(false);
+                activatorInfo = resolvedActivator[activatorId];
+            }
+
             var current = TieneCapturaVigente(v.Status);
             var consentCurrent = v.ConsentAt is { } consent && v.ManualActivatedAt is { } activated && consent >= activated;
             // reviewedBy: el nombre visible del revisor; si ya no se resuelve, su id (nunca vacío si hubo revisión).
@@ -158,7 +165,8 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 // HU #14310 — null en capturas anteriores (y sin captura vigente): el detalle no muestra aviso.
                 current ? v.PhotoChecks : null,
                 v.CorrespondeCartaIdentidad && v.TieneCartaIdentidad,
-                reviewerInfo);
+                reviewerInfo,
+                activatorInfo);
         }, ct);
 
     /// <summary>

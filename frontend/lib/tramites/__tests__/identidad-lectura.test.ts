@@ -353,6 +353,18 @@ describe('flujo manual', () => {
     expect(`${aprobado.revisadoPor} ${rechazado.revisadoPor}`).not.toMatch(/null|undefined/);
   });
 
+  it('con activador: «Flujo manual activado por …» en el hito de activación; sin él no hay línea', () => {
+    const v = validacion({ provider: 'manual', status: 'manual_activo' });
+    const [con, sin] = hitosDeIdentidad(v, [
+      evento('manual_activado', '2026-08-27T11:00:00Z', {
+        revisor: { name: 'Ana Pérez', email: 'ana@flit.co', role: 'Super Admin' },
+      }),
+      evento('manual_activado', '2026-08-27T10:00:00Z'),
+    ]);
+    expect(con.activadoPor).toBe('Flujo manual activado por Ana Pérez (ana@flit.co, Super Admin)');
+    expect(sin.activadoPor).toBeUndefined();
+  });
+
   it('sin revisor (o vacío) no agrega la línea', () => {
     const v = validacion({ provider: 'manual', status: 'aprobado' });
     const hitos = hitosDeIdentidad(v, [

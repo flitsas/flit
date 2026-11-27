@@ -96,7 +96,7 @@ public sealed class ActivarIdentidadManualHandler(
             TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
             KyverumVerificationId: kyverumIdPrevio, PartyRole: v.PartyRole,
             Message: $"Flujo manual activado por el usuario {command.ActivatedByUserId}; enlace de captura vigente "
-                + $"{BiometricRules.TokenTtlHoras} h.",
+                + $"{BiometricRules.TokenTtlManualDias} días.",
             Detail: $"origen={origen}; usuario={command.ActivatedByUserId}; estado_previo={estadoPrevio}; proveedor_previo={proveedorPrevio}; "
                 + $"kyverum_cancelado={cancelaKyverum}; expira_at={v.ExpiresAt:O}"), ct).ConfigureAwait(false);
 

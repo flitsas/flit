@@ -88,9 +88,24 @@ public sealed class IdentityAuditRevisorTests
     [Theory]
     [InlineData(IdentityValidationAuditStages.ManualAprobado, "usuario=019f1111-2222-7333-8444-555566667777; x=1", true)]
     [InlineData(IdentityValidationAuditStages.ManualRechazado, "motivo=a; usuario=019f1111-2222-7333-8444-555566667777", true)]
-    [InlineData(IdentityValidationAuditStages.ManualActivado, "usuario=019f1111-2222-7333-8444-555566667777", false)]
+    [InlineData(IdentityValidationAuditStages.ManualActivado, "origen=tramite; usuario=019f1111-2222-7333-8444-555566667777; estado_previo=x", true)]
+    [InlineData(IdentityValidationAuditStages.ManualEnlaceCopiado, "usuario=019f1111-2222-7333-8444-555566667777", false)]
     [InlineData(IdentityValidationAuditStages.ManualAprobado, "usuario=no-es-guid", false)]
     [InlineData(IdentityValidationAuditStages.ManualAprobado, null, false)]
-    public void ExtraerUsuario_solo_en_aprobado_o_rechazado_con_guid_valido(string stage, string? detail, bool espera)
+    public void ExtraerUsuario_solo_en_activado_aprobado_o_rechazado_con_guid_valido(string stage, string? detail, bool espera)
         => IdentityAuditRevisor.ExtraerUsuario(stage, detail).HasValue.Should().Be(espera);
+
+    [Fact]
+    public async Task SuperAdmin_ve_quien_activo_el_flujo_manual_y_el_cliente_no()
+    {
+        var res = Respuesta(IdentityValidationAuditStages.ManualActivado, $"origen=tramite; usuario={Revisor}; estado_previo=rechazado");
+
+        var enriquecida = await IdentityAuditRevisor.AplicarAsync(
+            res, Directorio(new ReviewerInfo("Ana Activadora", "ana@flit.co", "Super Admin")), TestContext.Current.CancellationToken);
+        enriquecida.Events.Single().Revisor.Should().Be(new ReviewerInfo("Ana Activadora", "ana@flit.co", "Super Admin"));
+
+        var paraCliente = IdentityAuditParaCliente.Aplicar(res.Events);
+        paraCliente.Should().OnlyContain(e => e.Revisor == null);
+        JsonSerializer.Serialize(paraCliente).Should().NotContain(Revisor.ToString());
+    }
 }

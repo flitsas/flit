@@ -42,7 +42,7 @@ public sealed class IdentidadManualRegeneracionTests
         v.RegenerarEnlaceManual(Now, HashNuevo);
 
         v.TokenHash.Should().Be(HashNuevo).And.NotBe(HashViejo);
-        v.ExpiresAt.Should().Be(Now.AddHours(BiometricRules.TokenTtlHoras)).And.Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(BiometricRules.TokenTtlManualDias)).And.Be(Now.AddDays(30));
         v.ResendCount.Should().Be(1);
         v.LastResentAt.Should().Be(Now);
         v.UpdatedAt.Should().Be(Now);
@@ -60,7 +60,7 @@ public sealed class IdentidadManualRegeneracionTests
 
         v.RegenerarEnlaceManual(Now, HashNuevo);
 
-        v.ExpiresAt.Should().Be(Now.AddHours(24));
+        v.ExpiresAt.Should().Be(Now.AddDays(30));
     }
 
     [Theory]
