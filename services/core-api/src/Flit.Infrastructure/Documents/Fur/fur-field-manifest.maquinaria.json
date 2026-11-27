@@ -48,10 +48,10 @@
     { "id": "vehicle_traction_cilindros", "type": "checkbox", "x": 861.9, "y": 109.6, "size": 8.0, "fontSize": 5.0 },
     { "id": "vehicle_traction_otros", "type": "checkbox", "x": 930.6, "y": 109.6, "size": 8.0, "fontSize": 5.0 },
 
-    { "id": "vehicle_cabin_cerrada", "type": "checkbox", "x": 523.1, "y": 215.3, "size": 8.0, "fontSize": 5.0 },
-    { "id": "vehicle_cabin_parasol", "type": "checkbox", "x": 590.2, "y": 215.3, "size": 8.0, "fontSize": 5.0 },
-    { "id": "vehicle_cabin_sin", "type": "checkbox", "x": 658.2, "y": 215.3, "size": 8.0, "fontSize": 5.0 },
-    { "id": "vehicle_cabin_otros", "type": "checkbox", "x": 707.8, "y": 215.3, "size": 8.0, "fontSize": 5.0 },
+    { "id": "vehicle_cabin_cerrada", "type": "checkbox", "x": 523.2, "y": 221.6, "size": 8.0, "fontSize": 5.0 },
+    { "id": "vehicle_cabin_parasol", "type": "checkbox", "x": 590.2, "y": 221.6, "size": 8.0, "fontSize": 5.0 },
+    { "id": "vehicle_cabin_sin", "type": "checkbox", "x": 658.2, "y": 221.6, "size": 8.0, "fontSize": 5.0 },
+    { "id": "vehicle_cabin_otros", "type": "checkbox", "x": 707.8, "y": 221.6, "size": 8.0, "fontSize": 5.0 },
 
     { "id": "vehicle_fuel_maq_1", "type": "checkbox", "x": 762.6, "y": 294.4, "size": 8.0, "fontSize": 5.0 },
     { "id": "vehicle_fuel_maq_2", "type": "checkbox", "x": 829.6, "y": 294.4, "size": 8.0, "fontSize": 5.0 },
@@ -97,10 +97,10 @@
     { "id": "vehicle_buyer_phone", "type": "text", "x": 418.0, "y": 508.0, "w": 66.0, "h": 13.0, "fontSize": 7.0, "bold": false, "align": "left" },
     { "id": "vehicle_buyer_signature", "type": "multiline", "x": 88.0, "y": 536.0, "w": 398.0, "h": 23.0, "fontSize": 6.5, "bold": false, "align": "center" },
 
-    { "id": "alert_data_code_1", "type": "checkbox", "x": 523.1, "y": 419.1, "size": 8.0, "fontSize": 5.0 },
-    { "id": "alert_data_code_2", "type": "checkbox", "x": 606.8, "y": 419.1, "size": 8.0, "fontSize": 5.0 },
-    { "id": "alert_data_code_3", "type": "checkbox", "x": 690.8, "y": 419.1, "size": 8.0, "fontSize": 5.0 },
-    { "id": "alert_data_code_4", "type": "checkbox", "x": 759.8, "y": 419.1, "size": 8.0, "fontSize": 5.0 },
+    { "id": "alert_data_code_1", "type": "checkbox", "x": 523.2, "y": 406.0, "size": 8.0, "fontSize": 5.0 },
+    { "id": "alert_data_code_2", "type": "checkbox", "x": 606.8, "y": 406.0, "size": 8.0, "fontSize": 5.0 },
+    { "id": "alert_data_code_3", "type": "checkbox", "x": 690.8, "y": 406.0, "size": 8.0, "fontSize": 5.0 },
+    { "id": "alert_data_code_4", "type": "checkbox", "x": 759.8, "y": 406.0, "size": 8.0, "fontSize": 5.0 },
     { "id": "alert_data_code_5", "type": "text", "x": 848.0, "y": 410.0, "w": 140.0, "h": 18.0, "fontSize": 5.5, "minFontSize": 4.0, "bold": false, "align": "left" },
 
     { "id": "observations", "type": "multiline", "x": 498.0, "y": 453.0, "w": 468.0, "h": 40.0, "fontSize": 6.5, "minFontSize": 5.0, "bold": false, "align": "left", "autoFit": true }
