@@ -437,6 +437,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     visible: visibleColumns,
     saving: savingColumns,
     setVisible: setVisibleColumns,
+    order: columnOrder,
+    setOrder: setColumnOrder,
+    reset: resetColumns,
   } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
     catalog: TRAMITES_COLUMN_KEYS,
     addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
@@ -1548,6 +1551,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   columns={TRAMITES_SELECTABLE_COLUMNS}
                   visible={visibleColumns}
                   onChange={setVisibleColumns}
+                  order={columnOrder}
+                  onReorder={setColumnOrder}
+                  onReset={resetColumns}
                   label="Columnas"
                   disabled={savingColumns}
                   buttonClassName={controlCls(columnasPersonalizadas)}
@@ -2490,7 +2496,10 @@ function TableBody({
   // llegó `visibleColumns`, que podría venir desordenado de una preferencia guardada). Header y
   // filas reciben esta MISMA lista `visibleKeysOrdered`, calculada una sola vez aquí: es lo que
   // garantiza la alineación por construcción, sin importar cuántas columnas se oculten.
-  const visibleDefs = TRAMITES_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+  // Orden del usuario: el de `visibleColumns` (ya viene en el orden guardado).
+  const visibleDefs = visibleColumns
+    .map((k) => TRAMITES_COLUMNS.find((c) => c.key === k))
+    .filter((c): c is (typeof TRAMITES_COLUMNS)[number] => c !== undefined);
   const visibleKeysOrdered = visibleDefs.map((c) => c.key);
   // `<colgroup>` no admite `fr` (lo que usa `gridLayout`): los anchos en % se calculan aparte,
   // con el MISMO `visibleColumns` — así quedan alineados con `visibleDefs` por construcción.

@@ -461,7 +461,9 @@ export function ClientProceduresTable({
   // no es una tabla, y eso NO puede depender de que una llamada de preferencias haya respondido.
   const columnasVisibles =
     visibleColumns && visibleColumns.length > 0
-      ? OT_PROCEDURES_COLUMNS.filter((c) => visibleColumns.includes(c.key))
+      ? visibleColumns
+          .map((k) => OT_PROCEDURES_COLUMNS.find((c) => c.key === k))
+          .filter((c): c is (typeof OT_PROCEDURES_COLUMNS)[number] => c !== undefined)
       : OT_PROCEDURES_COLUMNS;
 
   /**

@@ -153,7 +153,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "«Búsqueda rápida»: los atajos «Por aprobar» (entregados a la espera de tu decisión), «Por preasignar» (radicados sin placa) y «Revocatorias» (aprobados con una solicitud de revocatoria activa) resaltan y filtran de una vez la tarjeta correspondiente, sin tener que ubicarla en la cabecera.",
           "«Periodo» por fecha de radicación y «+ Filtro» con la gramática de Consultas (campo, operador, valores; admite pegar una columna de Excel).",
           "«Exportar» genera un Excel con todas las filas que cumplen los filtros, no solo la página.",
-          "Columnas configurables; la elección se guarda por usuario.",
+          "Pulsa «Columnas» para elegir qué ver. Arrastra cada columna por su asa (⋮⋮) para cambiar el orden; con el teclado, ponte en el asa y usa las flechas ↑ y ↓. «Por defecto», arriba en el panel, vuelve a las columnas y al orden de siempre. Todo se guarda solo, por usuario y por tabla: al volver sigues viendo la tabla como la dejaste.",
         ],
       },
       {

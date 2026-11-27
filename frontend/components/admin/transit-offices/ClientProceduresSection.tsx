@@ -493,6 +493,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     visible: visibleColumns,
     saving: savingColumns,
     setVisible: setVisibleColumns,
+    order: columnOrder,
+    setOrder: setColumnOrder,
+    reset: resetColumns,
   } = useUiPreferences("ot.procedures.columns", DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS, {
     catalog: OT_PROCEDURES_COLUMNS.map((c) => c.key),
   });
@@ -1707,6 +1710,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
                   visible={visibleColumns}
                   onChange={setVisibleColumns}
+                  order={columnOrder}
+                  onReorder={setColumnOrder}
+                  onReset={resetColumns}
                   label="Columnas"
                   disabled={savingColumns}
                   buttonClassName={controlCls(columnasPersonalizadas)}
