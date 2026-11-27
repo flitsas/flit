@@ -50,6 +50,22 @@ export interface UseUiPreferencesResult {
    * `widths` (anchos por columna) del valor guardado: otra HU los agrega y deben volver a "Por defecto".
    */
   reset: () => void;
+  /** Anchos por columna (clave → px) guardados por el usuario; vacío = todas con su ancho por defecto. */
+  widths: Record<string, number>;
+  /** Fija el ancho (px) de una columna y lo guarda. Optimista; revierte con aviso si falla. */
+  setWidth: (key: string, px: number) => void;
+  /** Quita el ancho guardado de una columna (vuelve a su ancho por defecto) y lo guarda. */
+  resetWidth: (key: string) => void;
+}
+
+/** Solo pares clave → número finito > 0; cualquier otra cosa del valor guardado se descarta. */
+function sanitizeWidths(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.round(v);
+  }
+  return out;
 }
 
 /**
@@ -99,6 +115,8 @@ export function useUiPreferences(
   const orderRef = useRef(order);
   // Resto del valor guardado que este hook no gestiona (p. ej. `widths`): se conserva al guardar.
   const extrasRef = useRef<Record<string, unknown>>({});
+  const [widths, setWidthsState] = useState<Record<string, number>>({});
+  const widthsRef = useRef(widths);
   const [status, setStatus] = useState<UiPreferencesStatus>('loading');
   const [saving, setSaving] = useState(false);
   // Ref viva de la selección actual: `setVisible` la usa para revertir ante un fallo de guardado
@@ -147,8 +165,11 @@ export function useUiPreferences(
             : [];
         reshownSavedRef.current = reshown;
         const extras: Record<string, unknown> = { ...(res?.value ?? {}) };
-        for (const k of ['visible', 'known', 'reshown', 'order']) delete extras[k];
+        for (const k of ['visible', 'known', 'reshown', 'order', 'widths']) delete extras[k];
         extrasRef.current = extras;
+        const cleanWidths = sanitizeWidths(res?.value?.widths);
+        widthsRef.current = cleanWidths;
+        setWidthsState(cleanWidths);
         const savedOrder = res?.value?.order;
         // Sin preferencia guardada, el backend responde `value: {}` (AC del contrato) — se
         // conservan las columnas por defecto. Igual si `visible` llega vacío/corrupto.
@@ -202,13 +223,21 @@ export function useUiPreferences(
   }, [scope]);
 
   const persist = useCallback(
-    (nextVisible: string[], nextOrder: string[], opts: { resetting?: boolean } = {}) => {
+    (
+      nextVisible: string[],
+      nextOrder: string[],
+      opts: { resetting?: boolean; widths?: Record<string, number> } = {},
+    ) => {
       const previousVisible = visibleRef.current;
       const previousOrder = orderRef.current;
+      const previousWidths = widthsRef.current;
+      const nextWidths = opts.resetting ? {} : (opts.widths ?? previousWidths);
       setVisibleState(nextVisible);
       setOrderState(nextOrder);
+      setWidthsState(nextWidths);
       visibleRef.current = nextVisible;
       orderRef.current = nextOrder;
+      widthsRef.current = nextWidths;
       setSaving(true);
       // try/catch dentro de una función async: atrapa también un `throw` síncrono del cliente.
       (async () => {
@@ -229,6 +258,7 @@ export function useUiPreferences(
           const extras = opts.resetting ? {} : extrasRef.current;
           await uiPreferencesClient.put(scope, {
             ...extras,
+            ...(Object.keys(nextWidths).length > 0 ? { widths: nextWidths } : {}),
             visible: nextVisible,
             ...(guardarOrden ? { order: nextOrder } : {}),
             ...(catalogoActual ? { known: [...catalogoActual] } : {}),
@@ -241,6 +271,8 @@ export function useUiPreferences(
           setOrderState(previousOrder);
           visibleRef.current = previousVisible;
           orderRef.current = previousOrder;
+          setWidthsState(previousWidths);
+          widthsRef.current = previousWidths;
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent(UI_PREFERENCES_SAVE_ERROR_EVENT, { detail: SAVE_ERROR_MESSAGE }),
@@ -285,5 +317,25 @@ export function useUiPreferences(
     );
   }, [persist]);
 
-  return { visible, status, saving, setVisible, order, setOrder, reset };
+  const setWidth = useCallback(
+    (key: string, px: number) => {
+      if (!Number.isFinite(px) || px <= 0) return;
+      persist(visibleRef.current, orderRef.current, {
+        widths: { ...widthsRef.current, [key]: Math.round(px) },
+      });
+    },
+    [persist],
+  );
+
+  const resetWidth = useCallback(
+    (key: string) => {
+      if (!(key in widthsRef.current)) return;
+      const next = { ...widthsRef.current };
+      delete next[key];
+      persist(visibleRef.current, orderRef.current, { widths: next });
+    },
+    [persist],
+  );
+
+  return { visible, status, saving, setVisible, order, setOrder, reset, widths, setWidth, resetWidth };
 }

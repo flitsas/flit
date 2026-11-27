@@ -15,6 +15,7 @@ import {
   TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { ColumnResizeHandle, type ColumnWidthsState } from "@/components/atom/ColumnResizeHandle";
 import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
@@ -92,6 +93,8 @@ export interface ClientProceduresTableProps {
    * tabla nunca se queda sin columnas porque una preferencia no cargara.
    */
   visibleColumns?: readonly string[];
+  /** HU #14741 — anchos por columna ajustables (arrastrando el borde de la cabecera). */
+  columnWidths?: ColumnWidthsState;
   /** sortBy actual del API (vin, placa, vendedor, …). */
   sortBy?: string;
   sortDir?: "asc" | "desc";
@@ -233,6 +236,13 @@ function SortMenu({
   );
 }
 
+/** HU #14741 — ancho por defecto aproximado (solo para `aria-valuenow` si la columna no se puede medir) y piso. */
+const OT_COL_DEFAULT_PX = 140;
+const OT_COL_MIN_PX = 80;
+
+/** Ancho exacto de una columna ajustada: el contenido que no cabe se recorta con puntos suspensivos. */
+const estiloAncho = (px: number) => ({ width: px, minWidth: px, maxWidth: px });
+
 function SortableTh({
   label,
   sortLabel,
@@ -241,7 +251,13 @@ function SortableTh({
   sortDir,
   onSortChange,
   className = "",
+  anchoPx,
+  columnWidths,
 }: {
+  /** HU #14741 — ancho propio (px) de la columna, si el usuario la ajustó. */
+  anchoPx?: number;
+  /** HU #14741 — con esto la cabecera lleva el tirador de ancho. */
+  columnWidths?: ColumnWidthsState;
   label: string;
   /** Por qué ordena, si no es lo que dice el rótulo (ver `sortLabel` en el catálogo). */
   sortLabel?: string;
@@ -257,12 +273,27 @@ function SortableTh({
   const Icon = !active ? ArrowUpDown : sortDir === "asc" ? IconoArriba : IconoAbajo;
 
   const cls = `${TABLA_HEADER_CELL_CLS} ${className}`.trim();
-  const style = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG };
+  const style = {
+    background: TABLA_HEADER_BG,
+    color: TABLA_HEADER_FG,
+    ...(anchoPx ? estiloAncho(anchoPx) : {}),
+  };
+  const tirador = columnWidths ? (
+    <ColumnResizeHandle
+      label={label}
+      width={anchoPx ?? OT_COL_DEFAULT_PX}
+      min={OT_COL_MIN_PX}
+      onPreview={(px) => columnWidths.preview(columnKey, px)}
+      onCommit={(px) => columnWidths.commit(columnKey, px)}
+      onReset={() => columnWidths.reset(columnKey)}
+    />
+  ) : null;
 
   if (!onSortChange) {
     return (
       <th className={cls} style={style}>
         {label}
+        {tirador}
       </th>
     );
   }
@@ -280,6 +311,7 @@ function SortableTh({
           sortDir={sortDir}
           onSortChange={onSortChange}
         />
+        {tirador}
       </th>
     );
   }
@@ -295,6 +327,7 @@ function SortableTh({
         {label}
         <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
       </button>
+      {tirador}
     </th>
   );
 }
@@ -448,6 +481,7 @@ export function ClientProceduresTable({
   onVerDocumentos,
   onVerDetalle,
   visibleColumns,
+  columnWidths,
   sortBy,
   sortDir,
   onSortChange,
@@ -607,6 +641,8 @@ export function ClientProceduresTable({
                 sortDir={sortDir}
                 onSortChange={columna.sortable ? onSortChange : undefined}
                 className={indice === 0 && !conCasillas ? "rounded-l-xl" : ""}
+                anchoPx={columnWidths?.widths[columna.key]}
+                columnWidths={columnWidths}
               />
             ))}
             <th
@@ -642,7 +678,12 @@ export function ClientProceduresTable({
                   // Excepción aprobada: en celular la fila es tarjeta y la celda dice su columna.
                   data-label={columna.label}
                   className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
-                  style={{ borderColor: "var(--di-border)" }}
+                  style={{
+                    borderColor: "var(--di-border)",
+                    ...(columnWidths?.widths[columna.key]
+                      ? { ...estiloAncho(columnWidths.widths[columna.key]), overflow: "hidden", textOverflow: "ellipsis" }
+                      : {}),
+                  }}
                 >
                   {renderCelda(columna.key, row, onVerDetalle)}
                 </td>
