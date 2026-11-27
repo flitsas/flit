@@ -669,6 +669,51 @@ public sealed class ContenidoReporteTests
         delVehiculo.DetalleRunt!.GarantiasAFavor.Should().Contain(g => g.Acreedor == DetalleRuntGarantia.PersonaNatural, "el PDF sigue con «Persona natural»");
     }
 
+    // HU #14752 (revisión del carril) — una respuesta RUNT legible cuya proyección para el Excel lanza: el lote se genera igual, las
+    // columnas ampliadas del RUNT quedan vacías (salvo 1-4, que salen del vehículo), sale el aviso D4 y el log solo trae el vehículo y el
+    // tipo de la excepción, nunca su mensaje.
+    [Fact]
+    public async Task HU14752_proyeccion_del_runt_que_falla_deja_las_columnas_vacias_y_el_aviso()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt], vehiculos: [new("TST9F2", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        var celda = await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST9F2", Fuente.Runt), PayloadRunt.Replace("TST901", "TST9F2", StringComparison.Ordinal), ct);
+        await RespuestaFuenteTests.GuardarCifradaAsync(api, celda.Id, RespuestaFuenteTests.Cifrar(api, ProtoJson(ExcelLoteTests.RespuestaExcel("TST9F2"))), ct);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        await using (var escritura = empresa.Db())
+        {
+            var fila = await escritura.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == vehiculo, ct);
+            fila.PropietarioDocTipo = "CC";
+            fila.PropietarioDocCifrado = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Proteger("1055566677");
+            await escritura.SaveChangesAsync(ct);
+        }
+
+        var captura = new Catalogo.CapturaLogs();
+        using var fabrica = LoggerFactory.Create(b => b.AddProvider(captura).SetMinimumLevel(LogLevel.Trace));
+        await using var db = empresa.Db();
+        var lector = Lector(api, db, new UsuariosIdentidadDePrueba(), logger: fabrica.CreateLogger<LectorContenidoReporte>());
+        lector.ProyectarRuntExcel = _ => throw new InvalidOperationException("SECRETO LOCATARIO FICTICIO UNO");
+
+        var delLote = await lector.LoteAsync(Usuario(empresa.Id), lote.Id, ct);
+
+        var excel = delLote.Vehiculos.Single().Excel!;
+        excel.Runt.Should().BeNull();
+        excel.RuntSinDetalle.Should().BeTrue("sale el aviso D4");
+        excel.PropietarioNumero.Should().Be("1055566677", "1-4 salen del vehículo");
+        var libro = ExcelDePrueba.Leer(Flit.Diagnostico.Api.Infraestructura.Excel.TabularWorkbookWriter.Write(
+            ExcelLote.Hojas(delLote, new Dictionary<Guid, DatosTecnicosVehiculo>(), null)));
+        var filaExcel = libro.Fila("Vehículos", "TST9F2");
+        foreach (var columna in ExcelLoteTests.NuevasRunt.Skip(4))
+            libro.Valor("Vehículos", filaExcel, "RUNT — " + columna).Should().BeEmpty(columna);
+        libro.Hojas["Diagnóstico"].Should().ContainSingle(f => f[0] == "Aviso").Which[1].Should().Be(ExcelLoteTests.AvisoD4);
+        captura.Lineas.Should().ContainSingle(l => l.Contains("no proyectable", StringComparison.Ordinal))
+            .Which.Should().StartWith("Warning").And.Contain(vehiculo.ToString()).And.Contain(nameof(InvalidOperationException));
+        captura.Lineas.Should().NotContain(l => l.Contains("SECRETO", StringComparison.Ordinal) || l.Contains("1055566677", StringComparison.Ordinal));
+    }
+
     /// <summary>Protector de documentos que falla con <paramref name="error"/> al descifrar <paramref name="marca"/>; lo demás va al real.</summary>
     private sealed class ProtectorDocumentoQueFalla(IProtectorDocumentoPersona real, byte[] marca, Exception error) : IProtectorDocumentoPersona
     {

@@ -16,6 +16,10 @@ internal static partial class LogReportes
     [LoggerMessage(Level = LogLevel.Warning, Message = "Documento no descifrable en el Excel del lote: vehículo {VehiculoId}, rol {Rol} ({Excepcion}); la celda sale vacía.")]
     public static partial void NoDescifradoExcel(ILogger logger, Guid vehiculoId, string rol, string excepcion);
 
+    /// <summary>HU #14752 (SP-7): la respuesta RUNT de un vehículo no se pudo proyectar para el Excel del lote; solo el vehículo y el tipo de la excepción.</summary>
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Respuesta RUNT no proyectable en el Excel del lote: vehículo {VehiculoId} ({Excepcion}); sus columnas ampliadas salen vacías.")]
+    public static partial void RuntNoProyectableExcel(ILogger logger, Guid vehiculoId, string excepcion);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Exportación de {TipoReporte} {Formato} rechazada: {Filas} filas pasan el máximo de {Maximo}.")]
     public static partial void DemasiadoGrande(ILogger logger, string tipoReporte, string formato, int filas, int maximo);
 

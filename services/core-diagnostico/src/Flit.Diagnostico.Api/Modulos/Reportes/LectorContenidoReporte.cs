@@ -195,11 +195,11 @@ internal sealed class LectorContenidoReporte(
             var delProveedor = f.LocatarioDocOrigen == OrigenDocumento.Proveedor;
             var runtCompletado = conRunt ? celdas[v.Id].FirstOrDefault(c => c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado) : null;
             var runt = runtCompletado is null ? null
-                : LectorDetalleRunt.LeerRespuesta(protectorRespuesta, runtCompletado.Cifrada) is { } respuesta ? DatosRuntExcel.Desde(respuesta) : null;
+                : LectorDetalleRunt.LeerRespuesta(protectorRespuesta, runtCompletado.Cifrada) is { } respuesta ? ProyectarParaExcel(respuesta, v.Id) : null;
             var locatarioTipo = delProveedor ? f.LocatarioDocTipo : null;
             var locatarioNumero = delProveedor ? DescifrarParaExcel(f.LocatarioDocCifrado, v.Id, RolLocatario) : null;
             var excel = new DatosExcelVehiculo(
-                f.PropietarioDocTipo, DescifrarParaExcel(f.PropietarioDocCifrado, v.Id, RolPropietario), locatarioTipo, locatarioNumero,
+                f.PropietarioDocTipo, conRunt ? DescifrarParaExcel(f.PropietarioDocCifrado, v.Id, RolPropietario) : null, locatarioTipo, locatarioNumero,
                 DatosExcelVehiculo.NombreDelLocatario(runt, locatarioTipo, locatarioNumero), runt, RuntSinDetalle: runtCompletado is not null && runt is null);
             return new VehiculoReporte(
                 v.Id, v.Orden, v.Identificador, CodigosDeEnum.Codigo(v.Tipo), v.Placa, v.Vin,
@@ -208,6 +208,30 @@ internal sealed class LectorContenidoReporte(
     }
 
     private const string RolPropietario = "PROPIETARIO";
+
+    /// <summary>
+    /// La proyección del RUNT para el Excel del lote (por defecto <see cref="DatosRuntExcel.Desde"/>). Solo los tests la reemplazan, para
+    /// probar una respuesta legible cuya proyección falla.
+    /// </summary>
+    internal Func<Flit.Consultas.Grpc.V1.ConsultarVehiculoIntempoResponse, DatosRuntExcel?> ProyectarRuntExcel { get; set; } = DatosRuntExcel.Desde;
+
+    /// <summary>
+    /// HU #14752 (revisión del carril): un fallo al proyectar una respuesta legible no tumba el Excel. Queda sin detalle (null, así que
+    /// <see cref="DatosExcelVehiculo.RuntSinDetalle"/> sale true y la hoja «Diagnóstico» lleva el aviso D4) y se registra solo el tipo de
+    /// la excepción (SP-7). La cancelación se propaga.
+    /// </summary>
+    private DatosRuntExcel? ProyectarParaExcel(Flit.Consultas.Grpc.V1.ConsultarVehiculoIntempoResponse respuesta, Guid vehiculoId)
+    {
+        try
+        {
+            return ProyectarRuntExcel(respuesta);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Catalogo.LogReportes.RuntNoProyectableExcel(logger, vehiculoId, ex.GetType().Name);
+            return null;
+        }
+    }
 
     private const string RolLocatario = "LOCATARIO";
 
