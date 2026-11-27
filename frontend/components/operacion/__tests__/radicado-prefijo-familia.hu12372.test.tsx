@@ -40,7 +40,7 @@ describe('HU #12372 — exports: el radicado es texto con prefijo, no una cantid
 });
 
 describe('HU #12372 — el buscador enseña el formato del radicado', () => {
-  it('AC3 — el marcador de posición por defecto (listado del gestor) muestra FT1-0000012', () => {
+  it('AC3 — el marcador de posición por defecto (listado del gestor) anuncia radicado, placa o VIN y varios por coma', () => {
     render(
       <TramitesFiltrosBar
         rangoSobre="created"
@@ -64,8 +64,12 @@ describe('HU #12372 — el buscador enseña el formato del radicado', () => {
       />,
     );
 
-    const caja = screen.getByPlaceholderText(/FT1-0000012/);
+    const caja = screen.getByPlaceholderText('Radicado, placa o VIN · varios separados por coma');
     expect(caja).toBeInTheDocument();
+    // Accesibilidad: la ayuda de varios valores se anuncia por descripción, no solo por placeholder.
+    expect(caja).toHaveAccessibleDescription(/separándolos con coma.*AAA111, BBB222/);
+    expect(caja).toHaveAttribute('title', expect.stringMatching(/AAA111, BBB222/));
+    expect(caja).toHaveAccessibleName('Buscar trámites');
     // Y no promete un formato viejo ni el número pelado como único modo.
     expect(caja.getAttribute('placeholder')).not.toMatch(/TRM-/);
   });

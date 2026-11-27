@@ -375,7 +375,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "buscar",
         title: "1. Buscar en el listado",
         paragraphs: [
-          "En Trámites, la barra «Buscar radicado (FT1-0000012), placa, VIN...» busca en el servidor sobre todo el universo de tu compañía, no solo sobre la página visible. El radicado casa exacto (con o sin prefijo: FT1-0000012 o solo 12); placa, VIN, nombre o documento de las partes, organismo y compañía casan por texto parcial.",
+          "En Trámites, la barra «Radicado, placa o VIN · varios separados por coma» busca en el servidor sobre todo el universo de tu compañía, no solo sobre la página visible. El radicado casa exacto (con o sin prefijo: FT1-0000012 o solo 12); placa, VIN, nombre o documento de las partes, organismo y compañía casan por texto parcial. Para buscar varios a la vez, sepáralos con coma (por ejemplo «AAA111, BBB222» o «FT1-0000012, FT1-0000013»): la lista trae los trámites que coincidan con cualquiera de ellos. Sin coma, la búsqueda funciona como siempre.",
           "«Periodo» acota por fecha de radicación (Hoy, Últimos 7/30/90 días, Mes actual, Mes anterior o Rango propio). «+ Filtro» abre las Consultas: eliges un campo del catálogo, un operador («es», «no es», «contiene», «está vacío», «tiene dato») y los valores. Puedes pegar una columna de Excel con varias placas o radicados: un valor por línea.",
         ],
         bullets: [
