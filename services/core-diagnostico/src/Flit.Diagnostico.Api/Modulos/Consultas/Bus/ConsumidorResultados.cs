@@ -27,7 +27,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// HU #14087 AC8 también guarda la respuesta COMPLETA tal como llegó, cifrada (<see cref="RespuestaFuenteCelda"/>), junto al
 /// payload normalizado (que no cambia).</item>
 /// <item>Un ERROR transitorio con reintentos disponibles (<see cref="ProgramadorReintentos.Politica"/>) se programa en un scope
-/// propio y lanza <see cref="ReintentoProgramadoException"/> (el SDK lleva el resultado a la cola de reintentos de 5, 10 y 20 s).
+/// propio y lanza <see cref="ReintentoProgramadoException"/> (el SDK lleva el resultado a las colas <c>.espera.n</c>, con un tick
+/// de 15 s, hasta que vence la espera del backoff 1/2/4 min ±20 %, HU #14752).
 /// Lo demás (OK, definitivo o reintentos agotados) cierra la celda con <see cref="PublicadorCeldas.CerrarAsync"/>: intentos, datos
 /// del vehículo, liberación o bloqueo de las demás celdas si es la RUNT y recálculo del lote, todo en la transacción del mensaje.</item>
 /// </list>
@@ -145,7 +146,7 @@ internal sealed partial class ConsumidorResultados(
 
         if (resultado.Estado == EstadoCelda.Error)
         {
-            var decision = programador.Politica.Decidir(resultado.TipoError, celda.IntentosAuto, respuesta.Fin);
+            var decision = programador.Decidir(resultado.TipoError, celda.IntentosAuto, respuesta.Fin);
             if (decision.Reintentar)
             {
                 // Lanza ReintentoProgramadoException (o vuelve sin efecto si la celda ya no es de este trabajo).

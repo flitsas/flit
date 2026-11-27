@@ -1,8 +1,8 @@
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
 /// <summary>
-/// Clase de error de una fuente (patrón <c>TipoErrorFuente</c> de Comparendos). <see cref="Timeout"/>, <see cref="Red"/> y
-/// <see cref="Http5xx"/> son transitorios (se reintentan con backoff, D-12); los demás son definitivos. El código que se guarda
+/// Clase de error de una fuente (patrón <c>TipoErrorFuente</c> de Comparendos). <see cref="Timeout"/>, <see cref="Red"/>,
+/// <see cref="Http5xx"/> y <see cref="LimiteProveedor"/> son transitorios (se reintentan con backoff, D-12); los demás son definitivos. El código que se guarda
 /// en la celda sale de <see cref="TipoErrorFuenteCodigos.Codigo"/>.
 /// </summary>
 public enum TipoErrorFuente
@@ -27,6 +27,9 @@ public enum TipoErrorFuente
 
     /// <summary>El proveedor respondió sin éxito o el RUNT no registra el vehículo (definitivo, HU #13877).</summary>
     EstadoNoOk,
+
+    /// <summary>El proveedor limitó las peticiones (transitorio).</summary>
+    LimiteProveedor,
 }
 
 /// <summary>
@@ -50,6 +53,7 @@ public static class TipoErrorFuenteCodigos
         TipoErrorFuente.Http5xx => "HTTP_5XX",
         TipoErrorFuente.Autenticacion => "AUTENTICACION",
         TipoErrorFuente.EstadoNoOk => "ESTADO_NO_OK",
+        TipoErrorFuente.LimiteProveedor => "LIMITE_PROVEEDOR",
         _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, "TipoErrorFuente sin código."),
     };
 }
@@ -126,7 +130,7 @@ public sealed record ResultadoRunt
     /// Verdadero si el error se puede reintentar (<see cref="TipoErrorFuente.Timeout"/>, <see cref="TipoErrorFuente.Red"/> o
     /// <see cref="TipoErrorFuente.Http5xx"/>).
     /// </summary>
-    public bool EsTransitorio => Error is TipoErrorFuente.Timeout or TipoErrorFuente.Red or TipoErrorFuente.Http5xx;
+    public bool EsTransitorio => Error is TipoErrorFuente.Timeout or TipoErrorFuente.Red or TipoErrorFuente.Http5xx or TipoErrorFuente.LimiteProveedor;
 
     public static ResultadoRunt Exito(VehiculoRunt vehiculo)
     {

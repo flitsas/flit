@@ -59,7 +59,7 @@ public sealed class ReintentosTests
             runt.TipoError.Should().BeNull();
             runt.LeaseHasta.Should().BeNull();
             runt.IntentosAuto.Should().Be(reintento);
-            runt.DisponibleDesde.Should().Be(ultimo.Fin + PoliticaReintentosEspera(reintento), "espera fija (2 min por defecto) desde el fin del intento");
+            runt.DisponibleDesde.Should().Be(ultimo.Fin + PoliticaReintentosEspera(reintento), "backoff 1/2/4 min (factor 0 en las pruebas) desde el fin del intento");
             simit.Estado.Should().Be(EstadoCelda.Pendiente, "las demás celdas siguen esperando a RUNT, sin bloquearse");
             simit.TipoError.Should().BeNull();
             (await procesador.ProcesarLoteAsync(ct)).Should().Be(0, "antes del backoff no se toma");
@@ -128,14 +128,50 @@ public sealed class ReintentosTests
         error.Which.Message.Should().Contain("Diagnostico:Consultas:MaxReintentos").And.Contain("[0, 3]");
     }
 
-    // Punto 3 AC1 (2026-11-11) — por defecto 3 reintentos, 2 min de espera fija y 10 min para «pegada»; 0 y 3 son válidos.
+    // HU #14752 (D5 = a) — por defecto 3 reintentos, base de 1 min, ±20 %, 60 s de mínimo para el límite y 10 min para «pegada».
     [Fact]
-    public void Por_defecto_3_reintentos_2_minutos_de_espera_y_10_de_umbral()
+    public void Por_defecto_3_reintentos_base_de_1_minuto_20_por_ciento_60_segundos_de_limite_y_10_de_umbral()
     {
         var porDefecto = new OpcionesConsultas();
         (porDefecto.MaxReintentos, porDefecto.EsperaReintento, porDefecto.UmbralPegada)
-            .Should().Be((3, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(10)));
+            .Should().Be((3, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)));
+        (porDefecto.FactorAleatorio, porDefecto.EsperaMinimaLimiteProveedor).Should().Be((0.2, TimeSpan.FromMinutes(1)));
         porDefecto.Errores().Should().BeEmpty();
+    }
+
+    // HU #14752 — el segundo y el tercer reintento esperan 2 y 4 min (factor 0 en la configuración de las pruebas).
+    [Fact]
+    public void Segundo_y_tercer_reintento_a_2_y_4_minutos()
+    {
+        PoliticaReintentosEspera(1).Should().Be(TimeSpan.FromMinutes(1));
+        PoliticaReintentosEspera(2).Should().Be(TimeSpan.FromMinutes(2));
+        PoliticaReintentosEspera(3).Should().Be(TimeSpan.FromMinutes(4));
+        ApiDePrueba.Configuracion("sin-base")["Diagnostico:Consultas:FactorAleatorio"].Should().Be("0", "las pruebas del motor corren sin azar");
+        var ahora = DateTimeOffset.UnixEpoch;
+        var tres = new PoliticaReintentos(3, PoliticaReintentos.EsperaPorDefecto, 0, PoliticaReintentos.EsperaMinimaLimitePorDefecto);
+        tres.Decidir("TIMEOUT", 1, ahora, 0.0).DisponibleDesde.Should().Be(ahora.AddMinutes(2));
+        tres.Decidir("TIMEOUT", 2, ahora, 1.0).DisponibleDesde.Should().Be(ahora.AddMinutes(4));
+    }
+
+    // HU #14752 — reglas de las claves nuevas: el factor en [0, 0,5], el mínimo del límite en [1 s, 10 min] y el umbral de pegada
+    // mayor que la espera MÁXIMA EFECTIVA (con la base de 2 min: 2 × 4 × 1,2 = 9,6 min > 9 min).
+    [Fact]
+    public void Validacion_del_factor_del_minimo_y_del_umbral_contra_la_espera_maxima_efectiva()
+    {
+        new OpcionesConsultas { FactorAleatorio = -0.1 }.Errores().Should().ContainSingle().Which.Should().Contain(nameof(OpcionesConsultas.FactorAleatorio));
+        new OpcionesConsultas { FactorAleatorio = 0.51 }.Errores().Should().ContainSingle().Which.Should().Contain(nameof(OpcionesConsultas.FactorAleatorio));
+        new OpcionesConsultas { FactorAleatorio = 0.5 }.Errores().Should().BeEmpty();
+        new OpcionesConsultas { EsperaMinimaLimiteProveedor = TimeSpan.Zero }.Errores().Should().ContainSingle()
+            .Which.Should().Contain(nameof(OpcionesConsultas.EsperaMinimaLimiteProveedor));
+        new OpcionesConsultas { EsperaMinimaLimiteProveedor = TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1) }.Errores().Should().ContainSingle()
+            .Which.Should().Contain(nameof(OpcionesConsultas.EsperaMinimaLimiteProveedor));
+
+        new OpcionesConsultas { UmbralPegada = TimeSpan.FromSeconds(288) }.Errores().Should().ContainSingle()
+            .Which.Should().Contain(nameof(OpcionesConsultas.UmbralPegada), "4 min 48 s es la espera máxima efectiva: no la supera");
+        new OpcionesConsultas { UmbralPegada = TimeSpan.FromSeconds(289) }.Errores().Should().BeEmpty();
+        new OpcionesConsultas { EsperaReintento = TimeSpan.FromMinutes(2), UmbralPegada = TimeSpan.FromMinutes(9) }.Errores().Should().ContainSingle()
+            .Which.Should().Contain(nameof(OpcionesConsultas.UmbralPegada));
+        OpcionesConsultas.MensajeFueraDeRango.Should().Contain("Diagnostico:Consultas:FactorAleatorio").And.Contain("Diagnostico:Consultas:EsperaMinimaLimiteProveedor");
     }
 
     [Theory]
@@ -155,9 +191,12 @@ public sealed class ReintentosTests
         {
             b.Configuration["Diagnostico:Consultas:EsperaReintento"] = "00:01:30";
             b.Configuration["Diagnostico:Consultas:UmbralPegada"] = "00:15:00";
+            b.Configuration["Diagnostico:Consultas:FactorAleatorio"] = "0.3";
+            b.Configuration["Diagnostico:Consultas:EsperaMinimaLimiteProveedor"] = "00:02:00";
         });
         var opciones = api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value;
         (opciones.EsperaReintento, opciones.UmbralPegada).Should().Be((TimeSpan.FromSeconds(90), TimeSpan.FromMinutes(15)));
+        (opciones.FactorAleatorio, opciones.EsperaMinimaLimiteProveedor).Should().Be((0.3, TimeSpan.FromMinutes(2)));
     }
 
     // Punto 3 — una espera fuera de [1 s, 1 h], o un umbral que no supera la espera (una celda que espera su reintento contaría
@@ -165,8 +204,14 @@ public sealed class ReintentosTests
     [Theory]
     [InlineData("EsperaReintento", "00:00:00")]
     [InlineData("EsperaReintento", "01:00:01")]
-    [InlineData("UmbralPegada", "00:02:00")]
+    // HU #14752: la API de pruebas corre con MaxReintentos 1 y factor 0, así que su espera máxima efectiva es 1 min (el mínimo del
+    // límite): un umbral de 1 min no la supera.
+    [InlineData("UmbralPegada", "00:01:00")]
     [InlineData("UmbralPegada", "1.00:00:01")]
+    [InlineData("FactorAleatorio", "0.6")]
+    [InlineData("FactorAleatorio", "-0.1")]
+    [InlineData("EsperaMinimaLimiteProveedor", "00:00:00")]
+    [InlineData("EsperaMinimaLimiteProveedor", "00:10:01")]
     public async Task Espera_o_umbral_fuera_de_rango_impide_arrancar(string clave, string valor)
     {
         var error = await FluentActions.Awaiting(() => ApiDePrueba.SinBaseAsync(configurar: b => b.Configuration[$"Diagnostico:Consultas:{clave}"] = valor))
@@ -174,7 +219,10 @@ public sealed class ReintentosTests
         error.Which.Message.Should().Contain($"Diagnostico:Consultas:{clave}");
     }
 
-    private static TimeSpan PoliticaReintentosEspera(int reintento) => reintento >= 1 ? PoliticaReintentos.EsperaPorDefecto : throw new ArgumentOutOfRangeException(nameof(reintento));
+    /// <summary>Espera del reintento n con el backoff de la política y factor 0 (configuración de las pruebas): 1, 2 y 4 min.</summary>
+    private static TimeSpan PoliticaReintentosEspera(int reintento) => reintento >= 1
+        ? PoliticaReintentos.EsperaPorDefecto * Math.Pow(2, reintento - 1)
+        : throw new ArgumentOutOfRangeException(nameof(reintento));
 
     /// <summary>Intentos del lote en orden de inicio, leídos con el contexto de la empresa.</summary>
     internal static async Task<List<IntentoConsulta>> IntentosAsync(ApiDePrueba api, EmpresaDePrueba empresa, Guid diagnostico, CancellationToken ct)
