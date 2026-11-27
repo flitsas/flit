@@ -154,6 +154,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "«Periodo» por fecha de radicación y «+ Filtro» con la gramática de Consultas (campo, operador, valores; admite pegar una columna de Excel).",
           "«Exportar» genera un Excel con todas las filas que cumplen los filtros, no solo la página.",
           "Columnas configurables; la elección se guarda por usuario.",
+          "En la pestaña de matrículas puedes activar la columna «Dígito de placa» desde «Columnas». Muestra el dígito que pidió el cliente al radicar sin placa: «Termina en 3» en carros, «Inicia en 7» en motos y motocarros, «Sin preferencia» si no pidió ninguno y «—» si el vehículo ya traía placa. No viene activada por defecto y no aparece en traspaso ni en otros trámites.",
         ],
       },
       {

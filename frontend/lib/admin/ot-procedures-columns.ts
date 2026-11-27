@@ -13,6 +13,12 @@ export interface OtProceduresColumnDef {
    * por el gestor, y anunciar un orden por empresa+persona prometería un orden que no existe.
    */
   sortLabel?: string;
+  /**
+   * HU #14744 — columna que SOLO existe en la pestaña de matrícula inicial (familia MATRICULAS).
+   * Fuera de ella no se pinta ni se ofrece en «Columnas», sin tocar la preferencia guardada. Nunca
+   * va en el default.
+   */
+  matriculaOnly?: boolean;
 }
 
 export const OT_PROCEDURES_COLUMNS: readonly OtProceduresColumnDef[] = [
@@ -27,12 +33,28 @@ export const OT_PROCEDURES_COLUMNS: readonly OtProceduresColumnDef[] = [
   { key: "empresaGestor", label: COPY.A06, sortable: true, sortLabel: COPY.A06 },
   { key: "estado", label: COPY.B18, sortable: true },
   { key: "fechaRadicacion", label: COPY.A04, sortable: true },
+  { key: "digitoPlaca", label: "Dígito de placa", matriculaOnly: true },
 ] as const;
 
-/** Todas las columnas visibles por defecto. */
-export const DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS: readonly string[] = OT_PROCEDURES_COLUMNS.map(
-  (c) => c.key,
-);
+/** Todas las columnas visibles por defecto, salvo las de matrícula inicial (HU #14744: se marcan a mano). */
+export const DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS: readonly string[] = OT_PROCEDURES_COLUMNS.filter(
+  (c) => !c.matriculaOnly,
+).map((c) => c.key);
+
+/** HU #14744 — claves que solo existen en la pestaña de matrícula inicial. */
+export const OT_MATRICULA_ONLY_KEYS: readonly string[] = OT_PROCEDURES_COLUMNS.filter(
+  (c) => c.matriculaOnly,
+).map((c) => c.key);
+
+/** HU #14744 — quita (sin tocar la preferencia) las columnas de matrícula fuera de esa pestaña. */
+export function applyOtMatriculaColumns(visible: readonly string[], esMatricula: boolean): string[] {
+  return esMatricula ? [...visible] : visible.filter((k) => !OT_MATRICULA_ONLY_KEYS.includes(k));
+}
+
+/** HU #14744 — catálogo del selector «Columnas» según la pestaña. */
+export function otSelectableColumns(esMatricula: boolean): readonly OtProceduresColumnDef[] {
+  return esMatricula ? OT_PROCEDURES_COLUMNS : OT_PROCEDURES_COLUMNS.filter((c) => !c.matriculaOnly);
+}
 
 /** Una opción de orden ofrecida por la cabecera de una columna (HU #12219). */
 export interface OtProceduresSortOption {

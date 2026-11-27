@@ -76,9 +76,11 @@ import {
 } from './dialogo-propio';
 import {
   TRAMITES_COLUMNS,
-  TRAMITES_SELECTABLE_COLUMNS,
   applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
+  applyMatriculaColumns,
+  selectableColumnsFor,
+  TRAMITES_MATRICULA_ONLY_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
   TRAMITES_COLUMNS_RESHOWN_ONCE,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
@@ -96,6 +98,7 @@ import { nombreArchivoTramites, selloDeArchivo } from './tramites-export';
 import { tramitesExportFields } from '@/lib/tramites/tramites-table-columns';
 import {
   FIRMA_TEXTO,
+  digitoPlacaLabelDeFila,
   FUENTE_LABEL,
   marcasDe,
   quipuxMarca,
@@ -470,7 +473,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const effectiveColumns = useMemo(() => {
     // HU #12363 — «Cliente» entra SOLO con el alcance de red y sale con cualquier otro (aunque una
     // preferencia guardada la trajera): la manda el alcance, no el selector de columnas.
-    const conAlcance = applyNetworkScopeColumns(visibleColumns, networkActive);
+    const conAlcance = applyMatriculaColumns(
+      applyNetworkScopeColumns(visibleColumns, networkActive),
+      modalidad === 'MATRICULAS',
+    );
     // En matrículas el titular es el comprador y la columna 'propietario' sale vacía.
     return modalidad === 'MATRICULAS' ? conAlcance.filter((k) => k !== 'propietario') : conAlcance;
   }, [visibleColumns, modalidad, networkActive]);
@@ -1545,9 +1551,19 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               columnSelector={
                 <ColumnSelector
                   // HU #12363 — sin «Cliente»: esa la enciende el alcance de red, no el usuario.
-                  columns={TRAMITES_SELECTABLE_COLUMNS}
-                  visible={visibleColumns}
-                  onChange={setVisibleColumns}
+                  columns={selectableColumnsFor(modalidad === 'MATRICULAS')}
+                  visible={applyMatriculaColumns(visibleColumns, modalidad === 'MATRICULAS')}
+                  onChange={(next) => {
+                    // HU #14744 — fuera de matrícula la columna no se ofrece, pero la preferencia
+                    // guardada la conserva: así reaparece al volver a la pestaña.
+                    const guardadas =
+                      modalidad === 'MATRICULAS'
+                        ? []
+                        : visibleColumns.filter((k) => TRAMITES_MATRICULA_ONLY_KEYS.includes(k));
+                    setVisibleColumns(
+                      TRAMITES_COLUMN_KEYS.filter((k) => next.includes(k) || guardadas.includes(k)),
+                    );
+                  }}
                   label="Columnas"
                   disabled={savingColumns}
                   buttonClassName={controlCls(columnasPersonalizadas)}
@@ -3580,6 +3596,8 @@ function TramiteRow({
     // Feature #12276 (HU #12312) — «Confirmado en RUNT»: SÍ, NO o «—». Sin tooltip, sin contador,
     // sin marca: al cliente no se le explica el porqué (decisión de producto); eso vive en el
     // Historial de plataforma. El guion cubre el «no consultado» y los trámites no aprobados.
+    // HU #14744 — «Dígito de placa»: solo matrícula inicial (ver `applyMatriculaColumns`).
+    digitoPlaca: <span data-testid="tramite-digito-placa">{digitoPlacaLabelDeFila(item)}</span>,
     confirmadoRunt: (
       <span className="flex items-center">
         {item.runtConfirmed === 'yes' || item.runtConfirmed === 'no' ? (

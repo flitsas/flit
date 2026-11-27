@@ -852,7 +852,8 @@
             "Columna «Marcas»: si el organismo recibe el trámite por Quipux, verás una etiqueta pequeña que dice en qué va: «QX · En cola» (se radica solo, espera la confirmación de Quipux), «QX · Radicado» (ya está en Quipux, esperando la decisión del organismo) o «QX · Falló», en rojo (Quipux no respondió y el trámite sigue en Preparado). Cuando el trámite ya está Aprobado o Rechazado no lleva etiqueta: su estado lo dice. Pasa el ratón sobre la etiqueta para ver qué significa; si tienes acceso a Log QX, un clic te lleva a la trazabilidad del envío.",
             "La estrella marca un trámite como prioritario; el filtro «solo prioritarios» los aísla y, sin orden explícito, van primero.",
             "«Exportar» genera un Excel con TODAS las filas que cumplen los filtros actuales, no solo las de pantalla.",
-            "El selector de columnas te deja elegir qué ver; la elección se guarda por usuario."
+            "El selector de columnas te deja elegir qué ver; la elección se guarda por usuario.",
+            "En la pestaña de matrículas puedes activar la columna «Dígito de placa» desde «Columnas». Muestra el dígito que pidió el cliente al radicar sin placa: «Termina en 3» en carros, «Inicia en 7» en motos y motocarros, «Sin preferencia» si no pidió ninguno y «—» si el vehículo ya traía placa. No viene activada por defecto y no aparece en traspaso ni en otros trámites."
           ],
           "callouts": []
         },
@@ -1727,7 +1728,8 @@
             "«Búsqueda rápida»: los atajos «Por aprobar» (entregados a la espera de tu decisión), «Por preasignar» (radicados sin placa) y «Revocatorias» (aprobados con una solicitud de revocatoria activa) resaltan y filtran de una vez la tarjeta correspondiente, sin tener que ubicarla en la cabecera.",
             "«Periodo» por fecha de radicación y «+ Filtro» con la gramática de Consultas (campo, operador, valores; admite pegar una columna de Excel).",
             "«Exportar» genera un Excel con todas las filas que cumplen los filtros, no solo la página.",
-            "Columnas configurables; la elección se guarda por usuario."
+            "Columnas configurables; la elección se guarda por usuario.",
+            "En la pestaña de matrículas puedes activar la columna «Dígito de placa» desde «Columnas». Muestra el dígito que pidió el cliente al radicar sin placa: «Termina en 3» en carros, «Inicia en 7» en motos y motocarros, «Sin preferencia» si no pidió ninguno y «—» si el vehículo ya traía placa. No viene activada por defecto y no aparece en traspaso ni en otros trámites."
           ],
           "callouts": []
         },
