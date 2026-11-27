@@ -40,10 +40,11 @@ public static class ConsolidadoVigenteTrasConflicto
         repo.ResetTracking();
         var fresca = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).ConfigureAwait(false);
         var vigente = fresca is null ? null : ConsolidadoEntregaModos.Existente(fresca, tipoAdjunto);
-        return vigente is null
+        return vigente is null || fresca is null
             ? null
             : new GenerarConsolidadoResult(
-                new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256),
+                // Épica #14657 — mismo nombre de entrega que el resto de salidas (generado por FLIT → con placa).
+                Flit.Tramites.Application.UseCases.ConsolidadoLotes.NombreDocumentoEntrega.ParaDocumento(vigente, fresca),
                 Regenerado: false);
     }
 }

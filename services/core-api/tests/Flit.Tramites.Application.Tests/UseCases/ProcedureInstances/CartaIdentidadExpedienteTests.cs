@@ -339,6 +339,29 @@ public sealed class CartaIdentidadExpedienteTests
         _cert.RequestedIds.Should().Equal("kyv-comprador");
     }
 
+    // ── Épica #14657 — nombre estándar {tipo}_{radicado}_{placa}.pdf (certificado Kyverum y carta manual) ──
+
+    [Theory]
+    [InlineData("aaa111", "AAA111")]
+    [InlineData(null, "SIN-PLACA")]
+    public async Task Epica14657_CertificadoKyverumYCartaManual_NombreConTipoRadicadoYPlaca(string? placa, string placaEnNombre)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Traspaso();
+        i.Plate = placa;
+        i.Actors.Add(Actor(i, "comprador", "111"));
+        i.Actors.Add(Actor(i, "vendedor", "333"));
+        i.BiometricValidations.Add(Bio("comprador", "111", manual: false, kyverumId: "kyv-comprador"));
+        i.BiometricValidations.Add(Bio("vendedor", "333", manual: true, carta: "CARTA-VENDEDOR"));
+
+        var (result, error) = await Handler().HandleAsync(i.Id, _tenant, ct);
+
+        error.Should().BeNull();
+        var nombres = result!.Documents.ToDictionary(d => d.Tipo, d => d.Filename);
+        nombres["certificado_identidad"].Should().Be($"certificado_identidad_TRM-2026-000001_{placaEnNombre}.pdf");
+        nombres["certificado_identidad_vendedor"].Should().Be($"certificado_identidad_vendedor_TRM-2026-000001_{placaEnNombre}.pdf");
+    }
+
     // ── AC2: identidad apalancada ─────────────────────────────────────────────────────────────────
 
     [Fact]

@@ -36,14 +36,22 @@ public static class NombreDocumentoTramite
     public static string Generar(string tipo, Flit.Tramites.Domain.Entities.ProcedureInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
-        var placa = instance.Plate;
-        if (string.IsNullOrWhiteSpace(placa))
-        {
-            placa = instance.FieldValues
-                .FirstOrDefault(f => string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase))?.ValueText;
-        }
+        return Generar(tipo, instance.ReferenceNumber, PlacaDe(instance));
+    }
 
-        return Generar(tipo, instance.ReferenceNumber, placa);
+    /// <summary>
+    /// Fuente ÚNICA de la placa para nombrar documentos: <c>Plate</c> (columna denormalizada, siempre disponible) o,
+    /// si falta, el field value <c>plate</c>. Si la consulta no cargó <c>FieldValues</c> (listados/descargas de
+    /// adjuntos) el fallback no encuentra nada y queda solo <c>Plate</c>; sin ninguna → <c>null</c> → <c>SIN-PLACA</c>.
+    /// </summary>
+    public static string? PlacaDe(Flit.Tramites.Domain.Entities.ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        if (!string.IsNullOrWhiteSpace(instance.Plate))
+            return instance.Plate;
+
+        return instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase))?.ValueText;
     }
 
     private static string SanearTipo(string? tipo)

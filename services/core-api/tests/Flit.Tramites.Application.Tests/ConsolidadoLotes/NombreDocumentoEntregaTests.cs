@@ -97,6 +97,118 @@ public sealed class NombreDocumentoEntregaTests
         NombreDocumentoEntrega.ParaAdjunto(a, i).Should().Be("impronta.png");
     }
 
+    // ── Épica #14657 — escrituras: documento real, no se renombra ───────────────────────────────
+
+    [Theory]
+    [InlineData("escritura")]
+    [InlineData("escritura_comprador")]
+    [InlineData("ESCRITURA")]
+    public void EscrituraDeSistema_ConservaSuNombre(string tipo)
+    {
+        var i = Instancia("AAA111");
+        var a = Adjunto(i, tipo, "escritura_publica_123.pdf", source: "system");
+
+        NombreDocumentoEntrega.EsGeneradoPorFlit(a).Should().BeFalse();
+        NombreDocumentoEntrega.ParaAdjunto(a, i).Should().Be("escritura_publica_123.pdf");
+    }
+
+    // ── Épica #14657 — rues/impronta guardados vía UploadAttachmentHandler (Source=user) ────────
+
+    [Theory]
+    [InlineData("rues", "rues_FT1-0000102.pdf", "rues_FT1-0000102_AAA111.pdf")]
+    [InlineData("impronta", "impronta_FT1-0000102.pdf", "impronta_FT1-0000102_AAA111.pdf")]
+    [InlineData("rues", "rues_FT1-0000102_XXX999.pdf", "rues_FT1-0000102_AAA111.pdf")]
+    public void RuesEImprontaYaGuardados_ConPatronDelGenerador_SeRenombran_AunqueSeanSourceUser(
+        string tipo, string guardado, string esperado)
+    {
+        var i = Instancia("AAA111");
+        var a = Adjunto(i, tipo, guardado, source: "user");
+
+        NombreDocumentoEntrega.ParaAdjunto(a, i).Should().Be(esperado);
+    }
+
+    [Theory]
+    [InlineData("rues", "certificado_de_camara.pdf")]
+    [InlineData("impronta", "scan_huella.pdf")]
+    [InlineData("rues", "RUES.pdf")]
+    public void RuesEImpronta_SubidosPorElUsuarioConOtroNombre_NoSeRenombran(string tipo, string nombre)
+    {
+        var i = Instancia("AAA111");
+        var a = Adjunto(i, tipo, nombre, source: "user");
+
+        NombreDocumentoEntrega.ParaAdjunto(a, i).Should().Be(nombre);
+    }
+
+    [Fact]
+    public void OtroTipoSourceUser_ConPrefijoSimilar_NoSeRenombra_NiRuesNoPdf()
+    {
+        var i = Instancia("AAA111");
+        var otro = Adjunto(i, "cedula", "cedula_FT1-0000102.pdf", source: "user");
+        var imagen = Adjunto(i, "rues", "rues_foto.png", source: "user", mime: "image/png");
+
+        NombreDocumentoEntrega.ParaAdjunto(otro, i).Should().Be("cedula_FT1-0000102.pdf");
+        NombreDocumentoEntrega.ParaAdjunto(imagen, i).Should().Be("rues_foto.png");
+    }
+
+    // ── Épica #14657 — históricos y duplicados del mismo tipo ───────────────────────────────────
+
+    [Fact]
+    public void Historico_ConservaSuNombre_YSoloElVigenteSeCalcula_SinDosNombresIguales()
+    {
+        var i = Instancia("AAA111");
+        var historico = Adjunto(i, "fur", "fur_revocado_v1.pdf");
+        historico.IsHistorico = true;
+        historico.UploadedAt = DateTimeOffset.UtcNow.AddDays(-2);
+        var vigente = Adjunto(i, "fur", "fur_v2.pdf");
+
+        NombreDocumentoEntrega.ParaAdjunto(historico, i).Should().Be("fur_revocado_v1.pdf");
+        NombreDocumentoEntrega.ParaAdjunto(vigente, i).Should().Be("fur_FT1-0000102_AAA111.pdf");
+    }
+
+    [Fact]
+    public void DosNoHistoricosDelMismoTipo_SoloElMasRecienteSeCalcula()
+    {
+        var i = Instancia("AAA111");
+        var viejo = Adjunto(i, "consolidado", "consolidado_a.pdf");
+        viejo.UploadedAt = DateTimeOffset.UtcNow.AddHours(-3);
+        var nuevo = Adjunto(i, "consolidado", "consolidado_b.pdf");
+
+        NombreDocumentoEntrega.ParaAdjunto(viejo, i).Should().Be("consolidado_a.pdf");
+        NombreDocumentoEntrega.ParaAdjunto(nuevo, i).Should().Be("consolidado_FT1-0000102_AAA111.pdf");
+    }
+
+    [Fact]
+    public async Task Listado_ConHistoricoYVigenteDelMismoTipo_NoMuestraDosNombresIguales()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var i = Instancia("AAA111");
+        var historico = Adjunto(i, "fur", "fur_anterior.pdf");
+        historico.IsHistorico = true;
+        historico.UploadedAt = DateTimeOffset.UtcNow.AddDays(-1);
+        var vigente = Adjunto(i, "fur", "fur_actual.pdf");
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        repo.GetByIdWithAttachmentsAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>()).Returns(i);
+
+        var (lista, _) = await new ListAttachmentsHandler(repo).HandleAsync(i.Id, i.TenantId, ct);
+
+        lista!.Attachments.Single(d => d.Id == historico.Id).Filename.Should().Be("fur_anterior.pdf");
+        lista.Attachments.Single(d => d.Id == vigente.Id).Filename.Should().Be("fur_FT1-0000102_AAA111.pdf");
+        lista.Attachments.Select(d => d.Filename).Should().OnlyHaveUniqueItems();
+    }
+
+    // ── Épica #14657 — placa: una sola fuente ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Placa_SinPlateConFieldValue_UsaElFieldValue_IgualQueNombreDocumentoTramite()
+    {
+        var i = Instancia(null);
+        i.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ddd444" });
+        var a = Adjunto(i, "fur", "viejo.pdf");
+
+        NombreDocumentoEntrega.ParaAdjunto(a, i).Should().Be("fur_FT1-0000102_DDD444.pdf")
+            .And.Be(NombreDocumentoTramite.Generar("fur", i));
+    }
+
     [Fact]
     public void ParaDocumento_ConDtoSinAdjuntoCargado_LoDevuelveIntacto()
     {
