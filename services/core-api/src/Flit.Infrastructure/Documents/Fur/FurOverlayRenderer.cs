@@ -110,10 +110,10 @@ public static partial class FurOverlayRenderer
     {
         var n = Math.Clamp(repeat, 1, 4);
         var single = field.FontSize > 0 ? field.FontSize + 2 : 10;
-        var (fontSize, firstBaseline, step) = FurCheckboxLayout.Stack(field.Y, field.Size, n, single);
-        var font = CreateFont(fontSize, true);
-        for (var i = 0; i < n; i++)
-            gfx.DrawString("X", font, XBrushes.Black, new XPoint(field.X, firstBaseline + i * step));
+        var placements = FurCheckboxLayout.Place(field.X, field.Y, field.Size, n, single);
+        var font = CreateFont(placements[0].FontSize, true);
+        foreach (var p in placements)
+            gfx.DrawString("X", font, XBrushes.Black, new XPoint(p.LeftX, p.BaselineY));
     }
 
     private static void DrawText(
