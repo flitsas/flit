@@ -4,8 +4,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// Señal de control del consumidor de resultados (ADR-0075, Q4, U2 = a; HU #13737): NO es un error. La lanza el consumidor
 /// cuando un resultado transitorio tiene reintentos disponibles (la celda ya quedó PENDIENTE con su intento, en un scope propio)
 /// o cuando vuelve un resultado demorado cuya espera aún no vence. El SDK revierte la transacción del mensaje (que no escribió
-/// nada) y lleva ese MISMO resultado a <c>diagnostico.consultas-resultados.retry.n</c>, configurada en 5, 10 y 20 s
-/// (<see cref="ProgramadorReintentos.Esperas"/>); al volver, el consumidor publica el trabajo nuevo. Su mensaje es técnico y fijo:
+/// nada) y lleva ese MISMO resultado a <c>diagnostico.consultas-resultados.espera.n</c>, con un tick de 15 s
+/// (<see cref="ProgramadorReintentos.Esperas"/>, HU #14752); al volver, el consumidor publica el trabajo nuevo o le da otra vuelta. Su mensaje es técnico y fijo:
 /// nunca lleva documentos ni datos de la fuente.
 /// </summary>
 /// <example>

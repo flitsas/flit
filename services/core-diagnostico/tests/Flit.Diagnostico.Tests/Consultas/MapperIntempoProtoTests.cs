@@ -234,6 +234,7 @@ public sealed class MapperIntempoProtoTests
     [InlineData(TipoErrorIntempo.SoapFault, null, TipoErrorDiagnostico.EstadoNoOk, false)]
     [InlineData(TipoErrorIntempo.Excepcion, null, TipoErrorDiagnostico.EstadoNoOk, false)]
     [InlineData(TipoErrorIntempo.Unspecified, null, TipoErrorDiagnostico.EstadoNoOk, false)]
+    [InlineData(TipoErrorIntempo.LimiteProveedor, 200, TipoErrorDiagnostico.LimiteProveedor, true)]
     public void Errores_tipados_se_traducen_y_HTTP_5xx_es_transitorio(TipoErrorIntempo tipo, int? status, TipoErrorDiagnostico esperado, bool transitorio)
     {
         var respuesta = new ConsultarVehiculoIntempoResponse
@@ -257,6 +258,30 @@ public sealed class MapperIntempoProtoTests
             .Should().Be(transitorio ? ClaseError.Transitorio : ClaseError.Definitivo);
     }
 
+    // HU #14752 (D5 = a) — TIPO_ERROR_FUENTE_LIMITE_PROVEEDOR es LIMITE_PROVEEDOR, transitorio, con un mensaje fijo sin datos.
+    [Fact]
+    public void LIMITE_PROVEEDOR_se_traduce_a_LIMITE_PROVEEDOR_transitorio()
+    {
+        var respuesta = new ConsultarVehiculoIntempoResponse
+        {
+            Proveedor = "intempo",
+            Resultado = ResultadoRuntIntempo.Error,
+            TipoError = TipoErrorIntempo.LimiteProveedor,
+            MensajeError = "Intempo limitó las peticiones de la consulta (HTTP 200).",
+            HttpStatus = 200,
+        };
+
+        var resultado = MapperIntempo.Mapear(respuesta, Servicio);
+
+        resultado.Error.Should().Be(TipoErrorDiagnostico.LimiteProveedor);
+        resultado.EsTransitorio.Should().BeTrue();
+        resultado.Mensaje.Should().EndWith("el proveedor limitó las peticiones; se reintenta en al menos un minuto.");
+        var codigo = TipoErrorFuenteCodigos.Codigo(resultado.Error!.Value);
+        codigo.Should().Be("LIMITE_PROVEEDOR");
+        ClasificadorErrores.Clasificar(codigo).Should().Be(ClaseError.Transitorio);
+        ((int)TipoErrorIntempo.LimiteProveedor).Should().Be(9, "valor del proto: TIPO_ERROR_FUENTE_LIMITE_PROVEEDOR = 9");
+    }
+
     // AC3 (F10-C10) — cada valor de TipoErrorFuente tiene un código de la tabla del clasificador y de los textos del tablero
     // (HTTP_5XX, AUTENTICACION, ESTADO_NO_OK); CodigosDeEnum no da HTTP_5XX, por eso el mapa explícito.
     [Fact]
@@ -269,6 +294,7 @@ public sealed class MapperIntempoProtoTests
         TipoErrorFuenteCodigos.Codigo(TipoErrorDiagnostico.Red).Should().Be("RED");
         TipoErrorFuenteCodigos.Codigo(TipoErrorDiagnostico.RespuestaInvalida).Should().Be("RESPUESTA_INVALIDA");
         TipoErrorFuenteCodigos.Codigo(TipoErrorDiagnostico.NoConectado).Should().Be("NO_CONECTADO");
+        TipoErrorFuenteCodigos.Codigo(TipoErrorDiagnostico.LimiteProveedor).Should().Be("LIMITE_PROVEEDOR");
 
         foreach (var tipo in Enum.GetValues<TipoErrorDiagnostico>())
         {

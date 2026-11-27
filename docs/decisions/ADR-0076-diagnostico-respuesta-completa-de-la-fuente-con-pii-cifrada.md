@@ -27,6 +27,9 @@ documenta la decisión; no la implementa.
 - 2026-10-28 — «Enmienda 2026-10-28 — respuesta cruda del proveedor en RUNT persona y RUES» (HUs #14153 y #14154).
   Cambia la Decisión 1 y la fila R-13 de «Qué cambia en otros ADR y reglas» **solo para tres fuentes**. Sigue en
   Propuesto.
+- 2026-11-27 — «Enmienda 2026-11-27 — datos personales en claro en el Excel del lote» (ola Excel lote + RUNT, registro
+  diferido de work item). Cambia la fila «export» de «Se mantiene sin cambios» **solo para el Excel del lote** y solo para
+  cuatro datos. Sigue en Propuesto.
 
 ## Contexto
 
@@ -370,6 +373,77 @@ base y en el payload HTTP, y más consultas facturables. Si security-agent o jur
   `localStorage`, consola ni telemetría.
 - **QA Agent.** Con y sin crudo, consulta repetida que no sale de caché, Trámites sin regresión, logs sin el cuerpo.
 - **Infra Agent.** Tamaño máximo de mensaje y volumen de DLQ con los cuerpos nuevos.
+
+## Enmienda 2026-11-27 — datos personales en claro en el Excel del lote
+
+**Status**: Propuesto (como el resto del ADR). **Work item**: registro diferido (`/register-work` al abrir el PR).
+**Decisión de producto** del usuario del 2026-11-27 (D3 = a), con el precedente de la decisión original del 2026-10-27.
+Requiere el aval del PO antes del merge.
+
+### Contexto
+
+El Excel del lote (`descargarExcelLote`, HU #13849) sale hoy con todos los documentos enmascarados («****» más los 4
+últimos) y sin nombres. Para reemplazar el Excel v1 que usa el cliente (53 columnas), la hoja
+«Vehículos» se amplía con 42 columnas. Cuatro de ellas llevan datos personales que hoy no salen en claro en ninguna
+exportación. El nombre del locatario y los acreedores ya están en la respuesta completa cifrada de la celda RUNT (Decisión 1
+de este ADR), así que **no se guarda nada nuevo**.
+
+### Alternativas consideradas
+
+| | a. En claro, descifrado solo al generar el Excel **(DECIDIDA, D3 = a)** | b. Enmascarado como hoy | c. En claro solo con un permiso nuevo «descargar con datos personales» |
+|---|---|---|---|
+| Pros | Iguala el v1 que el cliente ya usa. Sin esquema nuevo. Un único punto de descifrado | Sin riesgo nuevo | Menos personas ven los datos |
+| Contras | Un archivo descargado sale del control de FLIT | El cliente no puede conciliar contra su v1 | Permiso, menú y migración de roles nuevos. Más alcance |
+| Esfuerzo | M | S | L |
+| Riesgos | Ver «Riesgo residual aceptado» | Rechazo del cliente | Retrasa la ola |
+
+### Decisión
+
+1. **Alcance cerrado.** Solo el Excel del lote, y solo estos datos en claro: número de documento del propietario; tipo,
+   número y nombre del locatario (solo el que informa el RUNT, nunca el declarado por el cliente); acreedor y documento de
+   «Garantías a favor de» y «Garantías mobiliarias», también los de persona natural; y el documento del locatario dentro de
+   «Detalle de comparendos del locatario». Ningún otro dato de la respuesta (licencias, direcciones, teléfonos, correos,
+   demandantes de limitaciones, histórico) sale en claro. La lista vive en `ColumnasExcel.EnClaro` y es cerrada.
+2. **Dónde se descifra.** Solo en `LectorContenidoReporte.LoteAsync`, en memoria. Grilla, tablero, `/reportes/vehiculos`,
+   detalle de RUNT, PDF y ZIP siguen como hoy. `EnmascaradorDocumento` no cambia.
+3. **Permiso y visibilidad.** Los de hoy: `diagnostico.reportes.descargar` más la visibilidad de `AccesoLote`. Ninguna ruta nueva.
+4. **Huella sin PII.** La huella de la evidencia no lleva datos personales en claro ni un SHA sin clave de ellos: las celdas
+   en claro se sustituyen antes de firmar. `VersionPlantilla = 4`.
+5. **Logs y excepciones** sin valores: un descifrado fallido deja la celda vacía y registra solo el vehículo, el rol y el
+   tipo de la excepción.
+6. **Hoja de cálculo.** Los textos de la fuente (nombres, acreedores) pasan por la neutralización de fórmulas.
+7. **Cabeceras.** `Cache-Control: no-store`, `Pragma: no-cache`, `X-Content-Type-Options: nosniff` y un nombre de archivo sin PII.
+
+**Base legal y finalidad (Ley 1581, arts. 4 y 17).** El dato se entrega a la compañía que pidió el diagnóstico, para la
+finalidad del diagnóstico. La compañía responde por el tratamiento de lo que exporta. Rol de FLIT frente al cliente:
+duda abierta 2 de este ADR (jurídico).
+
+### Riesgo residual aceptado por el PO (2026-11-27)
+
+| Riesgo | Decisión | Consecuencia |
+|---|---|---|
+| **Evidencia del .xlsx sin cifrar en reposo** (SP-3) | **D6 = c**: el archivo se sigue guardando tal cual en el almacén (MinIO/Contabo o `diagnostico.archivo_local`) | Quien lea el almacén lee los datos de la Decisión 1. Es el mismo hueco que ya tiene el PDF del vehículo (`ContenidoReporteVehiculo.cs:208`), reportado al Líder Técnico. Cifrado posible después (propósito `Flit.Diagnostico.EvidenciaXlsx.v1`), sin cambiar el contrato |
+| **Sin auditoría de cada descarga** (SP-6) | **D7 = c**: igual que hoy, el Excel del lote no registra quién lo descarga | No hay rastro de quién bajó el archivo con datos personales. Si se reabre: `AlcanceReporte.Lote` y `diagnostico_id` en `accesos_reporte` |
+| Archivo descargado fuera del control de FLIT | Aceptado (D3 = a) | Se avisa en el manual funcional que el archivo trae datos personales |
+
+### Qué no cambia
+
+R-20 (el cliente no ve el origen manual), la grilla, el catálogo de reportes, el PDF, el ZIP, `payload` y el resto de
+este ADR.
+
+### Gates antes del merge
+
+1. **security-agent**: revisión de Habeas Data sobre el diff (SP-1, SP-2, SP-4, SP-5 y SP-7 a SP-11 de la
+   revisión previa de seguridad del 2026-11-27).
+2. **PO**: aval de la Decisión 1 y del riesgo residual (D6 = c, D7 = c).
+3. **Líder Técnico**: paso de este ADR, con sus enmiendas, a Aceptado.
+
+### Notas para agentes (enmienda)
+
+- **Backend Agent.** Descifrar solo en `LoteAsync`. Lista cerrada `ColumnasExcel.EnClaro`. Huella sin PII. Logs sin valores.
+- **QA Agent.** El número y el nombre sembrados salen en el Excel y no salen en la grilla, el PDF, la huella ni los logs.
+  Fuga entre empresas con datos exclusivos.
+- **Database Agent.** Sin cambios.
 
 ## ADRs relacionados
 

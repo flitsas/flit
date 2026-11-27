@@ -12,7 +12,7 @@ public enum ClaseError
 
 /// <summary>
 /// Clasificación de los errores de una fuente por su código (<c>tipo_error</c>, HU #13737, F03-H6, D-12). Manda lo que devuelve
-/// core-consultas: <c>TIMEOUT</c>, <c>RED</c>, <c>HTTP_5XX</c> y <c>LIMITE_PROVEEDOR</c> (429 del proveedor, resolvedor de errores) son
+/// core-consultas: <c>TIMEOUT</c>, <c>RED</c>, <c>HTTP_5XX</c> y <c>LIMITE_PROVEEDOR</c> (429 del proveedor o el 200 de límite de Intempo) son
 /// transitorios; <c>RESPUESTA_INVALIDA</c>,
 /// <c>AUTENTICACION</c>, <c>ESTADO_NO_OK</c> y <c>NO_CONECTADO</c> son definitivos, igual que <c>FUENTE_INACTIVA</c> (la fuente del
 /// impuesto de ese departamento está inactiva: el usuario la reprocesa más tarde, sin reintento automático). Todo lo demás (un código que no está en la

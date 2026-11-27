@@ -125,6 +125,7 @@ descarta. Cuando el productor puede publicar antes de que el consumidor haya arr
 van en `definitions.json` con los **mismos argumentos** que declara el SDK: ninguno en la cola principal ni en la
 `.dlq`. Si no coinciden, el consumidor falla al arrancar con `PRECONDITION_FAILED`. Las `.retry.<n>` y el exchange
 `<cola>.reintentos` los sigue declarando el consumidor, porque sus esperas son configuración del servicio.
+`diagnostico.consultas-resultados` usa `.espera.<n>` en lugar de `.retry.<n>` (HU #14752): todas con un TTL fijo de 15 s y tantas como pida su backoff (24 por defecto).
 
 | Cola | Dueño | Atada a `flit.consultas` con |
 |---|---|---|

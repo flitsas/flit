@@ -99,6 +99,46 @@ public sealed class HuellaEvidenciaTests
         deApi.VersionTablero.Should().Be(9);
     }
 
+    // HU #14752 SP-2 — el Excel v4 lleva PII en claro, pero la huella no: ParaHuella() no lee los datos del Excel y FirmaHuella
+    // sustituye las columnas de ColumnasExcel.EnClaro (documentos enmascarados, nombre y listas vacías). Dos lotes que solo difieren en
+    // el documento en claro (mismos 4 últimos) y en el nombre del locatario dan la misma firma de huella; la firma completa sí cambia.
+    [Fact]
+    public void HU14752_SP2_huella_y_firma_de_huella_sin_documento_ni_nombre()
+    {
+        const string documento = "1055566677";
+        const string otroDocumento = "2099996677";
+        const string nombre = "LOCATARIO FICTICIO UNO";
+        var runt = DatosRuntExcel.Desde(ExcelLoteTests.RespuestaExcel("TST1H1", documento, nombre))!;
+        var uno = LoteExcel(new DatosExcelVehiculo("CC", documento, "CC", documento, nombre, runt, false), documento);
+        var otro = LoteExcel(
+            new DatosExcelVehiculo("CC", otroDocumento, "CC", otroDocumento, "OTRO NOMBRE FICTICIO",
+                DatosRuntExcel.Desde(ExcelLoteTests.RespuestaExcel("TST1H1", otroDocumento, "OTRO NOMBRE FICTICIO"))!, false),
+            otroDocumento);
+
+        uno.ParaHuella().Values.Should().NotContain(v => v != null && (v.Contains(documento, StringComparison.Ordinal) || v.Contains(nombre, StringComparison.Ordinal)));
+        uno.ParaHuella().Should().Equal(otro.ParaHuella(), "ParaHuella no lee los datos en claro del Excel");
+        var hojasUno = ExcelLote.Hojas(uno, new Dictionary<Guid, DatosTecnicosVehiculo>(), null);
+        var hojasOtro = ExcelLote.Hojas(otro, new Dictionary<Guid, DatosTecnicosVehiculo>(), null);
+        ExcelLote.Firma(hojasUno).Should().NotBe(ExcelLote.Firma(hojasOtro), "las hojas sí llevan el documento y el nombre");
+        ExcelLote.FirmaHuella(hojasUno).Should().Be(ExcelLote.FirmaHuella(hojasOtro), "SP-2: ninguna celda en claro entra a la huella");
+        ExcelLote.FirmaHuella(hojasUno).Should().MatchRegex("^[0-9a-f]{64}$");
+    }
+
+    private static ContenidoReporteLote LoteExcel(DatosExcelVehiculo excel, string documento) => new(
+        new EncabezadoLoteReporte(Lote, "Lote", "Empresa", "Ana", Dato, "Diagnóstico Simple"),
+        [
+            new VehiculoReporte(VehiculoA, 1, "TST1H1", "PLACA_CARRO", "TST1H1", null,
+            [
+                new SeccionReporte("RUNT", "VEHICULO", EstadoSeccion.Completado, null, null, Dato,
+                    new Flit.Diagnostico.Api.Modulos.Tablero.ResultadoRuntDetalle("TST1H1", null, "PARTICULAR", "AUTOMOVIL", "STRIA", [], 1), null),
+                new SeccionReporte("SIMIT_LOCATARIO", "LOCATARIO", EstadoSeccion.Completado, null, null, Dato, null,
+                [
+                    new PersonaReporte(1, "LOCATARIO", "CC", "****6677", false, null, "SIMIT", EstadoPersonaReporte.Ok, Dato,
+                        new Flit.Diagnostico.Api.Modulos.Tablero.ResultadoSimitDetalle("VERDE", 0, [], false), documento),
+                ]),
+            ], Excel: excel),
+        ]);
+
     private static CeldaConsulta CeldaConsulta(OrigenCelda origen, Guid? usuario) => new()
     {
         Id = Guid.Parse("0199f000-0000-7000-8000-0000000000c3"),

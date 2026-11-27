@@ -132,7 +132,11 @@ public static class Program
         // (FailedPrecondition con el nombre de la variable) y el servicio arranca igual.
         var intempo = RuntIntempo.IntempoOpciones.Desde(builder.Configuration);
         builder.Services.AddHttpClient(RuntIntempo.ProveedorRuntIntempo.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(intempo.TimeoutSegundos));
-        builder.Services.AddSingleton(sp => new RuntIntempo.ProveedorRuntIntempo(sp.GetRequiredService<IHttpClientFactory>(), intempo));
+        // HU #14752 (D5 = a): tope hacia Intempo por instancia (4 concurrentes y 4 por segundo por defecto), para el bus y el gRPC.
+        builder.Services.AddSingleton(sp => new RuntIntempo.LimitadorIntempo(intempo));
+        builder.Services.AddSingleton(sp => new RuntIntempo.ProveedorRuntIntempo(sp.GetRequiredService<IHttpClientFactory>(), intempo,
+            sp.GetRequiredService<RuntIntempo.LimitadorIntempo>(), sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<RuntIntempo.ProveedorRuntIntempo>>()));
         var impuesto = Impuesto.OpcionesImpuesto.Desde(builder.Configuration);
         builder.Services.AddSingleton(impuesto);
         builder.Services.AddMemoryCache();

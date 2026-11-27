@@ -255,6 +255,86 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
         new PlatformConsumerOptions().RetryDelays.Should().Equal(TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
     }
 
+    // ── HU #14752 (contrato-runt §3.4, alternativa A): sufijo propio de las colas de espera, aditivo ──────────────────────────
+
+    [Fact]
+    public void HU14752_ElSufijoPorDefecto_EsRetry_YLasColasNoCambian()
+    {
+        new PlatformConsumerOptions().RetryQueueSuffix.Should().Be("retry");
+
+        var consumidor = Consumidor(new PlatformConsumerOptions { Queue = "prueba.sufijo", Producer = Productor });
+        Enumerable.Range(0, 3).Select(consumidor.RetryQueue).Should().Equal("prueba.sufijo.retry.1", "prueba.sufijo.retry.2", "prueba.sufijo.retry.3");
+        consumidor.DeadLetterQueue.Should().Be("prueba.sufijo.dlq");
+    }
+
+    [Fact]
+    public void HU14752_ConSufijoEspera_LasColasSonEspera1aN()
+    {
+        var consumidor = Consumidor(new PlatformConsumerOptions { Queue = "prueba.sufijo", Producer = Productor, RetryQueueSuffix = "espera" });
+
+        Enumerable.Range(0, 24).Select(consumidor.RetryQueue).Should().Equal(Enumerable.Range(1, 24).Select(n => $"prueba.sufijo.espera.{n}"));
+        consumidor.DeadLetterQueue.Should().Be("prueba.sufijo.dlq", "la DLQ no lleva el sufijo");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("Espera")]
+    [InlineData("espera.1")]
+    [InlineData("espera_1")]
+    [InlineData("es pera")]
+    public void HU14752_UnSufijoInvalido_NoRegistra(string sufijo)
+    {
+        var registrar = () => new ServiceCollection().AddFlitConsumer<PruebaDb, EfectoDePrueba, PedidoCreado>(
+            Config(), "prueba.invalida", Productor, [Tipo], o => o.RetryQueueSuffix = sufijo);
+
+        registrar.Should().Throw<InvalidOperationException>().WithMessage("*RetryQueueSuffix*");
+    }
+
+    [Fact]
+    public async Task HU14752_ConSufijoEspera_DeclaraLasColasEsperaConSuTtl_YNoLasRetry()
+    {
+        fixture.SkipIfUnavailable();
+        var tick = TimeSpan.FromSeconds(15);
+        var ct = TestContext.Current.CancellationToken;
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(new Comportamiento()), o =>
+            {
+                o.RetryQueueSuffix = "espera";
+                o.RetryDelays.Clear();
+                foreach (var _ in Enumerable.Range(0, 3))
+                    o.RetryDelays.Add(tick);
+            });
+        await using var conexion = await new ConnectionFactory { Uri = new Uri(fixture.RabbitMq) }.CreateConnectionAsync(ct);
+        try
+        {
+            for (var n = 1; n <= 3; n++)
+            {
+                await using var canal = await conexion.CreateChannelAsync(cancellationToken: ct);
+                // Redeclarar con los mismos argumentos no choca: la cola existe con ese TTL y su DLX a la cola principal.
+                var cola = $"{consumidor.Cola}.espera.{n}";
+                var redeclarar = () => canal.QueueDeclareAsync(cola, durable: true, exclusive: false, autoDelete: false,
+                    new Dictionary<string, object?>
+                    {
+                        ["x-message-ttl"] = (long)tick.TotalMilliseconds,
+                        ["x-dead-letter-exchange"] = $"{consumidor.Cola}.reintentos",
+                        ["x-dead-letter-routing-key"] = consumidor.Cola,
+                    }, cancellationToken: ct);
+                await redeclarar.Should().NotThrowAsync($"la cola {cola} se declaró con TTL de 15 s");
+            }
+
+            await using var otro = await conexion.CreateChannelAsync(cancellationToken: ct);
+            var retry = () => otro.QueueDeclarePassiveAsync($"{consumidor.Cola}.retry.1", ct);
+            await retry.Should().ThrowAsync<RabbitMQ.Client.Exceptions.OperationInterruptedException>("con otro sufijo no se declaran colas .retry.n");
+        }
+        finally
+        {
+            await using var limpieza = await conexion.CreateChannelAsync(cancellationToken: CancellationToken.None);
+            for (var n = 1; n <= 3; n++)
+                await limpieza.QueueDeleteAsync($"{consumidor.Cola}.espera.{n}", cancellationToken: CancellationToken.None);
+        }
+    }
+
     // ── HU #13727 (ADR-0075, D1): mensajes que el consumidor atiende a la vez ─────────────────────────────────────
 
     [Fact]

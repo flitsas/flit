@@ -175,7 +175,7 @@ public sealed record RespuestaSimulada(IMessage? Respuesta, StatusCode? Error = 
 /// <see cref="ConsumidorResultados"/> real como lo haría el SDK: un scope por mensaje, la transacción abierta antes del efecto y
 /// revertida si lanza, y la bandeja (un <c>eventId</c> repetido no repite el efecto). <see cref="ReintentoProgramadoException"/> (o un
 /// conflicto de concurrencia) lleva el resultado a la «cola de reintentos» con las esperas del consumidor
-/// (<see cref="ProgramadorReintentos.EsperasDe"/> con la espera configurada) medidas con el reloj de la API; agotadas, a <see cref="Muertos"/>. Cualquier otra
+/// (<see cref="ProgramadorReintentos.EsperasDe"/> con la política configurada: ticks de 15 s, HU #14752) medidas con el reloj de la API; agotadas, a <see cref="Muertos"/>. Cualquier otra
 /// excepción hace fallar la prueba. Los resultados demorados se entregan cuando el reloj alcanza su vencimiento.
 /// </summary>
 /// <example>
@@ -314,7 +314,7 @@ public sealed class BusDePrueba
         }
         catch (Exception ex) when (ex is ReintentoProgramadoException or DbUpdateException)
         {
-            var esperas = ProgramadorReintentos.EsperasDe(_api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value.EsperaReintento);
+            var esperas = ProgramadorReintentos.EsperasDe(ProgramadorReintentos.PoliticaDe(_api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value));
             if (intento < esperas.Count)
             {
                 lock (_demorados)
@@ -329,14 +329,28 @@ public sealed class BusDePrueba
         }
     }
 
+    /// <summary>La configuración de la API (con su <c>FactorAleatorio</c> = 0) y otro <c>MaxReintentos</c>.</summary>
+    private OpcionesConsultas ConMaximo(int max)
+    {
+        var o = _api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value;
+        return new OpcionesConsultas
+        {
+            MaxReintentos = max,
+            EsperaReintento = o.EsperaReintento,
+            FactorAleatorio = o.FactorAleatorio,
+            EsperaMinimaLimiteProveedor = o.EsperaMinimaLimiteProveedor,
+            UmbralPegada = o.UmbralPegada,
+        };
+    }
+
     private async Task ProcesarAsync(EventEnvelope sobre, CancellationToken ct)
     {
         await using var scope = _api.App.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
         var consumidor = _maxReintentos is { } max
             ? ActivatorUtilities.CreateInstance<ConsumidorResultados>(scope.ServiceProvider, new ProgramadorReintentos(
-                scope.ServiceProvider.GetRequiredService<IServiceScopeFactory>(), Reloj,
-                Options.Create(new OpcionesConsultas { MaxReintentos = max }), NullLogger<ProgramadorReintentos>.Instance))
+                scope.ServiceProvider.GetRequiredService<IServiceScopeFactory>(), Reloj, Options.Create(ConMaximo(max)),
+                scope.ServiceProvider.GetRequiredService<AzarReintentos>(), NullLogger<ProgramadorReintentos>.Instance))
             : scope.ServiceProvider.GetRequiredService<ConsumidorResultados>();
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
