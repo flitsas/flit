@@ -386,6 +386,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "La estrella marca un trámite como prioritario; el filtro «solo prioritarios» los aísla y, sin orden explícito, van primero.",
           "«Exportar» genera un Excel con TODAS las filas que cumplen los filtros actuales, no solo las de pantalla.",
           "Pulsa «Columnas» para elegir qué ver. Arrastra cada columna por su asa (⋮⋮) para cambiar el orden; con el teclado, ponte en el asa y usa las flechas ↑ y ↓. Para cambiar el ancho, arrastra el borde derecho de la cabecera; doble clic en ese borde la deja como estaba, y con el teclado usa ← y →. «Por defecto», arriba en el panel, vuelve a las columnas, al orden y a los anchos de siempre. Todo se guarda solo, por usuario y por tabla: al volver sigues viendo la tabla como la dejaste.",
+          "En la pestaña de matrículas puedes activar la columna «Dígito de placa» desde «Columnas». Muestra el dígito que pidió el cliente al radicar sin placa: «Termina en 3» en carros, «Inicia en 7» en motos y motocarros, «Sin preferencia» si no pidió ninguno y «—» si el vehículo ya traía placa. No viene activada por defecto y no aparece en traspaso ni en otros trámites.",
         ],
       },
       {

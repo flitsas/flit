@@ -106,6 +106,9 @@ import type { QueryCondition, QueryField } from "@/lib/api/queries";
 import {
   OT_PROCEDURES_COLUMNS,
   DEFAULT_OT_PROCEDURES_VISIBLE_COLUMNS,
+  OT_MATRICULA_ONLY_KEYS,
+  applyOtMatriculaColumns,
+  otSelectableColumns,
 } from "@/lib/admin/ot-procedures-columns";
 import {
   otProceduresExportFields,
@@ -508,6 +511,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   });
   // HU #14741 — anchos que el usuario fijó arrastrando el borde de la cabecera.
   const columnWidths = useColumnWidths(savedWidths, OT_COLUMN_KEYS, setSavedWidth, resetSavedWidth);
+
+  // HU #14744 — «Dígito de placa» solo en la pestaña de matrícula inicial; derivado, la preferencia
+  // guardada no se toca (al volver a la pestaña reaparece).
+  const esMatriculaTab = familia === "MATRICULAS";
+  const columnasEfectivas = useMemo(
+    () => applyOtMatriculaColumns(visibleColumns, esMatriculaTab),
+    [visibleColumns, esMatriculaTab],
+  );
 
   /** ¿La selección de columnas se apartó del default? Es lo que marca el control en azul. */
   const columnasPersonalizadas = useMemo(() => {
@@ -1061,7 +1072,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setExportError(null);
     try {
       const base = buildListQuery();
-      const campos = otProceduresExportFields(visibleColumns);
+      const campos = otProceduresExportFields(columnasEfectivas);
       const columnasExcel: DataColumn<OtClientProcedure>[] = campos.map((campo) => ({
         id: campo.id,
         label: campo.label,
@@ -1119,7 +1130,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     } finally {
       setExporting(false);
     }
-  }, [buildListQuery, visibleColumns, transitOfficeId]);
+  }, [buildListQuery, columnasEfectivas, transitOfficeId]);
 
   const handleSortChange = (nextSortBy: string, nextSortDir: "asc" | "desc") => {
     setSortBy(nextSortBy);
@@ -1716,9 +1727,19 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               empezarDeCeroDisabled={!hasActiveFilters && draftCondiciones.length === 0}
               columnSelector={
                 <ColumnSelector
-                  columns={OT_PROCEDURES_COLUMNS.map((c) => ({ key: c.key, label: c.label }))}
-                  visible={visibleColumns}
-                  onChange={setVisibleColumns}
+                  columns={otSelectableColumns(esMatriculaTab).map((c) => ({ key: c.key, label: c.label }))}
+                  visible={columnasEfectivas}
+                  onChange={(next) => {
+                    // Fuera de matrícula la columna no se ofrece, pero la preferencia la conserva.
+                    const guardadas = esMatriculaTab
+                      ? []
+                      : visibleColumns.filter((k) => OT_MATRICULA_ONLY_KEYS.includes(k));
+                    setVisibleColumns(
+                      OT_PROCEDURES_COLUMNS.map((c) => c.key).filter(
+                        (k) => next.includes(k) || guardadas.includes(k),
+                      ),
+                    );
+                  }}
                   order={columnOrder}
                   onReorder={setColumnOrder}
                   onReset={resetColumns}
@@ -1844,7 +1865,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
-          visibleColumns={visibleColumns}
+          visibleColumns={columnasEfectivas}
           columnWidths={columnWidths}
           sortBy={sortBy}
           sortDir={sortDir}

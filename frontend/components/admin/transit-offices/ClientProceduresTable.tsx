@@ -20,6 +20,7 @@ import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
 import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
+import { digitoPlacaOt } from "@/lib/admin/ot-procedures-export";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
   ESTADO_ICONO,
@@ -376,6 +377,8 @@ function renderCelda(
           )}
         </span>
       );
+    case "digitoPlaca":
+      return <span data-testid="ot-digito-placa">{digitoPlacaOt(row)}</span>;
     case "vin":
       return row.vin?.trim() || "—";
     case "placa":
@@ -498,7 +501,7 @@ export function ClientProceduresTable({
       ? visibleColumns
           .map((k) => OT_PROCEDURES_COLUMNS.find((c) => c.key === k))
           .filter((c): c is (typeof OT_PROCEDURES_COLUMNS)[number] => c !== undefined)
-      : OT_PROCEDURES_COLUMNS;
+      : OT_PROCEDURES_COLUMNS.filter((c) => !c.matriculaOnly);
 
   /**
    * Acciones disponibles para una fila, en el orden en que el operador las necesita: primero
