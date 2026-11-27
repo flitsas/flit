@@ -1,19 +1,23 @@
-# Variables de entorno: despliegue de Diagnóstico y consumo de la API de impuesto
+# Variables de entorno: despliegue de Diagnóstico, consumo de la API de impuesto y producto Impuestos
 
-> Generado: 2026-11-24 · fuente: `docker-compose.prod.yml` @ `c69a08575`
+> Generado: 2026-11-24 · fuente: `docker-compose.prod.yml` @ `c69a08575` · §5 (producto Impuestos) agregado el 2026-11-25
+> (M20b, rama `feature/AB-14694-producto-impuestos`)
 
-Alcance: el perfil `diagnostico` (core-diagnostico + frontend-diagnostico) y la fuente de impuesto vehicular que
-core-consultas consume. Del resto de la suite solo aparecen las variables de las que Diagnóstico o el impuesto dependen.
+Alcance: el perfil `diagnostico` (core-diagnostico + frontend-diagnostico), la fuente de impuesto vehicular que
+core-consultas consume y, en §5, el perfil `impuestos` (producto Impuestos, core-impuestos + frontend-impuestos, ADR-0093),
+que **no** es la fuente de impuesto de Diagnóstico. Del resto de la suite solo aparecen las variables de las que dependen.
 El detalle operativo sigue en [handoff-vps-diagnostico.md](../suite/handoff-vps-diagnostico.md) y
 [despliegue-develop-diagnostico.md](../suite/despliegue-develop-diagnostico.md).
 
 **Regenerar o verificar.** Desde la raíz del repo:
 
 ```bash
-grep -oE '\$\{(DIAGNOSTICO|IMPUESTO|CONSULTAS_IDENTIDAD|CORE_DIAGNOSTICO|FRONTEND_DIAGNOSTICO)[A-Z0-9_]*' docker-compose.prod.yml | sort -u
+grep -oE '\$\{(DIAGNOSTICO|IMPUESTO_|CONSULTAS_IDENTIDAD|CORE_DIAGNOSTICO|FRONTEND_DIAGNOSTICO)[A-Z0-9_]*' docker-compose.prod.yml | sort -u
+grep -oE '\$\{(IMPUESTOS|CORE_IMPUESTOS|FRONTEND_IMPUESTOS|SVC_IMPUESTOS|CONNECTION_STRING_IMPUESTOS|RABBITMQ_URL_IMPUESTOS)[A-Z0-9_]*' docker-compose.prod.yml | sort -u
 ```
 
-Hoy devuelve 51 nombres. Si cambia, el compose cambió: actualizar este archivo en el mismo PR.
+Hoy devuelven 51 y 29 nombres. Si cambia alguno, el compose cambió: actualizar este archivo en el mismo PR. (`IMPUESTO_`, con
+guion bajo, es la fuente de Diagnóstico; `IMPUESTOS` es el producto.)
 
 ---
 
@@ -183,7 +187,7 @@ Cliente OIDC público `diagnostico` del hub (PKCE). Se registra solo con el host
 |---|---|---|---|---|---|---|---|
 | `CORE_IDENTITY_GRPC_PORT` | core-identity | `Identidad__GrpcPort` | condicional | no | vacío | `.env.prod.example` (comentada) | gRPC de Identidad (8083). Lo usan la suscripción de Diagnóstico y la credencial de impuesto |
 | `SVC_DIAGNOSTICO_CLIENT_SECRET` | core-api / core-identity | `Suite__Oidc__ServiceClients__svc-diagnostico__Secret` | sí | sí | vacío | `.env.prod.example` | Registro de `svc-diagnostico`. Mismo valor que en core-diagnostico. Reiniciar core-api (y core-identity) al cambiarlo |
-| `SVC_CONSULTAS_CLIENT_SECRET` | core-api / core-identity | `Suite__Oidc__ServiceClients__svc-consultas__Secret` | sí | sí | vacío | `.env.prod.example` | Registro de `svc-consultas`, con el scope `platform.identidad.credenciales.impuesto` |
+| `SVC_CONSULTAS_CLIENT_SECRET` | core-api / core-identity | `Suite__Oidc__ServiceClients__svc-consultas__Secret` | sí | sí | vacío | `.env.prod.example` | Registro de `svc-consultas`, con los scopes `platform.identidad.credenciales.impuesto` y `platform.identidad.credenciales.impuesto.webhook` (HU #14711) |
 | `SVC_CONSULTAS_CLIENT_SECRET` | core-consultas | `Platform__ServiceClient__ClientSecret` | sí | sí | vacío | `.env.prod.example` | Token de servicio de core-consultas. Mismo valor que el registro |
 | `CORE_CONSULTAS_GRPC_PORT` | core-consultas | `Servicio__GrpcPort` | no | no | `8084` | `.env.prod.example` | Destino de `DIAGNOSTICO_CONSULTAS_ADDRESS` (`http://core-consultas:8084`) |
 | `RABBITMQ_URL_CONSULTAS` | core-consultas | `Platform__Messaging__ConnectionString` | sí | sí | `amqp://consultas:sin-clave@rabbitmq:5672/flit` | `.env.prod.example` | Consume los trabajos que Diagnóstico deja en `flit.consultas`. El default no sirve: poner la clave real |
@@ -266,8 +270,28 @@ Lo que sí hay que configurar para que la entrega funcione:
 | Perfil `identity` arriba con gRPC | core-identity | `COMPOSE_PROFILES=…,identity` y `CORE_IDENTITY_GRPC_PORT=8083` (`Identidad__GrpcPort`) |
 | Dirección del gRPC de Identidad | core-consultas | `CONSULTAS_IDENTIDAD_ADDRESS=http://core-identity:8083` (`Consultas__Identidad__Address`) |
 | Cliente de servicio `svc-consultas` | core-api y core-identity (registro) + core-consultas (uso) | `SVC_CONSULTAS_CLIENT_SECRET` → `Suite__Oidc__ServiceClients__svc-consultas__Secret` y `Platform__ServiceClient__ClientSecret`. Mismo valor en los dos lados |
-| Scope del cliente | `appsettings.json` de core-api/core-identity | `svc-consultas` ya trae `platform.identidad.credenciales.impuesto`. No es variable |
+| Scope del cliente | `appsettings.json` de core-api/core-identity | `svc-consultas` ya trae `platform.identidad.credenciales.impuesto` y, desde HU #14711, `platform.identidad.credenciales.impuesto.webhook`. No es variable |
 | Producto Diagnóstico encendido | Admin › Compañías › Productos | Dato de la base, no variable |
+
+Desde la HU #14711 la llave ya **no** hace falta capturarla a mano. Se obtiene del proveedor con el alta idempotente: el botón «Obtener del proveedor» o el alta automática al encender Diagnóstico. El alta también guarda el `webhook_secret` con los códigos `impuesto_webhook_secret` e `impuesto_webhook_secret_anterior`, este último vigente 24 h. La captura manual queda como respaldo.
+
+### 3.3.1 Alta de la credencial y aviso firmado (HU #14711)
+
+| Variable (clave .NET) | Servicio | Default | Obligatoria | Secreta | Uso |
+|---|---|---|---|---|---|
+| `Platform__ImpuestoProveedor__BaseUrl` | core-identity y core-api (respaldo) | vacío | condicional | no | URL base del proveedor, sin `/` final. En local, `http://127.0.0.1:8898` (stub) |
+| `Platform__ImpuestoProveedor__IntegrationToken` | core-identity y core-api | vacío | condicional | **sí** | Token de integración del ambiente, el mismo valor que `IMPUESTOS_SVC_INTEGRATION_TOKEN` de core-impuestos. Si está vacío, el botón responde `503 PROVEEDOR_NO_CONFIGURADO` y el alta automática reintenta y termina en `ERROR` |
+| `Platform__ImpuestoProveedor__TimeoutSeconds` | core-identity y core-api | `30` | no | no | Timeout de la llamada del alta |
+| `Platform__ImpuestoProveedor__TrabajadorActivo` | core-identity | `false` | no | no | Enciende el trabajador del alta automática de `diagnostico`. Apagado, encender Diagnóstico deja el alta en `PENDIENTE`. **Ojo:** encendido y con el proveedor configurado, el alta puede reemplazar la llave cargada a mano de las empresas que ya usan Diagnóstico (`api_key_rotated`) |
+| `Consultas__Impuesto__AvisoBaseUrl` | core-consultas | vacío | no | no | Base **pública** https del receptor; core-consultas agrega `/api/v1/impuesto/avisos/{token}`. Solo admite http en loopback. Si está vacía, no se manda `callbackUrl` y el resultado sigue llegando por polling |
+| `Consultas__Impuesto__AvisoTokenKey` | core-consultas | vacío | condicional | **sí** | Llave HMAC del token opaco por empresa, de al menos 32 bytes. Si se rota, se invalidan los `callbackUrl` de las consultas en curso, que se cierran por polling |
+
+Para encender el aviso hay que hacer tres cosas:
+1. Publicar la ruta `/api/v1/impuesto/avisos/*` de core-consultas en el gateway o nginx.
+2. Enmascarar ese path en los access logs, porque lleva el token.
+3. Resolver la IP real detrás de YARP (G-6), de la que dependen los límites de 60 por minuto por IP y 600 por minuto globales.
+
+El usuario del broker `plataforma` ya puede publicar en `flit.impuestos`, porque es el mismo permiso de `impuestos.producto.cambiado`. El trabajo `impuestos.credencial_diagnostico.actualizada` usa ese mismo permiso.
 
 ### 3.4 Lado Diagnóstico
 
@@ -311,3 +335,71 @@ Corregido en c69a08575: `CONSULTAS_IDENTIDAD_ADDRESS` se agregó vacía a `.env.
 |---|---|
 | `handoff-vps-diagnostico.md` §4 | Dice que el compose fija `Diagnostico__Fuentes__ImpuestoDisponible=false` sin variable. Hoy sale de `DIAGNOSTICO_IMPUESTO_DISPONIBLE` |
 | `CORE_IDENTITY_GRPC_PORT` | En `.env.prod.example` está comentada (`# CORE_IDENTITY_GRPC_PORT=8083`). Con el perfil `diagnostico` hay que descomentarla, o Diagnóstico responde 403 |
+
+---
+
+## 5. Producto Impuestos (perfil `impuestos`, HU #14694)
+
+Verificado contra `services/core-impuestos/src/Flit.Impuestos.Api/` (`ServicioSettings.cs` y las clases de opciones) y el
+bloque `core-impuestos` de `docker-compose.prod.yml`. Detalle operativo en
+[handoff-vps-impuestos.md](../suite/handoff-vps-impuestos.md) y
+[despliegue-develop-impuestos.md](../suite/despliegue-develop-impuestos.md). Ninguna variable del producto empieza por
+`IMPUESTO_` (sin S).
+
+**Convención del compose.** Los obligatorios del servicio van como `${VAR:-}` (sin `:?`): con el perfil apagado Compose no
+los exige; con el perfil encendido el servicio no arranca y el log dice qué variable falta (`ServicioSettings`, M11 para el
+file-manager).
+
+### 5.1 core-impuestos
+
+| Variable | Clave en el contenedor | Default | Obligatoria | Secreta | Uso |
+|---|---|---|---|---|---|
+| `CONNECTION_STRING_IMPUESTOS` | `ConnectionStrings__Servicio` | vacío | sí | sí | Rol dueño del esquema `impuestos` (G-2) |
+| `SVC_IMPUESTOS_CLIENT_SECRET` | `Platform__ServiceClient__ClientSecret` | vacío | sí | sí | Cliente `svc-impuestos`; el mismo valor en core-api/core-identity (G-5) |
+| `RABBITMQ_URL_IMPUESTOS` | `Platform__Messaging__ConnectionString` | vacío | sí | sí | Usuario `impuestos` del broker (G-8) |
+| `CORE_IMPUESTOS_GRPC_PORT` | `Servicio__GrpcPort` | `8089` | sí | no | gRPC interno h2c |
+| `IMPUESTOS_SVC_API_BASE_URL` | `Impuestos__Api__BaseUrl` | vacío | **sí, no arranca** | no | Base https del API de liquidación (G-9) |
+| `IMPUESTOS_SVC_INTEGRATION_TOKEN` | `Impuestos__Api__IntegrationToken` | vacío | **sí, no arranca** | sí | Token de integración del ambiente, solo para el alta (G-9). Lo emite FLIT API |
+| `IMPUESTOS_SVC_HTTP_TIMEOUT_SECONDS` | `Impuestos__Api__TimeoutSegundos` | `30` | no | no | Timeout por llamada al API |
+| `IMPUESTOS_SVC_DP_CERTIFICADO_RUTA` | (ruta del host del secreto `impuestos_dp_pfx`; en el contenedor `Impuestos__DataProtection__CertificadoRuta=/run/secrets/impuestos_dp_pfx`) | `/etc/flit/secrets/impuestos-dp.pfx` | sí | archivo | Certificado RSA de Data Protection (G-10) |
+| `IMPUESTOS_SVC_DP_CERTIFICADO_CLAVE` | `Impuestos__DataProtection__CertificadoClave` | vacío | sí | sí | Clave del `.pfx` |
+| `IMPUESTOS_SVC_IDENTIDAD_ADDRESS` | `Impuestos__Identidad__Address` | vacío | en la práctica | no | gRPC de Identidad; vacía = 403 en todo el negocio |
+| (fijo) | `Impuestos__Tramites__Address` | `http://core-api:${CORE_API_GRPC_PORT}` | — | no | Organismos y usuarios del producto |
+| (fijo) | `Impuestos__Plataforma__GatewayUrl` | `http://gateway:${GATEWAY_PORT}` | — | no | Manifiesto |
+| `IMPUESTOS_SVC_CONSULTAS_ADDRESS` | `Impuestos__Consultas__Address` | vacío | en la práctica | no | RUNT por core-consultas (`http://core-consultas:8084`); vacía = ítems en error reintentable |
+| `IMPUESTOS_SVC_AVISOS_URL_BASE` | `Impuestos__Avisos__UrlBase` | vacío | condicional (webhook, G-6) | no | Base https del `callbackUrl`; vacía = solo conciliación por GET |
+| (fijo) | `Impuestos__Avisos__PermitirHttpLocal` | `false` | — | no | http en loopback: solo local |
+| `IMPUESTOS_SVC_AVISOS_URL_FRONTEND` | `Impuestos__Avisos__UrlFrontend` | vacío | no | no | Enlace del correo «Lote terminado» |
+| `IMPUESTOS_SVC_AVISOS_POR_IP_POR_MINUTO` | `Impuestos__LimitesSolicitudes__AvisosPorIpPorMinuto` | `60` | no | no | Límite del receptor; menor que 1 impide arrancar |
+| `IMPUESTOS_SVC_CONCURRENCIA_EMPRESA` | `Impuestos__Ejecucion__ConcurrenciaPorEmpresa` | `2` | no | no | Ítems en vuelo por compañía |
+| `IMPUESTOS_SVC_CONCURRENCIA_GLOBAL` | `Impuestos__Ejecucion__ConcurrenciaGlobal` | `6` | no | no | Ítems en vuelo en total |
+| `IMPUESTOS_SVC_TASA_POR_SEGUNDO` | `Impuestos__Ejecucion__TasaPorSegundo` | `2` | no | no | POST por segundo al API |
+| `IMPUESTOS_SVC_ALTA_INTERVALO_SEGUNDOS` | `Impuestos__Aprovisionamiento__IntervaloSegundos` | `10` | no | no | Pausa del reintento del alta |
+| `IMPUESTOS_SVC_CONCILIACION_ESPERA_INCIERTO` | `Impuestos__Conciliacion__EsperaIncierto` | `00:30:00` | no | no | Espera del «Incierto» |
+| `FILE_MANAGER_BASE_URL` | mismo nombre | el de core-api (AWS pdn) | **sí, no arranca** (M11) | no | Recibos PDF (G-11) |
+| `FILE_MANAGER_FILES_PATH`, `FILE_MANAGER_TIMEOUT_SECONDS` | mismo nombre | `api/v1/files`, `30` | no | no | Como core-api |
+| `IMPUESTOS_FILE_MANAGER_CATEGORY` | `FILE_MANAGER_CATEGORY` | `impuestos` | sí | no | Categoría propia, registrada en el file-manager (G-11) |
+| `FILE_MANAGER_AUTH_TOKEN` | mismo nombre | vacío | en PDN (Contabo) | sí | El mismo de core-api |
+
+**Solo en el código, no en el compose** (afinación): `Servicio__MigrateOnStartup` (`true`),
+`Impuestos__Organismos__IntervaloSincronizacion` (1 día), `Impuestos__Fuentes__VigenciaCache` (6 h),
+`Impuestos__Usuarios__PlazoRpcSegundos` (10), `Impuestos__Plataforma__EsperaInicialMs` (5000) y `__RegistrarManifiesto`
+(`true`), `Impuestos__Aprovisionamiento__TrabajadorActivo` y `Impuestos__Conciliacion__TrabajadorActivo` (`true`; las
+pruebas los apagan) y el resto de `Impuestos__Conciliacion__*` y `Impuestos__Ejecucion__*`.
+**Nunca en un ambiente:** `Impuestos__Identidad__SimularSuscripcionActiva` y `Impuestos__Archivos__GuardarEnMemoria`.
+
+### 5.2 frontend-impuestos
+
+`IMPUESTOS_PORT` (4034/5034/6034), `IMPUESTOS_SESSION_SECRET` (secreta, ≥ 32 caracteres, distinta del hub y de los demás
+productos) y las comunes de los fronts de la suite (`FLIT_HUB_URL`, `FLIT_INTERNAL_API_KEY`, `FLIT_TRAMITES_URL`). Tabla
+completa en [despliegue-develop-impuestos.md](../suite/despliegue-develop-impuestos.md) §3.3.
+
+### 5.3 Lo que Impuestos pide a los demás
+
+| Qué | Dónde |
+|---|---|
+| `SVC_IMPUESTOS_CLIENT_SECRET` → `Suite__Oidc__ServiceClients__svc-impuestos__Secret` | core-api y core-identity. Los scopes no son variable: `services/core-api/src/Flit.Api/appsettings.json` |
+| `CORE_IDENTITY_GRPC_PORT=8083` | core-identity (suscripción, alta, credenciales, aprovisionamiento) |
+| Exchange `flit.impuestos` y colas `impuestos.*` | `deploy/rabbitmq/definitions.json` (`import_definitions`) |
+| Escritura de `tramites` y `plataforma` en `flit.impuestos`; usuario `impuestos` con destino `notificaciones` | Broker (G-8) |
+| Categoría `impuestos` | file-manager (G-11) |

@@ -14,7 +14,9 @@ namespace Flit.Consultas.Api.Impuesto;
 /// asíncrono <c>source_inactive</c> → <c>impuesto_fuente_inactiva</c>, y el 422 por falta de código de departamento →
 /// <c>impuesto_rechazo</c>. Cuando la fuente cierra el trabajo sin veredicto confirmado (rechazo de negocio, solicitud inválida, no
 /// confirmado, respuesta ilegible o tiempo agotado) deja un Warning 7436 con identificadores y códigos de forma estricta; nunca texto
-/// libre ni valores de la fuente.
+/// libre ni valores de la fuente. HU #14711: si hay aviso del proveedor (<see cref="Avisos.CallbackAvisoImpuesto"/>), el POST lleva
+/// <c>callbackUrl</c> y la espera entre sondeos la corta el aviso (<see cref="Avisos.BuzonAvisosImpuesto"/>); el polling queda de
+/// respaldo y los dos cierran por <see cref="CerrarConResultadoAsync"/>.
 /// </summary>
 internal sealed partial class ProveedorImpuesto(
     ITransporteImpuesto transporte,
@@ -24,7 +26,9 @@ internal sealed partial class ProveedorImpuesto(
     ISeguimientoImpuesto seguimiento,
     PlanSondeoImpuesto plan,
     TimeProvider time,
-    ILogger<ProveedorImpuesto> logger)
+    ILogger<ProveedorImpuesto> logger,
+    Avisos.CallbackAvisoImpuesto? callback = null,
+    Avisos.BuzonAvisosImpuesto? buzon = null)
 {
     public const string ClaveProveedor = "impuesto";
 
@@ -43,6 +47,9 @@ internal sealed partial class ProveedorImpuesto(
     private const string MensajeNoConfirmado = "El impuesto no quedó confirmado.";
 
     private static readonly Regex ArchivoId = ArchivoIdRegex();
+    private const string CodigoWebhookNoConfigurado = "webhook_not_configured";
+    private const string OrigenSondeo = "sondeo";
+    private const string OrigenAviso = "aviso";
     private const int MaxPdfBytes = 3 * 1024 * 1024;
 
     /// <summary>Códigos activos. Vacía si el transporte no está listo.</summary>
@@ -88,6 +95,16 @@ internal sealed partial class ProveedorImpuesto(
 
         var cuerpo = SolicitudServicioImpuesto.Crear(request, homologado, opciones.Contacto);
         var campoInvalido = SolicitudServicioImpuesto.Validar(cuerpo, departamentoActivo: true);
+        string? cuerpoConAviso = null;
+        async Task<string> CuerpoConAvisoAsync()
+        {
+            if (cuerpoConAviso is not null)
+                return cuerpoConAviso;
+            var url = callback is null ? null : await callback.UrlAsync(caller.TenantId, ct).ConfigureAwait(false);
+            cuerpoConAviso = url is null ? cuerpo : SolicitudServicioImpuesto.Crear(request, homologado, opciones.Contacto, url);
+            return cuerpoConAviso;
+        }
+
         if (campoInvalido is not null)
         {
             RegistroFallosProveedor.Anotar((FalloProveedor?)null);
@@ -102,7 +119,10 @@ internal sealed partial class ProveedorImpuesto(
 
         if (seg.IdExterno is null)
         {
-            (var envio, cred) = await EnviarConRefrescoAsync(cuerpo, cred, caller.TenantId, ct).ConfigureAwait(false);
+            (var envio, cred, var respaldo) = await EnviarConAvisoAsync(await CuerpoConAvisoAsync().ConfigureAwait(false), cuerpo, cred, caller.TenantId, ct)
+                .ConfigureAwait(false);
+            if (respaldo)
+                cuerpoConAviso = cuerpo;
             if (envio.Fallo is { } falloEnvio)
             {
                 await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
@@ -132,7 +152,18 @@ internal sealed partial class ProveedorImpuesto(
             if (espera > restante)
                 espera = restante;
 
-            await Task.Delay(espera, time, ct).ConfigureAwait(false);
+            // HU #14711: con buzón, la espera la corta el aviso del proveedor; si llega, cierra sin GET por el mismo camino.
+            if (buzon is null)
+            {
+                await Task.Delay(espera, time, ct).ConfigureAwait(false);
+            }
+            else if (await buzon.EsperarAsync(caller.TenantId, seg.IdExterno!, espera, ct).ConfigureAwait(false) is { } aviso)
+            {
+                return await CerrarConResultadoAsync(
+                    trabajoId, caller.TenantId, seg.IdExterno, request.DepartamentoCodigo, aviso.Estado, aviso.CuerpoConsulta, OrigenAviso, ct)
+                    .ConfigureAwait(false);
+            }
+
             var estado = await transporte.ConsultarAsync(seg.IdExterno!, cred.ApiKey!, ct).ConfigureAwait(false);
             n++;
             ultimoEstado = EstadoObservado(estado.Estado);
@@ -146,7 +177,10 @@ internal sealed partial class ProveedorImpuesto(
                     await seguimiento.OlvidarIdExternoAsync(trabajoId, ct).ConfigureAwait(false);
                     reenviado = true;
                     reanudado = false;
-                    (var envio, cred) = await EnviarConRefrescoAsync(cuerpo, cred, caller.TenantId, ct).ConfigureAwait(false);
+                    (var envio, cred, var respaldo) = await EnviarConAvisoAsync(await CuerpoConAvisoAsync().ConfigureAwait(false), cuerpo, cred, caller.TenantId, ct)
+                        .ConfigureAwait(false);
+                    if (respaldo)
+                        cuerpoConAviso = cuerpo;
                     if (envio.Fallo is { } falloRe)
                     {
                         await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
@@ -208,18 +242,9 @@ internal sealed partial class ProveedorImpuesto(
                 case EstadoTrabajoExterno.Exitoso:
                 case EstadoTrabajoExterno.Parcial:
                 case EstadoTrabajoExterno.Fallido:
-                    await seguimiento.CerrarAsync(trabajoId, EstadoCierre(estado.Estado), ct).ConfigureAwait(false);
-                    RegistroFallosProveedor.Anotar((FalloProveedor?)null);
-                    var veredicto = InterpreteImpuesto.Interpretar(estado.Cuerpo ?? "");
-                    var respuesta = AProto(veredicto);
-                    if (!veredicto.Confirmado)
-                    {
-                        AvisarSinVeredicto(trabajoId, seg.IdExterno, request.DepartamentoCodigo, veredicto.EstadoFuente,
-                            veredicto.EstadoResultadoFuente, veredicto.CodigoErrorFuente, respuesta.Resultado.Chequeos[0].Clave,
-                            veredicto.Advertencias);
-                    }
-
-                    return respuesta;
+                    return await CerrarConResultadoAsync(
+                        trabajoId, caller.TenantId, seg.IdExterno, request.DepartamentoCodigo, estado.Estado, estado.Cuerpo ?? "", OrigenSondeo, ct)
+                        .ConfigureAwait(false);
 
                 default:
                     fallosSeguidos = 0;
@@ -280,6 +305,57 @@ internal sealed partial class ProveedorImpuesto(
             Contenido = Google.Protobuf.ByteString.CopyFrom(archivo.Contenido),
             ContentType = string.IsNullOrWhiteSpace(archivo.ContentType) ? "application/pdf" : archivo.ContentType,
         };
+    }
+
+    /// <summary>
+    /// Cierre de la consulta con un resultado terminal, el MISMO para el GET del sondeo y para el aviso del proveedor (HU #14711):
+    /// cierra el seguimiento, descarta lo que quede en el buzón, interpreta el cuerpo (el aviso trae el <c>consulta</c> con la forma
+    /// del GET) y devuelve la respuesta que el consumidor publica a Diagnóstico. Regla de idempotencia: cada ejecución del trabajo
+    /// pasa por aquí una sola vez (el primer resultado terminal gana y el método retorna), así que hay una sola publicación; un aviso
+    /// que llega después, aunque traiga un <c>attempt</c> mayor, encuentra el trabajo cerrado y se descarta (el polling de hoy
+    /// tampoco reabre una consulta cerrada). Si el consumidor se cae antes de confirmar, el SDK reentrega el trabajo, su publicación
+    /// anterior se revirtió y el sondeo reanudado vuelve a cerrar y publicar una vez.
+    /// </summary>
+    private async Task<ConsultarImpuestoVehicularResponse> CerrarConResultadoAsync(
+        Guid trabajoId, Guid tenantId, string? idExterno, string? departamento, EstadoTrabajoExterno estado, string cuerpo, string origen,
+        CancellationToken ct)
+    {
+        await seguimiento.CerrarAsync(trabajoId, EstadoCierre(estado), ct).ConfigureAwait(false);
+        buzon?.Olvidar(tenantId, idExterno);
+        RegistroFallosProveedor.Anotar((FalloProveedor?)null);
+        var veredicto = InterpreteImpuesto.Interpretar(cuerpo);
+        var respuesta = AProto(veredicto);
+        if (!veredicto.Confirmado)
+        {
+            AvisarSinVeredicto(trabajoId, idExterno, departamento, veredicto.EstadoFuente,
+                veredicto.EstadoResultadoFuente, veredicto.CodigoErrorFuente, respuesta.Resultado.Chequeos[0].Clave,
+                veredicto.Advertencias);
+        }
+
+        ProveedorImpuestoLog.Cerrada(logger, trabajoId, origen);
+        return respuesta;
+    }
+
+    /// <summary>
+    /// POST con el <c>callbackUrl</c> si lo hay (<paramref name="cuerpo"/>); si el proveedor responde 422 <c>webhook_not_configured</c>
+    /// (la empresa perdió el secreto después de cachearlo), se reenvía sin él (<paramref name="cuerpoSinAviso"/>) y sigue el polling.
+    /// </summary>
+    /// <summary>
+    /// Envía con <c>callbackUrl</c>; ante 422 <c>webhook_not_configured</c> reenvía el cuerpo sin él y lo indica en <c>Respaldo</c>
+    /// para que quien llama memorice ese cuerpo (N-3) y un reenvío posterior no repita la ida y vuelta del 422.
+    /// </summary>
+    private async Task<(EnvioImpuesto Envio, CredencialImpuesto Cred, bool Respaldo)> EnviarConAvisoAsync(
+        string cuerpo, string cuerpoSinAviso, CredencialImpuesto cred, Guid tenantId, CancellationToken ct)
+    {
+        var (envio, credUsada) = await EnviarConRefrescoAsync(cuerpo, cred, tenantId, ct).ConfigureAwait(false);
+        if (envio.Fallo is { HttpStatus: 422 } && string.Equals(envio.CodigoError, CodigoWebhookNoConfigurado, StringComparison.Ordinal)
+            && !ReferenceEquals(cuerpo, cuerpoSinAviso))
+        {
+            var (respaldo, credRespaldo) = await EnviarConRefrescoAsync(cuerpoSinAviso, credUsada, tenantId, ct).ConfigureAwait(false);
+            return (respaldo, credRespaldo, true);
+        }
+
+        return (envio, credUsada, false);
     }
 
     private async Task<(EnvioImpuesto Envio, CredencialImpuesto Cred)> EnviarConRefrescoAsync(
@@ -491,6 +567,9 @@ internal sealed partial class ProveedorImpuesto(
 
 internal static partial class ProveedorImpuestoLog
 {
+    [LoggerMessage(EventId = 7437, Level = LogLevel.Information, Message = "Impuesto: trabajo {TrabajoId} cerrado por {Origen}.")]
+    public static partial void Cerrada(ILogger logger, Guid trabajoId, string origen);
+
     [LoggerMessage(EventId = 7436, Level = LogLevel.Warning, Message = "Impuesto sin veredicto confirmado: trabajo {TrabajoId}, consulta externa {IdExterno}, departamento {Departamento}, estado {EstadoFuente}, estado del resultado {EstadoResultado}, error_code {CodigoError}, clave {Clave}, advertencias {Advertencias}.")]
     public static partial void SinVeredicto(
         ILogger logger, Guid trabajoId, string idExterno, string departamento, string estadoFuente, string estadoResultado,

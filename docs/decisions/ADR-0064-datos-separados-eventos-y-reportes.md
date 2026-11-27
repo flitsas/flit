@@ -1,6 +1,6 @@
 # ADR-0064: Datos separados por producto, integración por eventos y reportes consolidados
 
-**Fecha**: 2026-09-23 (revisado 2026-10-06)  
+**Fecha**: 2026-09-23 (revisado 2026-10-06; enmienda «Excepción: tablas técnicas de core-consultas» 2026-11-25, Propuesto)  
 **Status**: Propuesto  
 **Deciders**: Líder Técnico FLIT (aceptación exclusiva humana — regla FLIT 15), arquitectura, PO  
 **Tags**: datos, integración, eventos, RabbitMQ, outbox, inbox, reportes, asyncapi  
@@ -104,9 +104,72 @@ Se elige la **Opción 3**: consistencia eventual en los consolidados a cambio de
 - El publicador RabbitMQ de `core-api` pasa de stub a implementación real.
 - Limpieza diaria: 7 días de filas publicadas en la outbox y 30 en la bandeja de entrada. Los mensajes muertos no se borran solos.
 
+## Excepción: tablas técnicas de core-consultas
+
+**Fecha**: 2026-11-25 · **Status**: Propuesto (no cambia el estado del resto del ADR) · **HU**: #14711 (registro de avisos), con precedente en la migración `20261120001000_ImpuestoSeguimientoTrabajos`.
+
+### Contexto
+
+El punto 1 de la decisión ya justifica que estas tablas no tengan FK a `identity.tenants` (A4): la empresa vive en otro servicio. El db-schema-validator dio `MISSING_1` sobre `consultas.vehicle_tax_webhook_deliveries` porque el resto de desvíos del checklist (`.claude/skills/db-schema-validator/checklist-validacion-schema.md`) no tenía respaldo en ningún ADR:
+
+- **A10**: sin RLS ni política `tenant_isolation`.
+- **A5, A6, A16**: sin `updated_by`, `deleted_at/by`, `row_version` ni triggers de `row_version` y `audit_log`.
+- **A11**: el índice de purga es solo `(created_at)`, sin `tenant_id` al frente.
+
+### Tablas cubiertas
+
+| Tabla | Migración | Qué guarda | Retención y purga | Índice de purga (A11) |
+|-------|-----------|------------|-------------------|-----------------------|
+| `consultas.vehicle_tax_jobs` | `20261120001000_ImpuestoSeguimientoTrabajos` (más `ix_vehicle_tax_jobs_tenant_id_external_id` en `20261125231810_ImpuestoAvisosWebhook`) | `trabajo_id` del bus → id externo de la consulta de impuesto, estado y contadores de sondeo. Sin placa, documento ni respuesta | 24 h por `created_at`; la borra `SeguimientoImpuestoBd.ReservarAsync` | `ix_vehicle_tax_jobs_created_at` |
+| `consultas.vehicle_tax_webhook_deliveries` | `20261125231810_ImpuestoAvisosWebhook` | `(tenant_id, delivery_id)` de cada aviso del proveedor ya verificado, `external_id`, `attempt`. Sin cuerpo, firma ni PII | 7 días por `created_at`; `PurgaAvisosImpuesto` cada hora | `ix_vehicle_tax_webhook_deliveries_created_at` |
+
+`vehicle_tax_jobs` sí cambia de estado (lleva `updated_at`), pero es efímera: su historia no tiene valor de auditoría y desaparece a las 24 h. `vehicle_tax_webhook_deliveries` es inmutable: solo `INSERT … ON CONFLICT DO NOTHING` y purga.
+
+### Condiciones (todas obligatorias para acogerse)
+
+1. **Esquema y usuario de BD propios.** La tabla vive en `consultas` y solo la toca el usuario de BD de core-consultas (punto 1 de la decisión). Nadie más la lee por SQL.
+2. **Filtro explícito por `tenant_id` en todo acceso** que no sea la purga. Única variante admitida: el acceso por una clave única global que el mismo servicio ligó a la empresa al crear la fila (`vehicle_tax_jobs.trabajo_id`, uuidv7 del sobre, reservado junto con su `tenant_id`). No se admite una búsqueda por un dato que llega de fuera sin pasar por la empresa, como `external_id` o `delivery_id` sin `tenant_id`.
+3. **Filas inmutables o efímeras, sin PII.** Sin placa, VIN, documento, nombres, cuerpos de proveedor ni firmas. Ninguna columna necesita marca `@pii` (A15). Si una columna nueva trae PII, la tabla sale de la excepción.
+4. **Purga acotada.** La retención es fija y corta (días, no meses), está en el código y en el `COMMENT` de la tabla. La purga filtra solo por `created_at`, que es el único acceso que recorre todas las empresas y por eso usa el índice sin `tenant_id` al frente. Los demás índices empiezan por `tenant_id` o son la PK o la clave única global de la condición 2.
+
+Lo que la excepción **no** cubre: A1–A3, A7–A9, A12–A15 y A17 siguen aplicando. Una tabla con datos de negocio, con PII o que se conserve más allá de la purga no se acoge, aunque viva en `consultas`.
+
+### Alternativas evaluadas
+
+**Opción 1 — Aplicar el checklist completo (RLS, columnas estándar, triggers, `tenant_id` en el índice de purga).**
+- Pros: sin excepciones que mantener; el validador pasa sin nota; uniforme con las tablas de negocio.
+- Contras: RLS no protege nada mientras la app sea dueña de las tablas y no haya `FORCE ROW LEVEL SECURITY` (memoria de RLS decorativo; ADR-0072 B3); `row_version`, soft delete y `audit_log` sobre filas que se insertan y se purgan solo generan escrituras y volumen; un índice `(tenant_id, created_at)` no sirve a una purga que recorre todas las empresas.
+- Esfuerzo: S. Riesgos: falsa sensación de aislamiento y triggers que fallan con la purga masiva.
+
+**Opción 2 — Excepción acotada con condiciones verificables, en este ADR — elegida.**
+- Pros: reutiliza el razonamiento del punto 1 y el precedente de A10/A11 de ADR-0072 para el schema de diagnóstico; las cuatro condiciones se revisan en code review; un solo lugar para todas las tablas técnicas del servicio.
+- Contras: el aislamiento depende del filtro a mano en el código; cada tabla nueva tiene que añadirse a la tabla de arriba.
+- Esfuerzo: S. Riesgos: un acceso nuevo sin `tenant_id`; se mitiga con la condición 2 en review y en el validador.
+
+**Opción 3 — ADR nuevo solo para las tablas técnicas de core-consultas.**
+- Pros: decisión con número propio y fácil de citar.
+- Contras: parte en dos la decisión sobre los datos de core-consultas, que ya está aquí y sigue en Propuesto; añade un número más en un directorio que ya tiene duplicados.
+- Esfuerzo: S. Riesgos: que los dos ADRs diverjan.
+
+**Tradeoff aceptado:** se acepta que el aislamiento entre empresas dependa del filtro explícito y de la revisión, a cambio de no pagar RLS, triggers ni columnas que hoy no protegen nada en tablas efímeras sin PII.
+
+### Condición de revisión
+
+- **Si core-consultas activa `FORCE ROW LEVEL SECURITY`** o pasa a un rol de app que no es dueño de las tablas, esta excepción **se revisa**: o las dos tablas reciben política `tenant_isolation` (con un rol de purga que la omita), o se justifica de nuevo por qué quedan fuera.
+- También se revisa si una tabla cubierta deja de cumplir una de las cuatro condiciones, o si su retención sube de 7 días.
+
+### Notas para agentes
+
+- **Database Agent / db-schema-validator**: una tabla de la lista con las cuatro condiciones cumplidas no es `MISSING` en A5, A6, A10, A11 (solo el índice de purga) ni A16. El `COMMENT` de la tabla debe decir la retención y «sin PII», y el remark de la migración debe citar esta sección.
+- **Backend Agent**: toda consulta nueva sobre estas tablas lleva `tenant_id` en el `WHERE`, salvo la purga y el acceso por `trabajo_id`. Nada de PII en columnas nuevas.
+- **Security Agent**: revisar la condición 2 en cada PR que toque `Impuesto/SeguimientoImpuestoBd.cs` o `Impuesto/Avisos/RegistroAvisosImpuestoBd.cs`.
+- **Infra Agent**: avisar al arquitecto antes de activar `FORCE ROW LEVEL SECURITY` en core-consultas.
+
 ## ADRs relacionados
 
 - ADR-0061, ADR-0062.
+- ADR-0072 — mismo razonamiento de A10 (sin RLS sin `FORCE`) y A11 (índices de purga y de cola) para el schema de diagnóstico; la sección «Excepción: tablas técnicas de core-consultas» lo aplica a core-consultas.
+- ADR-0079 — fachada del impuesto en core-consultas, dueña de `vehicle_tax_jobs` y `vehicle_tax_webhook_deliveries`.
 - ADR-0059 (`docs/decisions`) — consumidores como `BackgroundService`.
 - ADR-0070 — gRPC entre servicios, REST hacia afuera.
 

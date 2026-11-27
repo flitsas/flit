@@ -1,0 +1,2156 @@
+openapi: 3.0.3
+info:
+  title: FLIT Suite — API de Impuestos
+  version: "1.3.0"
+  description: >
+    Endpoints REST del producto Impuestos (core-impuestos) bajo /api/v1/impuestos (HU #14694, ADR-0093; plan
+    docs/impuestos/plan-implementacion.md §5.1; deltas de la 1.1.0 en §5.7 y de la 1.2.0 en §5.8). La app web llega por el gateway con el
+    token del producto (aud=impuestos) a través de su BFF. La compañía sale siempre del token; solo el Super Admin elige
+    otra con `?empresa=<tenantId>` en las rutas que lo admiten (EmpresaExplicita, con auditoría de lectura).
+
+
+    Uso de `?empresa` (único en todo el contrato desde la 1.1.0): (1) un usuario que no es Super Admin y envía
+    `empresa` recibe 403 EMPRESA_SOLO_SUPER_ADMIN, en lectura y en escritura; (2) el Super Admin que envía un valor que
+    no es un uuid, dos valores distintos, o no envía `empresa` en una ruta que opera sobre una sola compañía (escrituras,
+    configuración, usuarios), recibe 400 EMPRESA_REQUERIDA; (3) una compañía inexistente o sin Impuestos responde 404
+    EMPRESA_NO_ENCONTRADA. El código EMPRESA_NO_PERMITIDA de la 1.0.0 queda retirado: ninguna ruta lo emite y su
+    literal se conserva solo para clientes viejos.
+
+
+    Deltas 1.2.0 (aditivos; alta idempotente del proveedor, plan §5.8): MotivoAprovisionamiento suma
+    EMPRESA_INACTIVA_EN_PROVEEDOR y CLAVE_ROTADA y retira EMPRESA_YA_REGISTRADA y ALTA_SIN_CONFIRMAR (literal conservado
+    para el historial); la acción de LISTO_SIN_WEBHOOK pasa a REINTENTAR (CARGAR_SECRETO queda retirada);
+    Item.relanzadoDesdeLiquidacionId; `empresa` declarado (Super Admin, obligatorio) en el grid y en los GET de detalle de
+    liquidaciones; etiqueta de modoRespaldoFirma.
+
+
+    Delta 1.2.1 (solo descripciones y un literal de pantalla): POST .../aprovisionamiento/reintentar del backoffice
+    declara LISTO_SIN_WEBHOOK entre los estados admitidos (ya lo admitía en la 1.2.0) y
+    `x-flit-literales.pantalla.avisoRotacionCredenciales` describe el REQUIERE_CREDENCIALES de la 1.2.0, que nace de una
+    API key rechazada (CREDENCIAL_RECHAZADA) y no de una empresa ya registrada.
+
+
+    Delta 1.2.2 (solo literales): `x-flit-literales.errores` declara los códigos transversales que ya emitía el
+    servicio sin literal en el contrato: CONFLICTO_CONCURRENCIA (409, otro cambio guardado a la vez),
+    ESCRITURA_ENTRE_EMPRESAS (403, escritura sobre datos de otra compañía), SIN_USUARIO (403, el token no trae un `sub`
+    uuid en una lectura auditada del Super Admin, la carga de credenciales del backoffice o la gestión de usuarios) y
+    VALOR_INVALIDO (422, un CHECK de la base, sin su detalle). Pueden salir en cualquier ruta que lea o escriba con esas
+    reglas; el `error` es el literal y el front lo muestra tal cual.
+
+
+    Delta 1.2.3 (aditivo): ResumenLiquidacion.placaNoInscrita (boolean nullable; también en Liquidacion,
+    LiquidacionConItems y Dashboard.ultimosLotes, que lo extienden o lo usan). Solo en INDIVIDUAL: true si su único ítem
+    quedó en ERROR `portal_rejected` de placa no inscrita, false en otro caso; null en MASIVA, como estadoItem.
+
+
+    Deltas 1.3.0 (relanzar como nuevo intento y servicio público, decisión del usuario 2026-11-26): POST
+    .../items/{itemId}/relanzar ya no crea otra liquidación: abre un nuevo intento del MISMO ítem y responde 200 con la
+    misma LiquidacionConItems (sin 201 ni 422; `confirmarPosibleDuplicado` se acepta y se ignora; CONFIRMACION_REQUERIDA
+    queda retirado y su literal se conserva solo para clientes viejos; posibleDuplicado ya no se marca). ItemDetalle suma
+    numeroIntento e intentos[] (esquema IntentoItem, el más reciente primero). EstadoItem suma NO_APLICA (vehículo que el
+    RUNT reporta de servicio público: final, sin llamar al proveedor, ni error ni exitosa); Contadores y
+    Dashboard.resultados suman noAplica. Nuevo literal de NO_RELANZABLE.
+
+
+    Toda ruta de negocio pasa por el guard de suscripción (producto `impuestos` encendido para la compañía y sus
+    ancestros, fail-closed con Identidad): si no, 403 PRODUCTO_NO_HABILITADO. El Super Admin pasa el guard y ve las
+    compañías suspendidas en solo lectura (F4-CF10). Los permisos tienen el formato impuestos.<modulo>.<accion> (§5.2) y
+    se registran con el manifiesto (PUT /api/v1/platform/products/impuestos/manifest, ver platform.v1.yaml).
+
+
+    Errores de regla: cuerpo { code, error } con un `code` estable; `error` es SIEMPRE el literal de
+    `x-flit-literales.errores` para ese código (con {tope} sustituido) y el front lo muestra tal cual. Campos de nombre
+    en camelCase. Los textos visibles de estados, acciones, clases, motivos, campos y columnas están cerrados en
+    `x-flit-etiquetas` de cada enum y en `x-flit-literales` (raíz). El front no redacta otros textos para estos valores.
+    Un monto `null` significa «sin dato» y nunca suma como 0. Ninguna respuesta lleva api_key, webhook_secret,
+    dirección, correo ni teléfono del propietario.
+  license:
+    name: Propietario FLIT
+    url: https://flitsas.com
+
+servers:
+  - url: https://api.flit.co
+    description: Producción (vía Gateway YARP)
+  - url: http://localhost:4033
+    description: Local (core-impuestos)
+
+security:
+  - bearerAuth: []
+
+x-flit-literales:
+  errores:
+    SIN_EMPRESA: Tu usuario no tiene una compañía asociada.
+    PRODUCTO_NO_HABILITADO: Impuestos no está activo para tu compañía.
+    EMPRESA_SOLO_SUPER_ADMIN: Solo el Super Admin puede elegir la compañía.
+    # Retirado en 1.1.0 (lo reemplaza EMPRESA_SOLO_SUPER_ADMIN, 403). Se conserva el literal para clientes viejos.
+    EMPRESA_NO_PERMITIDA: Solo el Super Admin puede elegir la compañía.
+    EMPRESA_REQUERIDA: Elige una compañía.
+    EMPRESA_NO_ENCONTRADA: La compañía no existe o no tiene Impuestos.
+    APROVISIONAMIENTO_NO_LISTO: La compañía todavía no puede liquidar porque su configuración con el proveedor no está lista.
+    PRODUCTO_SUSPENDIDO: "Impuestos está suspendido para la compañía: solo lectura."
+    PLACA_INVALIDA: "Escribe una placa válida: de 4 a 10 letras o números."
+    FORMATO_NO_SOPORTADO: Solo se admiten archivos CSV y XLSX.
+    ARCHIVO_DEMASIADO_GRANDE: El archivo supera el máximo de 5 MB.
+    COLUMNA_PLACA_AUSENTE: Falta la columna de placa.
+    ARCHIVO_SIN_PLACAS: El archivo no tiene placas válidas.
+    LIMITE_SUPERADO: El archivo supera el tope de {tope} placas por lote.
+    LIQUIDACION_NO_ENCONTRADA: La liquidación no existe.
+    ITEM_NO_ENCONTRADO: La placa no existe en esta liquidación.
+    RECIBO_NO_ENCONTRADO: El recibo no existe.
+    RECIBO_NO_DISPONIBLE: El recibo no está disponible.
+    YA_TERMINADA: "La liquidación ya terminó: no se puede cerrar."
+    NO_RELANZABLE: Solo se relanzan placas en «Incierto — requiere decisión», con datos incompletos, con error reintentable o con placa no inscrita, que no estén en curso y cuya liquidación no se haya cerrado a mano.
+    CONFIRMACION_REQUERIDA: Confirma que aceptas un posible duplicado en el proveedor.
+    RANGO_INVALIDO: El rango de fechas no es válido.
+    FILTRO_INVALIDO: Un filtro no es válido.
+    PAGINACION_INVALIDA: La paginación no es válida.
+    REPORTE_NO_ENCONTRADO: El reporte no existe.
+    TOPE_EXPORTACION: "El reporte supera el máximo de {tope} filas para exportar: ajusta los filtros."
+    TOPE_INVALIDO: El máximo por lote debe ser un número entre 1 y 5000.
+    TOPE_SUPERA_CONTRACTUAL: El máximo por lote no puede superar el tope contractual de {tope}.
+    CORREO_INVALIDO: Un correo no es válido.
+    DEPARTAMENTO_NO_DISPONIBLE: Un departamento no está en la lista del proveedor.
+    CREDENCIAL_INVALIDA: "El proveedor rechazó la API key: revisa el valor e intenta de nuevo."
+    CREDENCIAL_REQUERIDA: Escribe la API key o el secreto del webhook.
+    ESTADO_NO_ADMITE_CARGA: En el estado actual de la compañía no se pueden cargar credenciales.
+    ESTADO_NO_REINTENTABLE: En el estado actual de la compañía no se puede reintentar.
+    PROVEEDOR_NO_DISPONIBLE: El proveedor no responde. Intenta más tarde.
+    DEMASIADAS_SOLICITUDES: Hiciste demasiadas solicitudes. Espera un momento e intenta de nuevo.
+    CUERPO_MUY_GRANDE: La solicitud es demasiado grande.
+    ROL_NO_PERMITIDO: El rol no es válido para Impuestos.
+    ROL_NO_ASIGNABLE: No puedes asignar ese rol.
+    OBJETIVO_PROTEGIDO: Este usuario se gestiona desde el administrador de la plataforma.
+    ACCION_SOBRE_SI_MISMO: No puedes hacer esta acción sobre tu propio usuario.
+    USUARIO_NO_ENCONTRADO: El usuario no existe en Impuestos de esta compañía.
+    USUARIO_SUSPENDIDO: El usuario está suspendido en Impuestos.
+    INVITACION_PENDIENTE: El usuario todavía no acepta su invitación.
+    ULTIMO_ADMINISTRADOR: La compañía debe conservar al menos un Administrador Impuestos.
+    ROL_YA_VIGENTE: El usuario ya tiene un rol vigente en Impuestos.
+    NOMBRE_REQUERIDO: Escribe el nombre.
+    PLATAFORMA_NO_DISPONIBLE: La plataforma no responde. Intenta más tarde.
+    # 1.2.2: códigos transversales (manejador global y lecturas auditadas); pueden salir en cualquier ruta.
+    CONFLICTO_CONCURRENCIA: Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.
+    ESCRITURA_ENTRE_EMPRESAS: No puedes modificar datos de otra compañía.
+    SIN_USUARIO: Tu sesión no identifica a un usuario. Vuelve a iniciar sesión.
+    VALOR_INVALIDO: Un valor enviado no es válido. Revisa los datos e inténtalo de nuevo.
+  pantalla:
+    montoSinDato: Sin dato
+    liquidacionesSinMonto: "{n} liquidaciones sin monto"
+    marcaParcial: Parcial
+    marcaPosibleDuplicado: Posible duplicado
+    marcaResultadoTardio: Resultado tardío
+    bannerFirmaSinConfirmar: "Firma sin confirmar: los resultados llegan por webhook en cuanto el proveedor confirme la firma."
+    bannerModoSinWebhook: "Modo sin webhook: los resultados se consultan al proveedor y pueden tardar más."
+    bannerProductoSuspendido: "Producto suspendido: solo lectura"
+    accionLiquidarPlaca: Liquidar placa
+    accionCargaMasiva: Carga masiva
+    accionCerrarLote: Cerrar lote
+    accionRelanzar: Relanzar
+    accionDescargarRecibo: Descargar recibo
+    accionDescargarPlantilla: Descargar plantilla
+    confirmarCerrarLote: "Cerrar el lote deja las placas pendientes en «Sin resultado (lote cerrado)». Si después llega un resultado, se aplica a la placa sin reabrir el lote."
+    confirmarRelanzar: "La placa se volverá a consultar como un nuevo intento de este mismo registro. El intento actual quedará en el historial."
+    detalleIncierto: Estamos verificando con el proveedor si recibió la solicitud.
+    credencialConfigurada: Configurada
+    credencialNoConfigurada: Sin configurar
+    avisoRotacionCredenciales: "El proveedor rechazó la API key guardada: reintenta el aprovisionamiento o carga credenciales nuevas."
+    sinResultados: No hay resultados para los filtros elegidos.
+
+tags:
+  - name: Sesion
+    description: "Lo que la app necesita al abrir: usuario, permisos y estado de aprovisionamiento."
+  - name: Dashboard
+    description: "Indicadores de liquidaciones por rango de fechas, sin datos personales."
+  - name: Liquidaciones
+    description: "Liquidación por placa y masiva (lote), grid conjunto, detalle, cierre manual y relanzamiento."
+  - name: Recibos
+    description: "Recibos PDF guardados en la suite (ADR-0057)."
+  - name: Reportes
+    description: "Cuatro reportes con filtros y exportación a Excel (5000 filas) o PDF (1000 filas)."
+  - name: Configuracion
+    description: "Configuración contractual (Super Admin) y operativa (Administrador Impuestos), y departamentos del proveedor."
+  - name: Usuarios
+    description: "Usuarios de Impuestos de la compañía, delegados en la plataforma (forma de ADR-0089)."
+  - name: Notificaciones
+    description: "Aviso en pantalla de lote terminado."
+  - name: Backoffice
+    description: >
+      Solo Super Admin (PoliticaBackoffice): compañías con su aprovisionamiento, carga de credenciales del proveedor y
+      configuración contractual. Lectura entre compañías con IgnoreQueryFilters solo en Modulos/Backoffice y auditoría
+      en impuestos.auditoria_lectura_backoffice.
+  - name: Avisos
+    description: "Receptor del webhook del proveedor (anónimo, autenticado por firma HMAC v1)."
+
+paths:
+  /api/v1/impuestos/sesion:
+    get:
+      tags: [Sesion]
+      operationId: obtenerSesionImpuestos
+      summary: Sesión del usuario en Impuestos
+      description: >
+        Usuario, compañía, roles y permisos impuestos.* del token, y el estado de aprovisionamiento de la compañía para
+        los banners y para habilitar o no «Liquidar placa» y «Carga masiva» (AC-FE-14). Autenticado: un usuario sin
+        permisos de Impuestos ni Super Admin recibe 403.
+      responses:
+        "200":
+          description: Sesión.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Sesion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+
+  /api/v1/impuestos/dashboard:
+    get:
+      tags: [Dashboard]
+      operationId: obtenerDashboardImpuestos
+      summary: Dashboard de la compañía (o global para el Super Admin)
+      description: >
+        Permiso impuestos.dashboard.ver. Rango por defecto: los últimos 30 días. El Super Admin sin `empresa` ve el
+        global con `ranking`; con `empresa`, el de esa compañía. Sin datos personales.
+      parameters:
+        - $ref: "#/components/parameters/Desde"
+        - $ref: "#/components/parameters/Hasta"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Indicadores.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Dashboard" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+
+  /api/v1/impuestos/liquidaciones:
+    get:
+      tags: [Liquidaciones]
+      operationId: listarLiquidaciones
+      summary: Grid de liquidaciones (individuales y masivas juntas)
+      description: >
+        Permiso impuestos.liquidaciones.ver. Orden por creadaEn descendente. Solo de la compañía del token. El Super Admin
+        DEBE enviar `empresa` (no hay vista global de liquidaciones, 1.2.0): sin ella, o con un valor que no es uuid o
+        repetido, 400 EMPRESA_REQUERIDA; `empresa` enviada por quien no es Super Admin, 403 EMPRESA_SOLO_SUPER_ADMIN;
+        compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
+      parameters:
+        - { name: tipo, in: query, schema: { $ref: "#/components/schemas/TipoLiquidacion" } }
+        - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoLiquidacion" } }
+        - $ref: "#/components/parameters/Desde"
+        - $ref: "#/components/parameters/Hasta"
+        - $ref: "#/components/parameters/Placa"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Página de liquidaciones.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaginaLiquidaciones" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/liquidaciones/individual:
+    post:
+      tags: [Liquidaciones]
+      operationId: crearLiquidacionIndividual
+      summary: Liquidar una placa
+      description: >
+        Permiso impuestos.liquidaciones.crear. Solo la placa (D-ENTRADA): se normaliza (mayúsculas, sin espacios ni
+        guiones; " abc-123 " -> "ABC123") y el resto sale del RUNT. Exige aprovisionamiento LISTO o LISTO_SIN_WEBHOOK.
+        Crea un lote INDIVIDUAL de un ítem y responde con `items[0]` para navegar al detalle de la placa. El Super Admin
+        liquida para la compañía de `empresa` (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SolicitudIndividual" } } }
+      responses:
+        "201":
+          description: Liquidación creada con su único ítem.
+          content: { application/json: { schema: { $ref: "#/components/schemas/LiquidacionConItems" } } }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "409":
+          description: APROVISIONAMIENTO_NO_LISTO o PRODUCTO_SUSPENDIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: PLACA_INVALIDA (campo placa).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/liquidaciones/plantilla:
+    get:
+      tags: [Liquidaciones]
+      operationId: descargarPlantillaMasiva
+      summary: Plantilla .xlsx de la carga masiva (una columna «placa»)
+      description: Permiso impuestos.liquidaciones.crear. El Super Admin la pide para la compañía de `empresa` (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Plantilla.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+
+  /api/v1/impuestos/liquidaciones/masiva/analizar:
+    post:
+      tags: [Liquidaciones]
+      operationId: analizarCargaMasiva
+      summary: Analizar un archivo de placas sin crear el lote
+      description: >
+        Permiso impuestos.liquidaciones.crear. Lee la columna «placa» (.xlsx o .csv, hasta 5 MB), normaliza y deduplica
+        (S4, S16). `tope` es el máximo por lote vigente (operativo si existe; si no, contractual). Con `superaTope`, el
+        front rechaza antes de crear el lote mostrando LIMITE_SUPERADO con el tope. El Super Admin analiza con el tope
+        de la compañía de `empresa` (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        "200":
+          description: Resumen del análisis.
+          content: { application/json: { schema: { $ref: "#/components/schemas/AnalisisCarga" } } }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "413":
+          description: ARCHIVO_DEMASIADO_GRANDE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "415":
+          description: FORMATO_NO_SOPORTADO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: COLUMNA_PLACA_AUSENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/liquidaciones/masiva:
+    post:
+      tags: [Liquidaciones]
+      operationId: crearLiquidacionMasiva
+      summary: Crear un lote con un archivo de placas
+      description: >
+        Permiso impuestos.liquidaciones.crear. El servidor vuelve a analizar el archivo. Crea un lote MASIVA con un ítem
+        por placa única válida y la copia de la configuración vigente (F3-CF3). Los ítems se leen aparte (GET .../items).
+        El Super Admin crea el lote para la compañía de `empresa` (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        "201":
+          description: Lote creado (sin ítems).
+          content: { application/json: { schema: { $ref: "#/components/schemas/Liquidacion" } } }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "409":
+          description: APROVISIONAMIENTO_NO_LISTO o PRODUCTO_SUSPENDIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "413":
+          description: ARCHIVO_DEMASIADO_GRANDE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "415":
+          description: FORMATO_NO_SOPORTADO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: COLUMNA_PLACA_AUSENTE, ARCHIVO_SIN_PLACAS o LIMITE_SUPERADO (con `tope`).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/liquidaciones/{id}:
+    parameters:
+      - $ref: "#/components/parameters/LiquidacionId"
+    get:
+      tags: [Liquidaciones]
+      operationId: obtenerLiquidacion
+      summary: Cabecera del lote con su avance
+      description: >
+        Permiso impuestos.liquidaciones.ver. Otra compañía responde 404 (aislamiento). El Super Admin
+        DEBE enviar `empresa` (1.2.0): sin ella o mal formada, 400 EMPRESA_REQUERIDA; enviada por quien no es Super Admin,
+        403 EMPRESA_SOLO_SUPER_ADMIN; compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Liquidación.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Liquidacion" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/liquidaciones/{id}/items:
+    parameters:
+      - $ref: "#/components/parameters/LiquidacionId"
+    get:
+      tags: [Liquidaciones]
+      operationId: listarItemsLiquidacion
+      summary: Placas del lote
+      description: >
+        Permiso impuestos.liquidaciones.ver. Orden por fila del archivo (o por placa en la individual). El Super Admin
+        DEBE enviar `empresa` (1.2.0): sin ella o mal formada, 400 EMPRESA_REQUERIDA; enviada por quien no es Super Admin,
+        403 EMPRESA_SOLO_SUPER_ADMIN; compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
+      parameters:
+        - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoItem" } }
+        - $ref: "#/components/parameters/Placa"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Página de ítems.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaginaItems" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/liquidaciones/{id}/items/{itemId}:
+    parameters:
+      - $ref: "#/components/parameters/LiquidacionId"
+      - $ref: "#/components/parameters/ItemId"
+    get:
+      tags: [Liquidaciones]
+      operationId: obtenerItemLiquidacion
+      summary: Detalle de la placa con el resultado completo
+      description: >
+        Permiso impuestos.liquidaciones.ver. El Super Admin
+        DEBE enviar `empresa` (1.2.0): sin ella o mal formada, 400 EMPRESA_REQUERIDA; enviada por quien no es Super Admin,
+        403 EMPRESA_SOLO_SUPER_ADMIN; compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Ítem con resultado, vigencias y recibos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ItemDetalle" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/liquidaciones/{id}/cerrar:
+    parameters:
+      - $ref: "#/components/parameters/LiquidacionId"
+    post:
+      tags: [Liquidaciones]
+      operationId: cerrarLiquidacion
+      summary: Cerrar a mano un lote en curso (DA-6b)
+      description: >
+        Permiso impuestos.liquidaciones.cerrar (Administrador Impuestos) o Super Admin; el Gestor recibe 403. Los ítems
+        no finales pasan a SIN_RESULTADO_LOTE_CERRADO y el lote a CERRADO_MANUALMENTE con usuario y fecha. Sale el correo
+        y el aviso de lote terminado una sola vez.
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                motivo: { type: string, maxLength: 300, nullable: true }
+      responses:
+        "200":
+          description: Liquidación cerrada.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Liquidacion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: YA_TERMINADA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/liquidaciones/{id}/items/{itemId}/relanzar:
+    parameters:
+      - $ref: "#/components/parameters/LiquidacionId"
+      - $ref: "#/components/parameters/ItemId"
+    post:
+      tags: [Liquidaciones]
+      operationId: relanzarItemLiquidacion
+      summary: Relanzar una placa como nuevo intento del mismo ítem
+      description: >
+        Permiso impuestos.liquidaciones.crear (1.3.0). No crea otra liquidación: abre un nuevo intento del MISMO ítem. Solo
+        desde INCIERTO_REQUIERE_DECISION, DATOS_INCOMPLETOS, ERROR con clase REINTENTABLE o ERROR `portal_rejected` de
+        placa no inscrita, y con la liquidación sin CERRADO_MANUALMENTE; si no (por ejemplo, el ítem ya está en curso por un
+        relanzamiento anterior o es NO_APLICA), 409 NO_RELANZABLE. El intento que se cierra queda en ItemDetalle.intentos;
+        el ítem sube numeroIntento, pierde el error, el resultado, el total y las vigencias del intento anterior y vuelve a
+        la cola (PENDIENTE y luego CONSULTANDO_RUNT); la liquidación vuelve a EN_PROCESO hasta que termine. posibleDuplicado
+        no se marca. Exige el aprovisionamiento como la individual. El Super Admin relanza en la compañía de `empresa`
+        (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirmarPosibleDuplicado: { type: boolean, description: "Retirado en la 1.3.0: se acepta y se ignora." }
+      responses:
+        "200":
+          description: La misma liquidación, con el ítem en su nuevo intento.
+          content: { application/json: { schema: { $ref: "#/components/schemas/LiquidacionConItems" } } }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: NO_RELANZABLE, APROVISIONAMIENTO_NO_LISTO o PRODUCTO_SUSPENDIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/liquidaciones/{id}/items/{itemId}/recibos/{reciboId}:
+    parameters:
+      - $ref: "#/components/parameters/LiquidacionId"
+      - $ref: "#/components/parameters/ItemId"
+      - { name: reciboId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Recibos]
+      operationId: descargarRecibo
+      summary: Descargar un recibo PDF guardado en la suite
+      description: >
+        Permiso impuestos.recibos.descargar. Se sirve desde el file-manager (ADR-0057), nunca por proxy al proveedor: el
+        navegador no envía ni recibe la api_key. Un recibo que no está GUARDADO responde 409 RECIBO_NO_DISPONIBLE con su
+        `motivo` (el front no pinta enlace para esos recibos).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: RECIBO_NO_DISPONIBLE (con `motivo`).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/reportes/{tipo}:
+    parameters:
+      - $ref: "#/components/parameters/TipoReporte"
+    get:
+      tags: [Reportes]
+      operationId: obtenerReporte
+      summary: Reporte paginado
+      description: >
+        Permiso impuestos.reportes.ver. Datos del propietario completos (DA-7=b); nunca dirección, correo ni teléfono.
+        La forma de cada fila depende del tipo (FilaReporteDetalle, FilaReporteLotes, FilaReporteDeuda,
+        FilaReporteErrores) y `columnas` trae el orden de las columnas con su etiqueta.
+      parameters:
+        - $ref: "#/components/parameters/Desde"
+        - $ref: "#/components/parameters/Hasta"
+        - $ref: "#/components/parameters/ReporteTipoLiquidacion"
+        - $ref: "#/components/parameters/ReporteEstado"
+        - $ref: "#/components/parameters/ReporteDepartamento"
+        - $ref: "#/components/parameters/ReporteUsuario"
+        - $ref: "#/components/parameters/Placa"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Página del reporte.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaginaReporte" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/reportes/{tipo}/excel:
+    parameters:
+      - $ref: "#/components/parameters/TipoReporte"
+    get:
+      tags: [Reportes]
+      operationId: exportarReporteExcel
+      summary: Exportar el reporte a Excel (hasta 5000 filas)
+      description: >
+        Permiso impuestos.reportes.exportar. Mismos filtros que el reporte (sin paginación; declarados desde la 1.1.0). Más de 5000 filas responde 422
+        TOPE_EXPORTACION con tope=5000 (no trunca en silencio). Sin límite de exportaciones por usuario (DA-9b).
+      parameters:
+        - $ref: "#/components/parameters/Desde"
+        - $ref: "#/components/parameters/Hasta"
+        - $ref: "#/components/parameters/ReporteTipoLiquidacion"
+        - $ref: "#/components/parameters/ReporteEstado"
+        - $ref: "#/components/parameters/ReporteDepartamento"
+        - $ref: "#/components/parameters/ReporteUsuario"
+        - $ref: "#/components/parameters/Placa"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Archivo .xlsx.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "422":
+          description: TOPE_EXPORTACION (tope 5000).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/reportes/{tipo}/pdf:
+    parameters:
+      - $ref: "#/components/parameters/TipoReporte"
+    get:
+      tags: [Reportes]
+      operationId: exportarReportePdf
+      summary: Exportar el reporte a PDF (hasta 1000 filas)
+      description: Igual que /excel con tope 1000.
+      parameters:
+        - $ref: "#/components/parameters/Desde"
+        - $ref: "#/components/parameters/Hasta"
+        - $ref: "#/components/parameters/ReporteTipoLiquidacion"
+        - $ref: "#/components/parameters/ReporteEstado"
+        - $ref: "#/components/parameters/ReporteDepartamento"
+        - $ref: "#/components/parameters/ReporteUsuario"
+        - $ref: "#/components/parameters/Placa"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "422":
+          description: TOPE_EXPORTACION (tope 1000).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/catalogos/reportes:
+    get:
+      tags: [Reportes]
+      operationId: obtenerCatalogosReportes
+      summary: Opciones de los filtros de reportes (departamentos y usuarios) (1.1.0)
+      description: >
+        Permiso impuestos.reportes.ver (también el Gestor). Ruta propia para no ampliar el permiso de /fuentes
+        (configuracion.ver) ni el de /usuarios (usuarios.gestionar), que exponen más datos. `departamentos` sale de la
+        caché de /fuentes; si la compañía no tiene aprovisionamiento listo o no hay caché, lista vacía (nunca 409 ni
+        503: los reportes de una compañía suspendida o en error se siguen filtrando). `usuarios` son quienes crearon
+        liquidaciones en la compañía (incluidos los suspendidos), solo id y nombre, sin correo. El Super Admin sin
+        `empresa` recibe las opciones de todas las compañías (vista global).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Opciones de los filtros.
+          content: { application/json: { schema: { $ref: "#/components/schemas/CatalogosReportes" } } }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+
+  /api/v1/impuestos/configuracion:
+    get:
+      tags: [Configuracion]
+      operationId: obtenerConfiguracionImpuestos
+      summary: Configuración contractual (solo lectura) y operativa
+      description: >
+        Permiso impuestos.configuracion.ver (Administrador Impuestos) o Super Admin con `empresa`. Con `empresa` de una
+        compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Configuración.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Configuracion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+    put:
+      tags: [Configuracion]
+      operationId: guardarConfiguracionOperativa
+      summary: Guardar la configuración operativa
+      description: >
+        Permiso impuestos.configuracion.editar. El máximo por lote no supera el contractual (422 TOPE_SUPERA_CONTRACTUAL
+        con `tope`); `null` usa el contractual. El Super Admin guarda la operativa de la compañía de `empresa`, que le
+        es obligatoria (400 EMPRESA_REQUERIDA sin ella) (1.1.0); si la compañía no existe o no tiene Impuestos, 404
+        EMPRESA_NO_ENCONTRADA y no se guarda nada (1.1.0).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ConfiguracionOperativaEntrada" } } }
+      responses:
+        "200":
+          description: Configuración completa tras guardar.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Configuracion" } } }
+        "400": { $ref: "#/components/responses/Empresa400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "422":
+          description: TOPE_SUPERA_CONTRACTUAL (con `tope`), TOPE_INVALIDO o CORREO_INVALIDO (campo).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/fuentes:
+    get:
+      tags: [Configuracion]
+      operationId: listarFuentesImpuestos
+      summary: Departamentos del proveedor (caché de GET /fuentes)
+      description: Permiso impuestos.configuracion.ver. Requiere aprovisionamiento LISTO o LISTO_SIN_WEBHOOK.
+      responses:
+        "200":
+          description: Departamentos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Departamento" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "409":
+          description: APROVISIONAMIENTO_NO_LISTO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          description: PROVEEDOR_NO_DISPONIBLE (sin caché vigente).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/usuarios:
+    get:
+      tags: [Usuarios]
+      operationId: listarUsuariosImpuestos
+      summary: Usuarios de Impuestos de la compañía
+      description: >
+        Permiso impuestos.usuarios.gestionar (Administrador Impuestos) o Super Admin con `empresa`. Delega en
+        flit.platform.v1.UsuariosProductoService de core-api (scope platform.usuarios.impuestos), con la forma de
+        Diagnóstico (ADR-0089). Filtros `rol` y `estado` (1.1.0). Con `empresa`, la página trae la compañía elegida en
+        `empresa` (id, nombre, NIT) para el encabezado del Super Admin.
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: rol, in: query, required: false, schema: { $ref: "#/components/schemas/RolImpuestos" } }
+        - { name: estado, in: query, required: false, schema: { $ref: "#/components/schemas/EstadoUsuarioImpuestos" } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "200":
+          description: Página de usuarios.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaginaUsuarios" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "503": { $ref: "#/components/responses/PlataformaNoDisponible" }
+    post:
+      tags: [Usuarios]
+      operationId: invitarUsuarioImpuestos
+      summary: Invitar a una persona a Impuestos
+      description: Solo el Super Admin da admin_impuestos; el Administrador Impuestos solo da gestor_impuestos (403 ROL_NO_ASIGNABLE).
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InvitacionUsuario" } } }
+      responses:
+        "201":
+          description: Usuario con su rol de Impuestos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioImpuestos" } } }
+        "400":
+          description: CORREO_INVALIDO, NOMBRE_REQUERIDO o EMPRESA_REQUERIDA (Super Admin sin `empresa` válida).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "409":
+          description: ROL_YA_VIGENTE o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: ROL_NO_PERMITIDO (campo rol).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "429": { $ref: "#/components/responses/DemasiadasSolicitudes" }
+        "503": { $ref: "#/components/responses/PlataformaNoDisponible" }
+
+  /api/v1/impuestos/usuarios/{usuarioId}/rol:
+    parameters:
+      - $ref: "#/components/parameters/UsuarioId"
+    put:
+      tags: [Usuarios]
+      operationId: cambiarRolUsuarioImpuestos
+      summary: Cambiar el rol de Impuestos de un usuario
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rol]
+              properties:
+                rol: { $ref: "#/components/schemas/RolImpuestos" }
+      responses:
+        "204": { description: "Rol cambiado." }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO o EMPRESA_REQUERIDA (Super Admin sin `empresa` válida).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: USUARIO_SUSPENDIDO, INVITACION_PENDIENTE o ULTIMO_ADMINISTRADOR.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: ROL_NO_PERMITIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503": { $ref: "#/components/responses/PlataformaNoDisponible" }
+
+  /api/v1/impuestos/usuarios/{usuarioId}/suspender:
+    parameters:
+      - $ref: "#/components/parameters/UsuarioId"
+    post:
+      tags: [Usuarios]
+      operationId: suspenderUsuarioImpuestos
+      summary: Suspender a un usuario en Impuestos (la cuenta y los demás productos no cambian)
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "204": { description: "Suspendido (idempotente)." }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO o EMPRESA_REQUERIDA (Super Admin sin `empresa` válida).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: ULTIMO_ADMINISTRADOR o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503": { $ref: "#/components/responses/PlataformaNoDisponible" }
+
+  /api/v1/impuestos/usuarios/{usuarioId}/reactivar:
+    parameters:
+      - $ref: "#/components/parameters/UsuarioId"
+    post:
+      tags: [Usuarios]
+      operationId: reactivarUsuarioImpuestos
+      summary: Reactivar a un usuario en Impuestos con el rol que tenía
+      parameters:
+        - $ref: "#/components/parameters/Empresa"
+      responses:
+        "204": { description: "Reactivado (idempotente)." }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO o EMPRESA_REQUERIDA (Super Admin sin `empresa` válida).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: ROL_YA_VIGENTE o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503": { $ref: "#/components/responses/PlataformaNoDisponible" }
+
+  /api/v1/impuestos/notificaciones:
+    get:
+      tags: [Notificaciones]
+      operationId: listarNotificacionesImpuestos
+      summary: Avisos en pantalla de la compañía («lote terminado»)
+      description: Autenticado. La campana los lee al cambiar de ruta (sin sondeo agresivo).
+      responses:
+        "200":
+          description: Avisos, el más reciente primero.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notificacion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+
+  /api/v1/impuestos/notificaciones/{notificacionId}/leida:
+    parameters:
+      - { name: notificacionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Notificaciones]
+      operationId: marcarNotificacionLeida
+      summary: Marcar un aviso como leído para el usuario
+      responses:
+        "204": { description: "Marcado (idempotente)." }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/backoffice/empresas:
+    get:
+      tags: [Backoffice]
+      operationId: listarEmpresasBackofficeImpuestos
+      summary: Compañías con Impuestos y su aprovisionamiento (Super Admin)
+      description: Permiso impuestos.backoffice.ver (solo Super Admin). Incluye las suspendidas (F4-CF10).
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Página de compañías.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaginaEmpresasBackoffice" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+
+  /api/v1/impuestos/backoffice/empresas/{tenantId}/aprovisionamiento:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Backoffice]
+      operationId: obtenerAprovisionamientoBackoffice
+      summary: Estado de aprovisionamiento con su historial (Super Admin)
+      responses:
+        "200":
+          description: Estado e historial.
+          content: { application/json: { schema: { $ref: "#/components/schemas/AprovisionamientoDetalle" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /api/v1/impuestos/backoffice/empresas/{tenantId}/aprovisionamiento/reintentar:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    post:
+      tags: [Backoffice]
+      operationId: reintentarAprovisionamientoBackoffice
+      summary: Reintentar el aprovisionamiento desde Impuestos (Super Admin)
+      description: >
+        Solo desde ERROR, INCIERTO, REQUIERE_REVISION_NIT o LISTO_SIN_WEBHOOK (desde la 1.2.0: el alta idempotente
+        devuelve el secreto del webhook); pasa a PENDIENTE y se evalúa en segundo plano. En otro estado, 409
+        ESTADO_NO_REINTENTABLE.
+      responses:
+        "202": { description: "Reintento aceptado." }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: ESTADO_NO_REINTENTABLE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/backoffice/empresas/{tenantId}/credenciales:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    get:
+      tags: [Backoffice]
+      operationId: obtenerEstadoCredencialesBackoffice
+      summary: Si la compañía tiene credenciales cargadas, sin los valores (Super Admin)
+      responses:
+        "200":
+          description: Estado de las credenciales (nunca los valores).
+          content: { application/json: { schema: { $ref: "#/components/schemas/EstadoCredenciales" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+    put:
+      tags: [Backoffice]
+      operationId: cargarCredencialesBackoffice
+      summary: Cargar api_key y webhook_secret del proveedor (Super Admin)
+      description: >
+        Permiso impuestos.credenciales.cargar (solo Super Admin). Admitido en REQUIERE_CREDENCIALES (api_key obligatoria,
+        webhook_secret opcional) y en LISTO_SIN_WEBHOOK (solo webhook_secret, o los dos). Se valida la api_key con
+        GET /fuentes del proveedor antes de guardar; si la rechaza, 422 CREDENCIAL_INVALIDA y el estado no cambia. Al
+        guardar: LISTO (firma sin confirmar) con secreto, LISTO_SIN_WEBHOOK sin él. Nunca devuelve ni registra los
+        valores; el formulario usa campos ocultos y luego solo muestra «Configurada».
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CargaCredenciales" } } }
+      responses:
+        "204": { description: "Guardadas y validadas." }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: ESTADO_NO_ADMITE_CARGA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: CREDENCIAL_INVALIDA o CREDENCIAL_REQUERIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          description: PROVEEDOR_NO_DISPONIBLE (no se pudo validar; no se guarda nada).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/backoffice/empresas/{tenantId}/configuracion-contractual:
+    parameters:
+      - $ref: "#/components/parameters/TenantId"
+    put:
+      tags: [Backoffice]
+      operationId: guardarConfiguracionContractual
+      summary: Guardar la configuración contractual (Super Admin)
+      description: >
+        Permiso impuestos.configuracion.contrato.editar (solo Super Admin). `departamentosHabilitados` null = todos los
+        activos de /fuentes. Si el nuevo contractual queda por debajo del operativo, el operativo se ajusta al contractual.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ConfiguracionContractualEntrada" } } }
+      responses:
+        "200":
+          description: Configuración completa tras guardar.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Configuracion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: >
+            APROVISIONAMIENTO_NO_LISTO (1.1.0): la compañía no está en LISTO ni LISTO_SIN_WEBHOOK y no se puede validar
+            `departamentosHabilitados` contra /fuentes del proveedor. No se guarda nada.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: TOPE_INVALIDO o DEPARTAMENTO_NO_DISPONIBLE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  /api/v1/impuestos/avisos/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: Token opaco del ítem (32 bytes en base64url, 43 caracteres). En la base solo se guarda su SHA-256.
+        schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$" }
+    post:
+      tags: [Avisos]
+      operationId: recibirAvisoProveedor
+      summary: Webhook del proveedor con el resultado de una consulta
+      description: >
+        Anónimo (AllowAnonymous); lo autentica la firma. Cabeceras del proveedor: X-Flit-Signature (v1=<hex HMAC-SHA256
+        de "{timestamp}.{cuerpo crudo}">), X-Flit-Timestamp (±300 s) y X-Flit-Delivery (dedupe). Responde en menos de 10 s
+        y aplica en segundo plano. Sin cuerpo en ninguna respuesta. No pasa por el guard de suscripción: una compañía
+        suspendida recibe 200 (S6). Ruta propia en el gateway (`impuestos-route`), sin política del gateway.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: "Cuerpo crudo del aviso del proveedor (guía de integración §6)." }
+      responses:
+        "200": { description: "Recibido (también duplicado, de compañía suspendida, de ítem cerrado o con consulta.id distinto)." }
+        "401": { description: "Token conocido con firma o timestamp inválidos." }
+        "410": { description: "Token desconocido (corta los reintentos del proveedor)." }
+        "413": { description: "Cuerpo de más de 256 KB." }
+        "429": { description: "Más de 60 peticiones por minuto desde la misma IP." }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Empresa:
+      name: empresa
+      in: query
+      required: false
+      description: >
+        Solo Super Admin. Compañía explícita (tenantId). Para otro usuario, 403 EMPRESA_SOLO_SUPER_ADMIN; valor que no
+        es uuid, repetido con dos valores, o ausente donde el Super Admin opera sobre una sola compañía, 400
+        EMPRESA_REQUERIDA (ver la descripción común).
+      schema: { type: string, format: uuid }
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LiquidacionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UsuarioId:
+      name: usuarioId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Desde:
+      name: desde
+      in: query
+      description: Fecha inicial (inclusive), hora de Colombia. Por defecto hoy menos 30 días.
+      schema: { type: string, format: date }
+    Hasta:
+      name: hasta
+      in: query
+      description: Fecha final (inclusive). Por defecto hoy. Un rango invertido o de más de 366 días responde 400 RANGO_INVALIDO.
+      schema: { type: string, format: date }
+    Placa:
+      name: placa
+      in: query
+      description: Placa o parte de ella; se normaliza como al crear.
+      schema: { type: string, maxLength: 10 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    ReporteTipoLiquidacion:
+      name: tipoLiquidacion
+      in: query
+      schema: { $ref: "#/components/schemas/TipoLiquidacion" }
+    ReporteEstado:
+      name: estado
+      in: query
+      schema: { $ref: "#/components/schemas/EstadoItem" }
+    ReporteDepartamento:
+      name: departamento
+      in: query
+      schema: { type: string, pattern: "^[0-9]{2}$" }
+    ReporteUsuario:
+      name: usuario
+      in: query
+      schema: { type: string, format: uuid }
+    TipoReporte:
+      name: tipo
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/TipoReporte" }
+
+  responses:
+    Unauthorized:
+      description: Sin sesión, token inválido o de otro producto.
+    Prohibido:
+      description: >
+        Sin el permiso de la ruta (sin cuerpo), o con cuerpo SIN_EMPRESA, PRODUCTO_NO_HABILITADO, ROL_NO_ASIGNABLE,
+        OBJETIVO_PROTEGIDO o EMPRESA_SOLO_SUPER_ADMIN (`empresa` enviada por quien no es Super Admin).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    NoEncontrado:
+      description: >
+        LIQUIDACION_NO_ENCONTRADA, ITEM_NO_ENCONTRADO, RECIBO_NO_ENCONTRADO, REPORTE_NO_ENCONTRADO, USUARIO_NO_ENCONTRADO
+        o EMPRESA_NO_ENCONTRADA. Un recurso de otra compañía responde igual que uno inexistente.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    Regla400:
+      description: RANGO_INVALIDO, FILTRO_INVALIDO, PAGINACION_INVALIDA o EMPRESA_REQUERIDA.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    Empresa400:
+      description: EMPRESA_REQUERIDA (Super Admin con `empresa` que no es uuid, repetida, o ausente en una escritura).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    PlataformaNoDisponible:
+      description: PLATAFORMA_NO_DISPONIBLE (core-api no respondió), con Retry-After.
+      headers:
+        Retry-After: { schema: { type: integer, example: 30 }, description: "Segundos para reintentar." }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    DemasiadasSolicitudes:
+      description: DEMASIADAS_SOLICITUDES, con Retry-After.
+      headers:
+        Retry-After: { schema: { type: integer }, description: "Segundos para reintentar." }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
+  schemas:
+    ErrorRegla:
+      type: object
+      required: [code, error]
+      properties:
+        code: { type: string, example: APROVISIONAMIENTO_NO_LISTO }
+        error: { type: string, description: "Literal de x-flit-literales.errores para el código, con {tope} sustituido." }
+        campo: { type: string, description: "Campo del cuerpo que incumple la regla." }
+        tope: { type: integer, description: "En LIMITE_SUPERADO, TOPE_SUPERA_CONTRACTUAL y TOPE_EXPORTACION." }
+        motivo: { $ref: "#/components/schemas/MotivoRecibo" }
+
+    Referencia:
+      type: object
+      required: [id, nombre]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+
+    Sesion:
+      type: object
+      required: [usuario, empresa, roles, permisos, esSuperAdmin, aprovisionamiento]
+      properties:
+        usuario:
+          type: object
+          required: [id, nombre, email]
+          properties:
+            id: { type: string, format: uuid }
+            nombre: { type: string }
+            email: { type: string }
+        empresa: { $ref: "#/components/schemas/Referencia" }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/RolImpuestos" }
+        permisos:
+          type: array
+          description: Solo slugs impuestos.*.
+          items: { type: string }
+        esSuperAdmin: { type: boolean }
+        aprovisionamiento:
+          type: object
+          required: [estado, firmaConfirmada, modoSinWebhook, puedeLiquidar, motivoNoLiquida]
+          properties:
+            estado: { $ref: "#/components/schemas/EstadoAprovisionamiento" }
+            firmaConfirmada: { type: boolean, description: "false en LISTO = banner «Firma sin confirmar»." }
+            modoSinWebhook: { type: boolean, description: "true en LISTO_SIN_WEBHOOK o con el modo respaldo por firma = banner «Modo sin webhook»." }
+            puedeLiquidar: { type: boolean, description: "true solo en LISTO o LISTO_SIN_WEBHOOK y con el producto activo." }
+            motivoNoLiquida:
+              type: string
+              nullable: true
+              enum: [APROVISIONAMIENTO_NO_LISTO, PRODUCTO_SUSPENDIDO]
+              description: Con puedeLiquidar=false, el código cuyo literal (x-flit-literales.errores) explica las acciones deshabilitadas.
+
+    RolImpuestos:
+      type: string
+      enum: [gestor_impuestos, admin_impuestos]
+      x-flit-etiquetas:
+        gestor_impuestos: Gestor Impuestos
+        admin_impuestos: Administrador Impuestos
+
+    EstadoAprovisionamiento:
+      type: string
+      enum: [PENDIENTE, LISTO, LISTO_SIN_WEBHOOK, ERROR, INCIERTO, REQUIERE_CREDENCIALES, REQUIERE_REVISION_NIT, SUSPENDIDO]
+      description: Plan §3.1. Mismos valores y etiquetas que ProvisioningStatus de platform.v1.yaml.
+      x-flit-etiquetas:
+        PENDIENTE: Pendiente
+        LISTO: Listo
+        LISTO_SIN_WEBHOOK: Listo sin webhook
+        ERROR: Error
+        INCIERTO: Incierto
+        REQUIERE_CREDENCIALES: Requiere credenciales
+        REQUIERE_REVISION_NIT: Requiere revisión del NIT
+        SUSPENDIDO: Suspendido
+
+    AccionAprovisionamiento:
+      type: string
+      nullable: true
+      description: >
+        Acción del Super Admin para el estado (plan §3.1). Desde la 1.2.0, LISTO_SIN_WEBHOOK lleva REINTENTAR (el alta
+        idempotente trae el secreto); CARGAR_SECRETO queda retirada (ningún estado la emite; literal conservado).
+      enum: [REINTENTAR, CARGAR_SECRETO, CARGAR_CREDENCIALES, CORREGIR_NIT]
+      x-flit-etiquetas:
+        REINTENTAR: Reintentar
+        CARGAR_SECRETO: Cargar secreto
+        CARGAR_CREDENCIALES: Cargar credenciales
+        CORREGIR_NIT: Corregir NIT
+
+    MotivoAprovisionamiento:
+      type: string
+      nullable: true
+      description: >
+        Código del motivo del estado (motivo_codigo). El servicio reporta a la plataforma el literal como `mensaje`
+        (platform.v1.yaml TenantProductProvisioning.message), así que el admin de compañías y el backoffice muestran el
+        mismo texto. 1.2.0: EMPRESA_INACTIVA_EN_PROVEEDOR (el alta trajo las credenciales con company.active=false) y
+        CLAVE_ROTADA (el alta respondió api_key_rotated y se reemplazó la llave; aparece en el historial). Retirados
+        (ningún flujo los emite; literal conservado porque el historial puede traerlos): EMPRESA_YA_REGISTRADA y
+        ALTA_SIN_CONFIRMAR.
+      enum:
+        - REINTENTO_PROGRAMADO
+        - SIN_WEBHOOK_SECRET
+        - ALTA_DATOS_RECHAZADOS
+        - RAZON_SOCIAL_LARGA
+        - AMBIENTE_NO_CONFIGURADO
+        - PROVEEDOR_INALCANZABLE
+        - ALTA_SIN_CONFIRMAR
+        - EMPRESA_YA_REGISTRADA
+        - CREDENCIAL_RECHAZADA
+        - NIT_AUSENTE
+        - NIT_AMBIGUO
+        - NIT_IGUAL_A_CABEZA
+        - PRODUCTO_DESACTIVADO
+        - EMPRESA_INACTIVA_EN_PROVEEDOR
+        - CLAVE_ROTADA
+      x-flit-etiquetas:
+        REINTENTO_PROGRAMADO: No se pudo contactar al proveedor; se reintentará automáticamente.
+        SIN_WEBHOOK_SECRET: "Falta el secreto del webhook: los resultados se consultan al proveedor."
+        ALTA_DATOS_RECHAZADOS: "El proveedor rechazó los datos del alta de la compañía."
+        RAZON_SOCIAL_LARGA: La razón social supera los 200 caracteres que admite el proveedor.
+        AMBIENTE_NO_CONFIGURADO: La integración con el proveedor no está configurada en este ambiente.
+        PROVEEDOR_INALCANZABLE: No se pudo contactar al proveedor después de varios intentos.
+        ALTA_SIN_CONFIRMAR: "El proveedor no confirmó el alta: puede haberla recibido. Reintenta para verificar."
+        EMPRESA_YA_REGISTRADA: "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas en Impuestos."
+        CREDENCIAL_RECHAZADA: "El proveedor rechazó la API key de la compañía: carga credenciales nuevas en Impuestos."
+        NIT_AUSENTE: La compañía no tiene NIT.
+        NIT_AMBIGUO: No se puede separar el dígito de verificación del NIT.
+        NIT_IGUAL_A_CABEZA: El NIT es el mismo de su compañía cabeza.
+        PRODUCTO_DESACTIVADO: Impuestos está desactivado para la compañía.
+        EMPRESA_INACTIVA_EN_PROVEEDOR: "El proveedor tiene la compañía desactivada: pide su reactivación y luego reintenta."
+        CLAVE_ROTADA: El proveedor reemplazó la API key de la compañía; la nueva quedó guardada.
+
+    TipoLiquidacion:
+      type: string
+      enum: [INDIVIDUAL, MASIVA]
+      x-flit-etiquetas:
+        INDIVIDUAL: Individual
+        MASIVA: Masiva
+
+    EstadoLiquidacion:
+      type: string
+      enum: [CREADO, EN_PROCESO, COMPLETADO, COMPLETADO_CON_NOVEDADES, CERRADO_MANUALMENTE]
+      description: Plan §3.3.
+      x-flit-etiquetas:
+        CREADO: Creado
+        EN_PROCESO: En proceso
+        COMPLETADO: Completado
+        COMPLETADO_CON_NOVEDADES: Completado con novedades
+        CERRADO_MANUALMENTE: Cerrado manualmente
+
+    EstadoItem:
+      type: string
+      enum:
+        - PENDIENTE
+        - CONSULTANDO_RUNT
+        - REINTENTO_PROGRAMADO
+        - ENVIANDO
+        - ENVIADO
+        - INCIERTO
+        - INCIERTO_REQUIERE_DECISION
+        - DATOS_INCOMPLETOS
+        - DEPARTAMENTO_NO_HABILITADO
+        - EXITOSO
+        - ERROR
+        - SIN_RESULTADO_LOTE_CERRADO
+        - NO_APLICA
+      description: >
+        Plan §3.2. Junto a DATOS_INCOMPLETOS va la etiqueta de `campoFaltante`; junto a DEPARTAMENTO_NO_HABILITADO, el
+        nombre del departamento; junto a INCIERTO, x-flit-literales.pantalla.detalleIncierto. NO_APLICA (1.3.0): el RUNT
+        reporta el vehículo como de servicio público; es final, no se relanza, no cuenta como error ni como exitosa, y lleva
+        errorCodigo `servicio_publico` con errorMensaje «El RUNT reporta el vehículo como de servicio público. Los vehículos
+        de servicio público no pagan impuesto vehicular.»
+      x-flit-etiquetas:
+        PENDIENTE: Pendiente
+        CONSULTANDO_RUNT: Consultando RUNT
+        REINTENTO_PROGRAMADO: Reintento programado
+        ENVIANDO: Enviando
+        ENVIADO: Esperando resultado
+        INCIERTO: Incierto
+        INCIERTO_REQUIERE_DECISION: Incierto — requiere decisión
+        DATOS_INCOMPLETOS: Datos incompletos
+        DEPARTAMENTO_NO_HABILITADO: Departamento no habilitado
+        EXITOSO: Exitosa
+        ERROR: Con error
+        SIN_RESULTADO_LOTE_CERRADO: Sin resultado (lote cerrado)
+        NO_APLICA: No aplica (servicio público)
+
+    ResultadoStatus:
+      type: string
+      nullable: true
+      enum: [con_deuda, paz_y_salvo, error]
+      description: result.status del proveedor (guía §6). null sin resultado.
+      x-flit-etiquetas:
+        con_deuda: Con deuda
+        paz_y_salvo: Paz y salvo
+        error: Con error
+
+    ClaseError:
+      type: string
+      nullable: true
+      enum: [CORREGIR_DATOS, DEPENDE, REINTENTABLE]
+      description: Clase del error según la guía §9 (AC-BE-49).
+      x-flit-etiquetas:
+        CORREGIR_DATOS: Corregir datos
+        DEPENDE: Depende del mensaje
+        REINTENTABLE: Reintentable como nueva consulta
+
+    CampoFaltante:
+      type: string
+      nullable: true
+      description: Dato del RUNT que falta para el departamento (nombre del campo del payload del proveedor), o la secretaría sin homologar.
+      enum:
+        - documentType
+        - documentNumber
+        - OwnerName
+        - vehicleModel
+        - secretaryDepartmentCode
+        - secretaryCity
+        - OwnerEmail
+        - OwnerPhone
+        - OwnerAddress
+      x-flit-etiquetas:
+        documentType: Tipo de documento del propietario
+        documentNumber: Número de documento del propietario
+        OwnerName: Nombre del propietario
+        vehicleModel: Modelo del vehículo
+        secretaryDepartmentCode: Secretaría de tránsito sin homologar
+        secretaryCity: Municipio de la secretaría de tránsito
+        OwnerEmail: Correo del propietario
+        OwnerPhone: Celular o teléfono del propietario
+        OwnerAddress: Dirección del propietario
+
+    EstadoRecibo:
+      type: string
+      enum: [PENDIENTE, GUARDADO, SIN_ARCHIVO, PENDIENTE_REINTENTO_MANUAL]
+      x-flit-etiquetas:
+        PENDIENTE: Descargando
+        GUARDADO: Disponible
+        SIN_ARCHIVO: Sin recibo
+        PENDIENTE_REINTENTO_MANUAL: No disponible
+
+    MotivoRecibo:
+      type: string
+      nullable: true
+      enum: [SIN_FILE_ID, FILE_MISSING, NOT_FOUND, STORAGE_UNAVAILABLE]
+      description: >
+        AC-BE-51 / AC-FE-22: un mensaje distinto por caso. Con SIN_FILE_ID el front agrega la razón del warning
+        (`razon` del recibo) tras el literal: «Sin recibo: <razón>».
+      x-flit-etiquetas:
+        SIN_FILE_ID: Sin recibo
+        FILE_MISSING: El archivo no existe en el proveedor
+        NOT_FOUND: El proveedor no encontró el archivo
+        STORAGE_UNAVAILABLE: Almacenamiento del proveedor no disponible, intentar más tarde
+
+    TipoRecibo:
+      type: string
+      enum: [VIGENCIA, CONSOLIDADO, PAZ_Y_SALVO]
+      x-flit-etiquetas:
+        VIGENCIA: Recibo de vigencia
+        CONSOLIDADO: Recibo consolidado
+        PAZ_Y_SALVO: Paz y salvo
+
+    MotivoFilaInvalida:
+      type: string
+      enum: [PLACA_VACIA, PLACA_INVALIDA]
+      x-flit-etiquetas:
+        PLACA_VACIA: Fila sin placa
+        PLACA_INVALIDA: Placa no válida (de 4 a 10 letras o números)
+
+    TipoNotificacion:
+      type: string
+      enum: [LOTE_TERMINADO]
+      x-flit-etiquetas:
+        LOTE_TERMINADO: Lote terminado
+
+    TipoReporte:
+      type: string
+      enum: [detalle, lotes, deuda, errores]
+      x-flit-etiquetas:
+        detalle: Detalle de liquidaciones
+        lotes: Resumen por lote
+        deuda: Placas con deuda
+        errores: Errores de liquidación
+
+    OrigenCredencial:
+      type: string
+      nullable: true
+      enum: [ALTA, COPIA_DIAGNOSTICO, CARGA_MANUAL]
+      x-flit-etiquetas:
+        ALTA: Alta automática
+        COPIA_DIAGNOSTICO: Copiada de Diagnóstico
+        CARGA_MANUAL: Cargada por el Super Admin
+
+    SolicitudIndividual:
+      type: object
+      additionalProperties: false
+      required: [placa]
+      properties:
+        placa: { type: string, minLength: 1, maxLength: 20, example: " abc-123 " }
+
+    Contadores:
+      type: object
+      required: [exitosas, conDeuda, pazYSalvo, error, datosIncompletos, departamentoNoHabilitado, incierto, sinResultado, pendientes, noAplica]
+      properties:
+        exitosas: { type: integer }
+        conDeuda: { type: integer }
+        pazYSalvo: { type: integer }
+        error: { type: integer }
+        datosIncompletos: { type: integer }
+        departamentoNoHabilitado: { type: integer }
+        incierto: { type: integer }
+        sinResultado: { type: integer }
+        pendientes: { type: integer }
+        noAplica: { type: integer, description: "Ítems NO_APLICA (servicio público, 1.3.0)." }
+      x-flit-etiquetas:
+        exitosas: Exitosas
+        conDeuda: Con deuda
+        pazYSalvo: Paz y salvo
+        error: Con error
+        datosIncompletos: Datos incompletos
+        departamentoNoHabilitado: Departamento no habilitado
+        incierto: Inciertas
+        sinResultado: Sin resultado
+        pendientes: Pendientes
+        noAplica: No aplica
+
+    ResumenLiquidacion:
+      type: object
+      required: [id, tipo, estado, totalItems, contadores, creadaEn, creadaPor, empresa]
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { $ref: "#/components/schemas/TipoLiquidacion" }
+        estado: { $ref: "#/components/schemas/EstadoLiquidacion" }
+        totalItems: { type: integer }
+        contadores: { $ref: "#/components/schemas/Contadores" }
+        creadaEn: { type: string, format: date-time }
+        creadaPor: { $ref: "#/components/schemas/Referencia" }
+        empresa: { $ref: "#/components/schemas/Referencia" }
+        nombreArchivo: { type: string, nullable: true }
+        placa: { type: string, nullable: true, description: "Solo en INDIVIDUAL." }
+        itemId: { type: string, format: uuid, nullable: true, description: "Solo en INDIVIDUAL: id de su único ítem, para enlazar al detalle de la placa (1.1.0)." }
+        estadoItem: { type: string, allOf: [{ $ref: "#/components/schemas/EstadoItem" }], nullable: true, description: "Solo en INDIVIDUAL: estado de su único ítem (1.1.0); null en MASIVA." }
+        placaNoInscrita: { type: boolean, nullable: true, description: "Solo en INDIVIDUAL: true si su único ítem quedó en ERROR de placa no inscrita (portal_rejected), false si no (1.2.3); null en MASIVA." }
+
+    Liquidacion:
+      allOf:
+        - $ref: "#/components/schemas/ResumenLiquidacion"
+        - type: object
+          required: [configCopia]
+          properties:
+            terminadaEn: { type: string, format: date-time, nullable: true }
+            cerradaPor: { type: object, allOf: [{ $ref: "#/components/schemas/Referencia" }], nullable: true, description: "Quien cerró el lote a mano (DA-6b); null si terminó solo." }
+            cerradaEn: { type: string, format: date-time, nullable: true, description: "Fecha del cierre manual; null si terminó solo." }
+            motivoCierre: { type: string, maxLength: 300, nullable: true, description: "Motivo del cierre manual (POST .../cerrar); null si no hubo cierre o no se dio (1.1.0)." }
+            configCopia:
+              type: object
+              required: [maxRegistrosLote, departamentosHabilitados, concurrencia]
+              properties:
+                maxRegistrosLote: { type: integer }
+                departamentosHabilitados: { type: array, nullable: true, items: { type: string } }
+                concurrencia: { type: integer }
+
+    LiquidacionConItems:
+      allOf:
+        - $ref: "#/components/schemas/Liquidacion"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Item" }
+
+    PaginaLiquidaciones:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ResumenLiquidacion" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Propietario:
+      type: object
+      nullable: true
+      description: Completo, sin enmascarar (DA-7=b). Nunca dirección, correo ni teléfono.
+      required: [nombre, documentoTipo, documentoNumero]
+      properties:
+        nombre: { type: string, nullable: true }
+        documentoTipo: { type: string, nullable: true, enum: [CC, NIT, CE, PA, TI, CD] }
+        documentoNumero: { type: string, nullable: true }
+
+    Departamento:
+      type: object
+      required: [codigo, nombre]
+      properties:
+        codigo: { type: string, example: "25" }
+        nombre: { type: string, example: Cundinamarca }
+        activa: { type: boolean }
+
+    Secretaria:
+      type: object
+      nullable: true
+      description: Secretaría de tránsito de la placa según el RUNT (1.1.0); null si el RUNT no la trajo.
+      required: [nombre, ciudad]
+      properties:
+        nombre: { type: string, nullable: true }
+        ciudad: { type: string, nullable: true }
+      x-flit-etiquetas:
+        nombre: Secretaría
+        ciudad: Ciudad
+
+    Item:
+      type: object
+      required: [id, liquidacionId, placa, estado, errorCodigo, errorClase, campoFaltante, departamento, propietario, totalAPagar, resultadoStatus, parcial, posibleDuplicado]
+      properties:
+        id: { type: string, format: uuid }
+        liquidacionId: { type: string, format: uuid }
+        fila: { type: integer, nullable: true }
+        placa: { type: string, example: ABC123 }
+        estado: { $ref: "#/components/schemas/EstadoItem" }
+        errorCodigo: { type: string, nullable: true, description: "Código del proveedor (guía §9) o RUNT_*." }
+        errorClase: { $ref: "#/components/schemas/ClaseError" }
+        errorMensaje: { type: string, nullable: true, description: "Texto del proveedor para el usuario (result.error.message)." }
+        campoFaltante: { $ref: "#/components/schemas/CampoFaltante" }
+        departamento: { type: object, allOf: [{ $ref: "#/components/schemas/Departamento" }], nullable: true }
+        propietario: { $ref: "#/components/schemas/Propietario" }
+        totalAPagar: { type: number, nullable: true, description: "null = «Sin dato» (nunca 0)." }
+        resultadoStatus: { $ref: "#/components/schemas/ResultadoStatus" }
+        parcial: { type: boolean, description: "true si la consulta terminó partial." }
+        posibleDuplicado: { type: boolean, description: "Solo en ítems relanzados antes de la 1.3.0; desde entonces siempre false." }
+        resultadoTardio: { type: boolean }
+        relanzadoDesde: { type: string, format: uuid, nullable: true, description: "Id del ítem original. Desde la 1.1.0 se prefiere relanzadoDesdeItemId (mismo valor)." }
+        relanzadoDesdeItemId: { type: string, format: uuid, nullable: true, description: "Id del ítem original del que se relanzó (1.1.0)." }
+        relanzadoDesdeLiquidacionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Id de la liquidación (lote) del ítem original (1.2.0), para armar /liquidaciones/{id}/items/{itemId} del
+            original. null si el ítem no es un relanzamiento. Se deriva del ítem original; no es una columna propia.
+        secretaria: { $ref: "#/components/schemas/Secretaria" }
+
+    PaginaItems:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Item" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Periodo:
+      type: object
+      required: [periodo, avaluo, impuesto, sancion, intereses, descuentos, pagosPrevios, totalAPagar, otrosCargos, vencimiento, referenciaPago, noLiquidable]
+      description: Una vigencia adeudada. Todo monto puede ser null («Sin dato»).
+      properties:
+        periodo: { type: string, example: "2025" }
+        avaluo: { type: number, nullable: true }
+        impuesto: { type: number, nullable: true }
+        sancion: { type: number, nullable: true }
+        intereses: { type: number, nullable: true }
+        descuentos: { type: number, nullable: true }
+        pagosPrevios: { type: number, nullable: true }
+        totalAPagar: { type: number, nullable: true }
+        otrosCargos:
+          type: array
+          items:
+            type: object
+            required: [descripcion, monto]
+            properties:
+              descripcion: { type: string }
+              monto: { type: number, nullable: true }
+        vencimiento: { type: string, format: date, nullable: true }
+        referenciaPago: { type: string, nullable: true }
+        noLiquidable: { type: boolean, description: "true con el warning period_not_liquidable (sin montos ni recibo)." }
+        reciboId: { type: string, format: uuid, nullable: true }
+      x-flit-etiquetas:
+        periodo: Vigencia
+        avaluo: Avalúo
+        impuesto: Impuesto
+        sancion: Sanción
+        intereses: Intereses
+        descuentos: Descuentos
+        pagosPrevios: Pagos previos
+        totalAPagar: Total a pagar
+        otrosCargos: Otros cargos
+        vencimiento: Vencimiento
+        referenciaPago: Referencia de pago
+        noLiquidable: El portal no permite liquidar esta vigencia
+
+    Recibo:
+      type: object
+      required: [id, tipo, periodos, estado, motivo]
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { $ref: "#/components/schemas/TipoRecibo" }
+        periodos: { type: array, items: { type: string } }
+        estado: { $ref: "#/components/schemas/EstadoRecibo" }
+        motivo: { $ref: "#/components/schemas/MotivoRecibo" }
+        razon: { type: string, nullable: true, description: "Con SIN_FILE_ID, el texto del warning del proveedor." }
+
+    ItemDetalle:
+      allOf:
+        - $ref: "#/components/schemas/Item"
+        - type: object
+          required: [empresa, creadaPor, creadaEn, resultado, periodos, recibos, numeroIntento, intentos]
+          properties:
+            empresa: { $ref: "#/components/schemas/Referencia" }
+            creadaPor: { $ref: "#/components/schemas/Referencia" }
+            creadaEn: { type: string, format: date-time }
+            consultaStatus: { type: string, nullable: true, enum: [succeeded, partial, failed], description: "consulta.status del proveedor." }
+            resultado:
+              type: object
+              nullable: true
+              description: >
+                result completo del proveedor (guía §6), tal cual: totals, lastPayment, clearance, validations (enviado
+                frente a portal), warnings, file_errors y error. null sin resultado.
+            periodos: { type: array, items: { $ref: "#/components/schemas/Periodo" } }
+            recibos: { type: array, items: { $ref: "#/components/schemas/Recibo" } }
+            numeroIntento: { type: integer, minimum: 1, description: "Intento en curso (1.3.0): 1 al crear, +1 por relanzamiento." }
+            intentos:
+              type: array
+              description: "Intentos cerrados al relanzar (1.3.0), el más reciente primero; vacío si nunca se relanzó."
+              items: { $ref: "#/components/schemas/IntentoItem" }
+
+    IntentoItem:
+      type: object
+      description: >
+        Un intento cerrado de un ítem (1.3.0): la foto del ítem en el momento de relanzarlo. Sin datos del propietario ni el
+        resultado del proveedor.
+      required: [numero, estado, errorCodigo, errorMensaje, totalAPagar, registradoEn, relanzadoPor]
+      properties:
+        numero: { type: integer, minimum: 1 }
+        estado: { $ref: "#/components/schemas/EstadoItem" }
+        errorCodigo: { type: string, nullable: true }
+        errorMensaje: { type: string, nullable: true }
+        totalAPagar: { type: number, nullable: true, description: "null = «Sin dato» (nunca 0)." }
+        registradoEn: { type: string, format: date-time, description: "Cuándo se cerró el intento (el relanzamiento)." }
+        relanzadoPor: { type: string, nullable: true, description: "Nombre de quien relanzó, tal como venía en su token." }
+
+    AnalisisCarga:
+      type: object
+      required: [validas, duplicadas, invalidas, tope, superaTope]
+      properties:
+        validas: { type: integer, description: "Placas únicas válidas." }
+        duplicadas: { type: integer }
+        invalidas:
+          type: array
+          items:
+            type: object
+            required: [fila, valor, motivo]
+            properties:
+              fila: { type: integer }
+              valor: { type: string }
+              motivo: { $ref: "#/components/schemas/MotivoFilaInvalida" }
+        tope: { type: integer }
+        superaTope: { type: boolean }
+
+    Dashboard:
+      type: object
+      required: [periodo, contadores, resultados, deuda, montoTotal, liquidacionesSinMonto, parcial, serie, porDepartamento, ultimosLotes, ranking]
+      properties:
+        periodo:
+          type: object
+          required: [desde, hasta]
+          properties:
+            desde: { type: string, format: date }
+            hasta: { type: string, format: date }
+        contadores:
+          type: object
+          required: [total, individuales, masivas, lotesEnProceso]
+          properties:
+            total: { type: integer }
+            individuales: { type: integer }
+            masivas: { type: integer }
+            lotesEnProceso: { type: integer }
+          x-flit-etiquetas:
+            total: Liquidaciones
+            individuales: Individuales
+            masivas: Masivas
+            lotesEnProceso: Lotes en proceso
+        resultados:
+          type: object
+          required: [exitosas, conError, pendientesWebhook, pendientesConsulta, datosIncompletos, departamentoNoHabilitado, inciertas, sinResultado, noAplica]
+          properties:
+            exitosas: { type: integer }
+            conError: { type: integer }
+            pendientesWebhook: { type: integer }
+            pendientesConsulta: { type: integer }
+            datosIncompletos: { type: integer }
+            departamentoNoHabilitado: { type: integer }
+            inciertas: { type: integer }
+            sinResultado: { type: integer }
+            noAplica: { type: integer, description: "Placas NO_APLICA (servicio público, 1.3.0)." }
+          x-flit-etiquetas:
+            exitosas: Exitosas
+            conError: Con error
+            pendientesWebhook: Pendientes de webhook
+            pendientesConsulta: Pendientes por consulta
+            datosIncompletos: Datos incompletos
+            departamentoNoHabilitado: Departamento no habilitado
+            inciertas: Inciertas
+            sinResultado: Sin resultado
+            noAplica: No aplica
+        deuda:
+          type: object
+          required: [placasConDeuda, placasAlDia]
+          properties:
+            placasConDeuda: { type: integer }
+            placasAlDia: { type: integer }
+          x-flit-etiquetas:
+            placasConDeuda: Placas con deuda
+            placasAlDia: Placas al día
+        montoTotal:
+          type: number
+          nullable: true
+          description: >
+            Suma de totalAPagar sin los null. Etiqueta «Monto total liquidado». null (1.1.0) cuando ninguna liquidación
+            del rango trae monto: se muestra x-flit-literales.pantalla.montoSinDato, nunca 0.
+        liquidacionesSinMonto: { type: integer, description: "Con N > 0 se muestra x-flit-literales.pantalla.liquidacionesSinMonto y la marca Parcial." }
+        parcial: { type: boolean }
+        serie:
+          type: array
+          items:
+            type: object
+            required: [fecha, total]
+            properties:
+              fecha: { type: string, format: date }
+              total: { type: integer }
+              individuales: { type: integer, description: "Liquidaciones INDIVIDUAL del día (1.1.0). total = individuales + masivas." }
+              masivas: { type: integer, description: "Placas de lotes MASIVA del día (1.1.0)." }
+            x-flit-etiquetas:
+              individuales: Individuales
+              masivas: Masivas
+        porDepartamento:
+          type: array
+          items:
+            type: object
+            required: [codigo, nombre, total]
+            properties:
+              codigo: { type: string }
+              nombre: { type: string }
+              total: { type: integer }
+              monto: { type: number, nullable: true, description: "Suma de totalAPagar del departamento sin los null; null = «Sin dato» (1.1.0)." }
+            x-flit-etiquetas:
+              total: Liquidaciones
+              monto: Monto liquidado
+        ultimosLotes:
+          type: array
+          maxItems: 5
+          items: { $ref: "#/components/schemas/ResumenLiquidacion" }
+        ranking:
+          type: array
+          nullable: true
+          description: Solo Super Admin en la vista global; null en los demás.
+          items:
+            type: object
+            required: [empresa, total]
+            properties:
+              empresa: { $ref: "#/components/schemas/Referencia" }
+              total: { type: integer }
+
+    ColumnaReporte:
+      type: object
+      required: [clave, etiqueta]
+      properties:
+        clave: { type: string }
+        etiqueta: { type: string }
+
+    PaginaReporte:
+      type: object
+      required: [tipo, columnas, items, total, page, pageSize]
+      properties:
+        tipo: { $ref: "#/components/schemas/TipoReporte" }
+        columnas: { type: array, items: { $ref: "#/components/schemas/ColumnaReporte" } }
+        items:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/FilaReporteDetalle"
+              - $ref: "#/components/schemas/FilaReporteLotes"
+              - $ref: "#/components/schemas/FilaReporteDeuda"
+              - $ref: "#/components/schemas/FilaReporteErrores"
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    FilaReporteDetalle:
+      type: object
+      required: [liquidacionId, itemId, tipo, placa, estado, departamento, propietarioNombre, documentoTipo, documentoNumero, totalAPagar, resultadoStatus, parcial, creadaEn, usuario]
+      properties:
+        liquidacionId: { type: string, format: uuid }
+        itemId: { type: string, format: uuid }
+        tipo: { $ref: "#/components/schemas/TipoLiquidacion" }
+        placa: { type: string }
+        estado: { $ref: "#/components/schemas/EstadoItem" }
+        departamento: { type: string, nullable: true }
+        propietarioNombre: { type: string, nullable: true }
+        documentoTipo: { type: string, nullable: true }
+        documentoNumero: { type: string, nullable: true }
+        totalAPagar: { type: number, nullable: true }
+        resultadoStatus: { $ref: "#/components/schemas/ResultadoStatus" }
+        parcial: { type: boolean }
+        creadaEn: { type: string, format: date-time }
+        usuario: { type: string }
+        empresa: { type: object, allOf: [{ $ref: "#/components/schemas/Referencia" }], nullable: true, description: "Solo Super Admin en la vista global (sin `empresa`); null en los demás (1.1.0)." }
+      x-flit-etiquetas:
+        empresa: Compañía
+        tipo: Tipo
+        placa: Placa
+        estado: Estado
+        departamento: Departamento
+        propietarioNombre: Propietario
+        documentoTipo: Tipo de documento
+        documentoNumero: Número de documento
+        totalAPagar: Total a pagar
+        resultadoStatus: Resultado
+        parcial: Parcial
+        creadaEn: Fecha
+        usuario: Usuario
+
+    FilaReporteLotes:
+      type: object
+      required: [liquidacionId, tipo, estado, totalItems, exitosas, conError, pendientes, creadaEn, terminadaEn, usuario]
+      properties:
+        liquidacionId: { type: string, format: uuid }
+        tipo: { $ref: "#/components/schemas/TipoLiquidacion" }
+        estado: { $ref: "#/components/schemas/EstadoLiquidacion" }
+        nombreArchivo: { type: string, nullable: true }
+        totalItems: { type: integer }
+        exitosas: { type: integer }
+        conError: { type: integer }
+        pendientes: { type: integer }
+        creadaEn: { type: string, format: date-time }
+        terminadaEn: { type: string, format: date-time, nullable: true }
+        usuario: { type: string }
+        empresa: { type: object, allOf: [{ $ref: "#/components/schemas/Referencia" }], nullable: true, description: "Solo Super Admin en la vista global (sin `empresa`); null en los demás (1.1.0)." }
+      x-flit-etiquetas:
+        empresa: Compañía
+        tipo: Tipo
+        estado: Estado
+        nombreArchivo: Archivo
+        totalItems: Placas
+        exitosas: Exitosas
+        conError: Con error
+        pendientes: Pendientes
+        creadaEn: Creado
+        terminadaEn: Terminado
+        usuario: Usuario
+
+    FilaReporteDeuda:
+      type: object
+      required: [liquidacionId, itemId, placa, departamento, propietarioNombre, documentoTipo, documentoNumero, vigencias, totalAPagar, parcial, consultadaEn]
+      properties:
+        liquidacionId: { type: string, format: uuid }
+        itemId: { type: string, format: uuid }
+        placa: { type: string }
+        departamento: { type: string, nullable: true }
+        propietarioNombre: { type: string, nullable: true }
+        documentoTipo: { type: string, nullable: true }
+        documentoNumero: { type: string, nullable: true }
+        vigencias: { type: array, items: { type: string } }
+        totalAPagar: { type: number, nullable: true }
+        parcial: { type: boolean }
+        consultadaEn: { type: string, format: date-time }
+        empresa: { type: object, allOf: [{ $ref: "#/components/schemas/Referencia" }], nullable: true, description: "Solo Super Admin en la vista global (sin `empresa`); null en los demás (1.1.0)." }
+      x-flit-etiquetas:
+        empresa: Compañía
+        placa: Placa
+        departamento: Departamento
+        propietarioNombre: Propietario
+        documentoTipo: Tipo de documento
+        documentoNumero: Número de documento
+        vigencias: Vigencias adeudadas
+        totalAPagar: Total a pagar
+        parcial: Parcial
+        consultadaEn: Fecha de consulta
+
+    FilaReporteErrores:
+      type: object
+      required: [liquidacionId, itemId, placa, estado, errorCodigo, errorClase, errorMensaje, campoFaltante, departamento, creadaEn, usuario]
+      properties:
+        liquidacionId: { type: string, format: uuid }
+        itemId: { type: string, format: uuid }
+        placa: { type: string }
+        estado: { $ref: "#/components/schemas/EstadoItem" }
+        errorCodigo: { type: string, nullable: true }
+        errorClase: { $ref: "#/components/schemas/ClaseError" }
+        errorMensaje: { type: string, nullable: true }
+        campoFaltante: { $ref: "#/components/schemas/CampoFaltante" }
+        departamento: { type: string, nullable: true }
+        creadaEn: { type: string, format: date-time }
+        usuario: { type: string }
+        empresa: { type: object, allOf: [{ $ref: "#/components/schemas/Referencia" }], nullable: true, description: "Solo Super Admin en la vista global (sin `empresa`); null en los demás (1.1.0)." }
+      x-flit-etiquetas:
+        empresa: Compañía
+        placa: Placa
+        estado: Estado
+        errorCodigo: Código de error
+        errorClase: Clase
+        errorMensaje: Mensaje del proveedor
+        campoFaltante: Dato faltante
+        departamento: Departamento
+        creadaEn: Fecha
+        usuario: Usuario
+
+    CatalogosReportes:
+      type: object
+      required: [departamentos, usuarios]
+      properties:
+        departamentos: { type: array, items: { $ref: "#/components/schemas/Departamento" } }
+        usuarios:
+          type: array
+          description: Solo id y nombre (sin correo).
+          items: { $ref: "#/components/schemas/Referencia" }
+
+    Configuracion:
+      type: object
+      required: [contractual, operativa, departamentosDisponibles]
+      properties:
+        contractual:
+          type: object
+          required: [maxRegistrosLote, departamentosHabilitados]
+          properties:
+            maxRegistrosLote: { type: integer, minimum: 1, maximum: 5000, default: 500 }
+            departamentosHabilitados: { type: array, nullable: true, items: { type: string }, description: "null = todos los activos de /fuentes." }
+        operativa:
+          type: object
+          required: [maxRegistrosLote, correosAviso]
+          properties:
+            maxRegistrosLote: { type: integer, nullable: true, description: "null = el contractual." }
+            correosAviso: { type: array, items: { type: string, format: email } }
+        departamentosDisponibles: { type: array, items: { $ref: "#/components/schemas/Departamento" } }
+      x-flit-etiquetas:
+        contractual: Contractual
+        operativa: Operativa
+        maxRegistrosLote: Máximo de placas por lote
+        departamentosHabilitados: Departamentos habilitados
+        correosAviso: Correos del aviso «Lote terminado»
+
+    ConfiguracionOperativaEntrada:
+      type: object
+      additionalProperties: false
+      required: [maxRegistrosLote, correosAviso]
+      properties:
+        maxRegistrosLote: { type: integer, nullable: true, minimum: 1, maximum: 5000 }
+        correosAviso: { type: array, maxItems: 20, items: { type: string, format: email, maxLength: 254 } }
+
+    ConfiguracionContractualEntrada:
+      type: object
+      additionalProperties: false
+      required: [maxRegistrosLote, departamentosHabilitados]
+      properties:
+        maxRegistrosLote: { type: integer, minimum: 1, maximum: 5000 }
+        departamentosHabilitados: { type: array, nullable: true, items: { type: string, pattern: "^[0-9]{2}$" } }
+
+    UsuarioImpuestos:
+      type: object
+      required: [id, nombre, email, rol, estado]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        email: { type: string }
+        rol: { $ref: "#/components/schemas/RolImpuestos" }
+        estado: { $ref: "#/components/schemas/EstadoUsuarioImpuestos" }
+        protegido:
+          type: boolean
+          description: >
+            true si es AdminCompany de la compañía (D-ROL-ADMIN): es Administrador Impuestos por la plataforma y cambiar
+            rol, suspender o reactivar responde 403 OBJETIVO_PROTEGIDO; el front no ofrece esas acciones (1.1.0).
+
+    EstadoUsuarioImpuestos:
+      type: string
+      enum: [ACTIVO, INVITADO, SUSPENDIDO]
+      x-flit-etiquetas:
+        ACTIVO: Activo
+        INVITADO: Invitado
+        SUSPENDIDO: Suspendido
+
+    PaginaUsuarios:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/UsuarioImpuestos" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        empresa: { $ref: "#/components/schemas/EmpresaIdentificada" }
+
+    EmpresaIdentificada:
+      type: object
+      nullable: true
+      description: Compañía con su NIT para el encabezado del Super Admin (1.1.0); null para quien no es Super Admin.
+      required: [id, nombre, nit]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        nit: { type: string, nullable: true }
+
+    InvitacionUsuario:
+      type: object
+      additionalProperties: false
+      required: [email, nombre, rol]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        nombre: { type: string, minLength: 1, maxLength: 150 }
+        rol: { $ref: "#/components/schemas/RolImpuestos" }
+
+    Notificacion:
+      type: object
+      required: [id, tipo, liquidacionId, creadaEn, leida]
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { $ref: "#/components/schemas/TipoNotificacion" }
+        liquidacionId: { type: string, format: uuid }
+        creadaEn: { type: string, format: date-time }
+        leida: { type: boolean, description: "Leída por el usuario del token." }
+
+    AprovisionamientoResumen:
+      type: object
+      required: [estado, motivo, accion, firmaConfirmada]
+      properties:
+        estado: { $ref: "#/components/schemas/EstadoAprovisionamiento" }
+        motivo: { $ref: "#/components/schemas/MotivoAprovisionamiento" }
+        accion: { $ref: "#/components/schemas/AccionAprovisionamiento" }
+        firmaConfirmada: { type: boolean }
+
+    EmpresaBackoffice:
+      type: object
+      required: [id, nombre, nit, aprovisionamiento, suspendida]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        nit: { type: string, nullable: true }
+        aprovisionamiento: { $ref: "#/components/schemas/AprovisionamientoResumen" }
+        suspendida: { type: boolean }
+        usuarios: { type: integer, minimum: 0, description: "Cantidad de usuarios de Impuestos de la compañía (1.1.0)." }
+      x-flit-etiquetas:
+        usuarios: Usuarios
+
+    PaginaEmpresasBackoffice:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/EmpresaBackoffice" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    AprovisionamientoDetalle:
+      allOf:
+        - $ref: "#/components/schemas/AprovisionamientoResumen"
+        - type: object
+          required: [modoRespaldoFirma, actualizadoEn, historial]
+          properties:
+            empresa: { $ref: "#/components/schemas/EmpresaIdentificada" }
+            modoRespaldoFirma:
+              type: boolean
+              description: >
+                Marca ortogonal al estado (plan §3.1): 5 firmas inválidas seguidas encienden el respaldo; las consultas
+                salen sin callbackUrl y el servicio pide un alta para refrescar el secreto (1.2.0).
+              x-flit-etiquetas:
+                "true": "Respaldo de firma: los resultados llegan por consulta mientras se revisa el secreto."
+            actualizadoEn: { type: string, format: date-time }
+            historial:
+              type: array
+              description: Transiciones, la más reciente primero.
+              items:
+                type: object
+                required: [desde, hacia, motivo, actorTipo, en]
+                properties:
+                  desde: { type: string, allOf: [{ $ref: "#/components/schemas/EstadoAprovisionamiento" }], nullable: true }
+                  hacia: { $ref: "#/components/schemas/EstadoAprovisionamiento" }
+                  motivo: { $ref: "#/components/schemas/MotivoAprovisionamiento" }
+                  actorTipo:
+                    type: string
+                    enum: [SISTEMA, SUPER_ADMIN, PLATAFORMA]
+                    x-flit-etiquetas:
+                      SISTEMA: Sistema
+                      SUPER_ADMIN: Super Admin
+                      PLATAFORMA: Plataforma
+                  en: { type: string, format: date-time }
+
+    EstadoCredenciales:
+      type: object
+      required: [tieneApiKey, tieneWebhookSecret, origen, apiKeyPrefijo, actualizadoEn]
+      properties:
+        tieneApiKey: { type: boolean }
+        tieneWebhookSecret: { type: boolean }
+        origen: { $ref: "#/components/schemas/OrigenCredencial" }
+        apiKeyPrefijo: { type: string, nullable: true, maxLength: 12, description: "Primeros caracteres, para soporte. No es secreto." }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+
+    CargaCredenciales:
+      type: object
+      additionalProperties: false
+      properties:
+        apiKey: { type: string, nullable: true, minLength: 16, maxLength: 256, description: "Nunca se devuelve ni se registra." }
+        webhookSecret: { type: string, nullable: true, minLength: 16, maxLength: 256, description: "Nunca se devuelve ni se registra." }

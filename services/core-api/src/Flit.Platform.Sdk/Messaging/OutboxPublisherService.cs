@@ -1,14 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using RabbitMQ.Client.Exceptions;
 
 namespace Flit.Platform.Sdk.Messaging;
 
 /// <summary>
 /// Saca los eventos pendientes de la outbox y los publica (HU #13338). Mismo patrón que la outbox de Trámites
 /// (<c>ProcedureStateChangeOutboxProcessor</c>): reclamo con <c>FOR NO KEY UPDATE SKIP LOCKED</c> dentro de una
-/// transacción, seguro con varias réplicas. Se sella <c>published_at</c> solo cuando el broker confirmó; si el broker
-/// no responde, el evento queda pendiente (sube <c>attempts</c>) y el lote se corta: sale en el siguiente ciclo, en
-/// orden, cuando el broker vuelva (AC3). Con el broker (o la base) caído, la espera entre ciclos se duplica en cada
+/// transacción, seguro con varias réplicas. Se sella <c>published_at</c> solo cuando el broker confirmó; si falla, el evento
+/// queda pendiente (sube <c>attempts</c>) y sale en el siguiente ciclo. El orden se conserva <b>por destino</b> (exchange +
+/// llave de ruteo, HU #14694 BLOQ-1 c): tras un fallo, los siguientes del MISMO destino esperan sin intentarse, y los de otros
+/// destinos siguen (un exchange sin permiso o sin declarar no detiene al resto), aunque los pendientes más viejos sean todos del
+/// destino detenido: el ciclo lee en ventanas que excluyen los destinos ya detenidos. Si el broker no se alcanza
+/// (<see cref="BrokerUnreachableException"/>), el lote se corta entero: sale en el siguiente ciclo, en orden, cuando el
+/// broker vuelva (AC3). Con el broker (o la base) caído, o sin nada publicado por un destino caído, la espera entre ciclos se duplica en cada
 /// fallo seguido hasta <see cref="PlatformMessagingOptions.MaxRetryDelay"/>, y vuelve a <c>PollInterval</c> al primer
 /// ciclo sano: una caída larga no llena la base ni el log con un intento por segundo.
 /// </summary>
@@ -40,7 +45,7 @@ internal sealed class OutboxPublisherService<TContext>(
                 ciclo = new CicloOutbox(0, Fallo: true);
             }
 
-            fallosSeguidos = ciclo.Fallo ? fallosSeguidos + 1 : 0;
+            fallosSeguidos = FallosSeguidos(fallosSeguidos, ciclo);
 
             // Lote lleno y sano: puede haber más, se sigue sin esperar.
             if (!ciclo.Fallo && ciclo.Publicados >= options.BatchSize)
@@ -55,6 +60,15 @@ internal sealed class OutboxPublisherService<TContext>(
             }
         }
     }
+
+    /// <summary>
+    /// Fallos seguidos tras <paramref name="ciclo"/>: cuentan para el backoff de <see cref="Espera"/>. Un ciclo que publicó
+    /// algo con el broker respondiendo vuelve a cero aunque un destino haya fallado: ese destino ya espera por su cuenta y no
+    /// debe frenar a los demás. Si no salió nada, o el broker no se alcanzó, la espera crece (sin ciclo caliente cuando el
+    /// único pendiente es el destino caído).
+    /// </summary>
+    internal static int FallosSeguidos(int previos, CicloOutbox ciclo) =>
+        !ciclo.Fallo || (ciclo.Publicados > 0 && !ciclo.BrokerInalcanzable) ? 0 : previos + 1;
 
     /// <summary>
     /// Espera antes del siguiente ciclo: <paramref name="poll"/> si el último salió bien; con fallos seguidos,
@@ -82,35 +96,85 @@ internal sealed class OutboxPublisherService<TContext>(
         {
             db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-            // La tabla sale del modelo de EF (no de una entrada externa); el tamaño del lote va como parámetro.
-            var sql = "SELECT * FROM " + Table(db) + " WHERE published_at IS NULL ORDER BY occurred_at, id LIMIT {0} FOR NO KEY UPDATE SKIP LOCKED";
-            var batch = await db.Set<OutboxMessage>().FromSqlRaw(sql, options.BatchSize).ToListAsync(ct).ConfigureAwait(false);
+            var tabla = Table(db);
 
             var published = 0;
+            var intentos = 0;
             var fallo = false;
-            foreach (var message in batch)
+            var brokerCaido = false;
+            // Destinos con un fallo en este ciclo: lo que sigue de ese destino espera al próximo ciclo, en orden.
+            var detenidos = new List<(string Exchange, string RoutingKey)>();
+            // Ventanas sucesivas dentro de la misma transacción: cada una excluye los destinos ya detenidos, así un destino
+            // caído con muchos pendientes viejos no llena el lote y deja sin salir a los demás (N-1). Los publicados se
+            // guardan al cerrar cada ventana, para que la siguiente no los vuelva a traer. El ciclo intenta como mucho
+            // BatchSize eventos; cada ventana publica algo o detiene un destino nuevo, de modo que siempre termina.
+            while (!brokerCaido && intentos < options.BatchSize)
             {
-                try
+                var limite = options.BatchSize - intentos;
+                var (sql, parametros) = ConsultaVentana(tabla, detenidos, limite);
+                var ventana = await db.Set<OutboxMessage>().FromSqlRaw(sql, parametros).ToListAsync(ct).ConfigureAwait(false);
+                if (ventana.Count == 0)
+                    break;
+
+                foreach (var message in ventana)
                 {
-                    await publisher.PublishAsync(message, ct).ConfigureAwait(false);
-                    message.PublishedAt = time.GetUtcNow();
-                    message.LastError = null;
-                    published++;
+                    var destino = (message.Exchange, message.RoutingKey);
+                    if (detenidos.Contains(destino))
+                        continue;
+                    intentos++;
+                    try
+                    {
+                        await publisher.PublishAsync(message, ct).ConfigureAwait(false);
+                        message.PublishedAt = time.GetUtcNow();
+                        message.LastError = null;
+                        published++;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        message.Attempts++;
+                        message.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
+                        OutboxLog.PublishFailed(logger, message.Id, message.RoutingKey, message.Attempts, ex);
+                        fallo = true;
+                        if (ex is BrokerUnreachableException)
+                        {
+                            brokerCaido = true;
+                            break; // sin broker: el resto espera, en orden, y no se leen más ventanas
+                        }
+                        detenidos.Add(destino); // solo este destino espera; los demás siguen
+                        // Un destino que rechaza una y otra vez (no un broker caído, que es transitorio) se avisa aparte.
+                        if (message.Attempts >= options.AttemptsWarningThreshold)
+                            OutboxLog.DestinationStuck(logger, message.Exchange, message.RoutingKey, message.Attempts, options.AttemptsWarningThreshold);
+                    }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    message.Attempts++;
-                    message.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-                    OutboxLog.PublishFailed(logger, message.Id, message.RoutingKey, message.Attempts, ex);
-                    fallo = true;
-                    break; // el broker no responde: el resto del lote espera, en orden
-                }
+
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                // Ventana más corta que lo pedido: ya se leyó todo lo pendiente que no es de un destino detenido.
+                if (ventana.Count < limite)
+                    break;
             }
 
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
             await tx.CommitAsync(ct).ConfigureAwait(false);
-            return new CicloOutbox(published, fallo);
+            return new CicloOutbox(published, fallo, brokerCaido);
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Pendientes más viejos primero, sin los destinos detenidos. Los valores (destinos y tamaño) van como parámetros; la
+    /// tabla sale del modelo de EF.
+    /// </summary>
+    private static (string Sql, object[] Parametros) ConsultaVentana(string tabla, List<(string Exchange, string RoutingKey)> detenidos, int limite)
+    {
+        var parametros = new List<object>(detenidos.Count * 2 + 1);
+        var sql = new System.Text.StringBuilder("SELECT * FROM ").Append(tabla).Append(" WHERE published_at IS NULL");
+        foreach (var (exchange, routingKey) in detenidos)
+        {
+            sql.Append(" AND NOT (exchange = {").Append(parametros.Count).Append("} AND routing_key = {").Append(parametros.Count + 1).Append("})");
+            parametros.Add(exchange);
+            parametros.Add(routingKey);
+        }
+        sql.Append(" ORDER BY occurred_at, id LIMIT {").Append(parametros.Count).Append("} FOR NO KEY UPDATE SKIP LOCKED");
+        parametros.Add(limite);
+        return (sql.ToString(), [.. parametros]);
     }
 
     private static string Table(DbContext db)
@@ -123,8 +187,8 @@ internal sealed class OutboxPublisherService<TContext>(
     }
 }
 
-/// <summary>Resultado de un ciclo del publicador.</summary>
-internal readonly record struct CicloOutbox(int Publicados, bool Fallo);
+/// <summary>Resultado de un ciclo del publicador; <c>BrokerInalcanzable</c>: el ciclo se cortó por <see cref="BrokerUnreachableException"/>.</summary>
+internal readonly record struct CicloOutbox(int Publicados, bool Fallo, bool BrokerInalcanzable = false);
 
 internal static partial class OutboxLog
 {
@@ -134,4 +198,8 @@ internal static partial class OutboxLog
     [LoggerMessage(EventId = 7302, Level = LogLevel.Warning,
         Message = "Outbox: no se pudo publicar {EventId} ({Type}), intento {Attempts}; queda pendiente")]
     public static partial void PublishFailed(ILogger logger, Guid eventId, string type, int attempts, Exception ex);
+
+    [LoggerMessage(EventId = 7303, Level = LogLevel.Warning,
+        Message = "Outbox: el destino {Exchange} / {RoutingKey} lleva {Attempts} intentos fallidos (umbral {Threshold}); revisar permiso del usuario del broker o la declaración del exchange")]
+    public static partial void DestinationStuck(ILogger logger, string exchange, string routingKey, int attempts, int threshold);
 }

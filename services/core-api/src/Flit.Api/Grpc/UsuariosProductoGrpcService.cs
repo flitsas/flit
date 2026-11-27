@@ -12,7 +12,7 @@ namespace Flit.Api.Grpc;
 
 /// <summary>
 /// Adaptador gRPC de <c>flit.platform.v1.UsuariosProductoService</c> (ADR-0089, HU #14587). Delgado: verifica el llamante
-/// y el producto (<see cref="DiagnosticoUsuariosServicioAuthorization.VerificarLlamante"/>), reverifica al actor en la base
+/// y el producto (<see cref="UsuariosProductoServicioAuthorization.VerificarLlamante"/>, HU #14694: mapa cliente → producto), reverifica al actor en la base
 /// (<see cref="IActorUsuariosProducto"/>), delega en los casos de uso por producto, audita cada escritura en
 /// <c>admin.audit</c> (actor, empresa, usuario objetivo, rol antes y después, resultado y causa; sin correo, SP-16) y traduce
 /// los rechazos a estados gRPC con <c>ErrorInfo</c> (contrato §3.4). Logs: solo ids y códigos.
@@ -131,7 +131,7 @@ internal sealed partial class UsuariosProductoGrpcService(
     private async Task<(Guid Tenant, ProductActor Actor)> AutorizarAsync(string producto, ServerCallContext context, string? operacion = null, Guid? usuario = null)
     {
         var caller = PlatformServiceCaller.From(context);
-        var actorId = DiagnosticoUsuariosServicioAuthorization.VerificarLlamante(caller, producto, context.RequestHeaders);
+        var actorId = UsuariosProductoServicioAuthorization.VerificarLlamante(caller, producto, context.RequestHeaders);
         var actor = await actores.VerificarAsync(caller.TenantId, actorId, producto, context.CancellationToken).ConfigureAwait(false);
         if (actor is { IsSuperAdmin: true }
             && !await actores.EmpresaHabilitadaAsync(caller.TenantId, producto, context.CancellationToken).ConfigureAwait(false))
@@ -163,7 +163,7 @@ internal sealed partial class UsuariosProductoGrpcService(
             TargetEntityType: tipoObjetivo,
             TargetEntityId: objetivo,
             ClientIp: null,
-            UserAgent: DiagnosticoUsuariosServicioAuthorization.ClientId,
+            UserAgent: PlatformServiceCaller.From(context).ClientId,
             OldValue: antes,
             NewValue: despues), context.CancellationToken);
 

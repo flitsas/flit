@@ -95,6 +95,13 @@ service EmpresasService {
   // Empresas activas que tienen `producto` encendido, con la misma regla fail-closed de la jerarquía que
   // ObtenerProductosHabilitados (ADR-0057). Ordenadas por nombre. `producto` es obligatorio y no puede ser `plataforma`.
   rpc ListarEmpresasConProducto(ListarEmpresasConProductoRequest) returns (ListarEmpresasConProductoResponse);
+
+  // Datos para dar de alta la empresa en el proveedor del producto Impuestos (ADR-0093, plan §1.3 decisión P1). A
+  // diferencia del resto de este servicio, va por UNA empresa: x-flit-tenant-id OBLIGATORIA (sin ella
+  // INVALID_ARGUMENT). Solo svc-impuestos, con el scope platform.identidad.empresas.alta (otro sub -> PERMISSION_DENIED
+  // reason CLIENTE_NO_PERMITIDO). Empresa inexistente -> NOT_FOUND. Responde lo mismo que el diálogo de activación
+  // (GET /api/v1/platform/admin/tenants/{tenantId}/products/impuestos/alta-previa): un solo handler para los dos.
+  rpc ObtenerDatosAltaProveedor(ObtenerDatosAltaProveedorRequest) returns (ObtenerDatosAltaProveedorResponse);
 }
 
 message ListarEmpresasConProductoRequest {
@@ -118,4 +125,33 @@ message Empresa {
   // "flit_smtp" (Colas FLIT) o "tenant_api" (API de correo de la empresa, hoy Renting). Sin política, "flit_smtp".
   // Comparendos lo usa como su canal de correo y su juego de plantillas.
   string canal_correo = 4;
+}
+
+// La empresa va en la metadata x-flit-tenant-id.
+message ObtenerDatosAltaProveedorRequest {}
+
+message ObtenerDatosAltaProveedorResponse {
+  // Razón social (identity.tenants.legal_name), tal cual. Quien llama decide si supera el máximo del proveedor
+  // (200 caracteres -> ERROR con motivo RAZON_SOCIAL_LARGA).
+  string legal_name = 1;
+  // NIT base sin dígito de verificación, normalizado con la regla D-TAXID (plan §1.3). Vacío si estado_nit no es VALIDO.
+  string tax_id_base = 2;
+  EstadoNit estado_nit = 3;
+  // Correo del AdminCompany activo más antiguo de la empresa (D-EMAIL). Vacío = sin AdminCompany activo (SIN_ADMIN).
+  string contact_email = 4;
+  // false si la empresa está inactiva en la plataforma.
+  bool empresa_activa = 5;
+}
+
+// Resultado de normalizar el NIT de la empresa (D-TAXID, DA-8). Todo lo que no es VALIDO es «Requiere revisión del NIT».
+enum EstadoNit {
+  ESTADO_NIT_UNSPECIFIED = 0;
+  ESTADO_NIT_VALIDO = 1;
+  // No se puede separar el dígito de verificación sin ambigüedad (10 dígitos o más sin guion, letras, o un guion sin
+  // exactamente un dígito después).
+  ESTADO_NIT_AMBIGUO = 2;
+  // La empresa no tiene NIT.
+  ESTADO_NIT_AUSENTE = 3;
+  // La base es la misma de un ancestro de la jerarquía (hija sin NIT propio, DA-8).
+  ESTADO_NIT_IGUAL_A_CABEZA = 4;
 }

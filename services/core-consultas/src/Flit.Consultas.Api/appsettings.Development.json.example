@@ -28,7 +28,10 @@
   // avalúo e impuesto) con datos inventados: solo con Ambiente LOCAL o DEV (en QA y PDN el servicio no arranca con ella).
   "Consultas": {
     "Ambiente": "LOCAL",
-    "Simulacion": { "Habilitada": true }
+    "Simulacion": { "Habilitada": true },
+    // HU #14711: aviso del proveedor de impuesto. AvisoBaseUrl vacío = sin callbackUrl (cierra el polling); lo pone el script
+    // local. AvisoTokenKey (>= 32 bytes) llega por variable de entorno Consultas__Impuesto__AvisoTokenKey, nunca en git.
+    "Impuesto": { "AvisoBaseUrl": "" }
   },
 
   // Modo de cada consulta: «real» llama al proveedor, «mock» responde datos de prueba sin red.

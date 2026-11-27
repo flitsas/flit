@@ -87,6 +87,7 @@ La opción 1 deja el modo simulado terminable ya y el encendido real detrás de 
 
 - [ADR-0075](ADR-0075-diagnostico-consultas-por-rabbitmq.md) — la ida no lleva nombres (U1 = b). La enmienda del nombre del propietario queda en Propuesto, en el mismo ADR, cuando cierre el corte de documentos.
 - [ADR-0076](ADR-0076-diagnostico-respuesta-completa-de-la-fuente-con-pii-cifrada.md) — no se amplía: el impuesto no pide respuesta cruda del portal.
+- [ADR-0064](ADR-0064-datos-separados-eventos-y-reportes.md), sección «Excepción: tablas técnicas de core-consultas» (Propuesto, 2026-11-25) — justifica que `consultas.vehicle_tax_jobs` y `consultas.vehicle_tax_webhook_deliveries` vayan sin RLS, sin columnas ni triggers de auditoría y con índice de purga sin `tenant_id` al frente. Se revisa si core-consultas activa `FORCE ROW LEVEL SECURITY`.
 
 ## Notas para agentes
 

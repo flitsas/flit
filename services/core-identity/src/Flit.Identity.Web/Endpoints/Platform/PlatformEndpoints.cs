@@ -1,12 +1,16 @@
 using System.Security.Claims;
 using Flit.Admin.Domain.Companies.Domains;
 using Flit.Api.Authorization;
+using Flit.Api.Platform;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Platform.Application.Apps;
+using Flit.Modules.Platform.Application.Companies;
 using Flit.Modules.Platform.Application.Hosts;
 using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
+using Flit.Modules.Platform.Domain.Companies;
 using Flit.Modules.Platform.Domain.Manifest;
+using Flit.Modules.Platform.Domain.TenantProducts;
 using Flit.Modules.Security.Application.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -109,6 +113,20 @@ public static class PlatformEndpoints
                 UpdatedByEmail = p.UpdatedBy is { } by && emails.TryGetValue(by, out var email) ? email : null,
                 ComingSoon = hosts.IsComingSoon(p.ProductCode),
                 p.ImpuestoApiKeyConfigurada,
+                // HU #14711 (platform.v1 1.2.0): si el secreto del webhook del impuesto está configurado (solo en diagnostico).
+                p.ImpuestoWebhookSecretConfigurada,
+                // HU #14694 (platform.v1 1.1.0): último estado reportado; null sin aprovisionamiento o sin reporte.
+                Provisioning = p.Provisioning is { } estado
+                    ? new
+                    {
+                        status = estado.Estado,
+                        reason = estado.MotivoCodigo,
+                        message = estado.Mensaje,
+                        action = estado.Accion,
+                        signatureConfirmed = estado.FirmaConfirmada,
+                        updatedAt = estado.ActualizadoEn,
+                    }
+                    : null,
             }));
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("ListTenantProducts");
 
@@ -145,11 +163,77 @@ public static class PlatformEndpoints
                 {
                     TenantProductException.ProductNotFound => StatusCodes.Status404NotFound,
                     TenantProductException.ProductInactive or TenantProductException.ProductNotEnabledForHead => StatusCodes.Status409Conflict,
+                    TenantProductException.ProvisioningPrerequisiteMissing => StatusCodes.Status409Conflict,
                     _ => StatusCodes.Status400BadRequest,
                 };
-                return Problem(status, ex.Code, ex.Message);
+                return Problem(status, ex.Code, ex.Message, TituloDe(ex.Code));
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // HU #14711: el trabajador del alta reservó la fila de aprovisionamiento entre la lectura y el guardado.
+                return Problem(StatusCodes.Status409Conflict, "CONCURRENT_UPDATE",
+                    "La compañía se actualizó al mismo tiempo. Vuelve a intentarlo.");
             }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("SetTenantProduct");
+
+        // HU #14694 (platform.v1 1.1.0, plan §1.3 P1) GET /admin/tenants/{tenantId}/products/{productCode}/alta-previa —
+        // lo que el servicio del producto enviará al alta del proveedor (diálogo de activación). Solo lectura.
+        group.MapGet("/admin/tenants/{tenantId:guid}/products/{productCode}/alta-previa", async (
+            Guid tenantId,
+            string productCode,
+            ObtenerDatosAltaProveedorHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var datos = await handler.HandleAsync(tenantId, productCode, ct);
+                if (datos is null)
+                    return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
+
+                return Results.Ok(new
+                {
+                    legalName = datos.LegalName,
+                    taxIdBase = datos.TaxIdBase,
+                    nitStatus = NitEmpresa.Codigo(datos.EstadoNit),
+                    contactEmail = datos.ContactEmail,
+                    blocking = datos.CodigoBloqueo,
+                });
+            }
+            catch (TenantProductException ex) when (ex.Code == TenantProductException.ProductWithoutProvisioning)
+            {
+                return Problem(StatusCodes.Status404NotFound, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("GetTenantProductProvisioningPreview");
+
+        // HU #14694 (platform.v1 1.1.0, plan §1.2 R1) POST …/aprovisionamiento/reintentar — encola el trabajo
+        // <producto>.aprovisionamiento.reintentar por la outbox con el id del SuperAdmin. Sin cuerpo; 202.
+        group.MapPost("/admin/tenants/{tenantId:guid}/products/{productCode}/aprovisionamiento/reintentar", async (
+            Guid tenantId,
+            string productCode,
+            ClaimsPrincipal user,
+            IIdentityDb db,
+            RetryProvisioningHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var solicitadoPor))
+                return Results.Unauthorized();
+
+            if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
+                return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
+
+            try
+            {
+                await handler.HandleAsync(new RetryProvisioningCommand(tenantId, productCode), solicitadoPor, ct);
+                return Results.Accepted();
+            }
+            catch (TenantProductException ex)
+            {
+                var status = ex.Code == TenantProductException.ProductNotEnabled
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status404NotFound;
+                return Problem(status, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("RetryTenantProductProvisioning");
 
         // PUT /admin/tenants/{tenantId}/products/{productCode}/credentials/{credentialCode} — guarda o reemplaza la API key (ADR-0092).
         group.MapPut("/admin/tenants/{tenantId:guid}/products/{productCode}/credentials/{credentialCode}", async (
@@ -214,6 +298,56 @@ public static class PlatformEndpoints
             }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("DeleteTenantProductCredential");
 
+        // HU #14711 (plan §3.1) POST /admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener — alta
+        // idempotente en el proveedor del impuesto: guarda la api_key y el webhook_secret. Sin cuerpo (el servidor arma los datos
+        // del alta); responde solo metadatos, nunca valores. Límite por usuario y empresa detrás de la autorización
+        // (AltaCredencialImpuestoRateLimit). Si choca con la ronda del alta automática: 409 ALTA_EN_CURSO, nunca un 500.
+        group.MapPost("/admin/tenants/{tenantId:guid}/products/diagnostico/credentials/impuesto/obtener", async (
+            Guid tenantId,
+            ClaimsPrincipal user,
+            IIdentityDb db,
+            ObtenerCredencialImpuestoDiagnosticoHandler handler,
+            ITenantProductProvisioningStore provisioning,
+            TimeProvider clock,
+            CancellationToken ct) =>
+        {
+            if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
+                return Problem(StatusCodes.Status404NotFound, CodigosAltaCredencialImpuesto.TenantNotFound, CodigosAltaCredencialImpuesto.Literal(CodigosAltaCredencialImpuesto.TenantNotFound));
+
+            try
+            {
+                Guid? changedBy = Guid.TryParse(user.FindFirstValue("sub"), out var sub) ? sub : null;
+                var r = await handler.HandleAsync(tenantId, changedBy, ct);
+                // El estado del alta de diagnostico queda listo también cuando la credencial se obtiene a mano; sin cambio de
+                // estado no sube la versión (N-3).
+                await provisioning.RegistrarEstadoAltaDiagnosticoManualAsync(AltaCredencialDiagnosticoAutomatica.EstadoTrasExito(tenantId, r, clock.GetUtcNow()), ct);
+                return Results.Ok(new
+                {
+                    apiKeyPrefix = r.ApiKeyPrefix,
+                    created = r.Created,
+                    rotated = r.Rotated,
+                    hasWebhookSecret = r.HasWebhookSecret,
+                    changed = r.Changed,
+                    updatedAt = r.UpdatedAt,
+                });
+            }
+            catch (AltaCredencialImpuestoException ex)
+            {
+                var status = ex.Code switch
+                {
+                    CodigosAltaCredencialImpuesto.NitAusente or CodigosAltaCredencialImpuesto.NitAmbiguo
+                        or CodigosAltaCredencialImpuesto.NitIgualACabeza or CodigosAltaCredencialImpuesto.SinAdmin => StatusCodes.Status422UnprocessableEntity,
+                    CodigosAltaCredencialImpuesto.ProductoNoHabilitado or CodigosAltaCredencialImpuesto.AltaEnCurso => StatusCodes.Status409Conflict,
+                    CodigosAltaCredencialImpuesto.TenantNotFound => StatusCodes.Status404NotFound,
+                    CodigosAltaCredencialImpuesto.ProveedorNoConfigurado => StatusCodes.Status503ServiceUnavailable,
+                    _ => StatusCodes.Status502BadGateway,
+                };
+                return Problem(status, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+          .RequireAltaCredencialImpuestoRateLimit()
+          .WithName("ObtenerCredencialImpuestoDiagnostico");
+
         return app;
     }
 
@@ -223,8 +357,12 @@ public static class PlatformEndpoints
             .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .Contains(scope, StringComparer.Ordinal);
 
-    private static IResult Problem(int status, string code, string detail) =>
-        Results.Problem(statusCode: status, detail: detail, extensions: new Dictionary<string, object?> { ["code"] = code });
+    private static IResult Problem(int status, string code, string detail, string? title = null) =>
+        Results.Problem(statusCode: status, detail: detail, title: title, extensions: new Dictionary<string, object?> { ["code"] = code });
+
+    /// <summary>Títulos cerrados en el contrato (platform.v1 1.1.0); los demás códigos usan el título por defecto del estado.</summary>
+    private static string? TituloDe(string code) =>
+        code == TenantProductException.ProvisioningPrerequisiteMissing ? "Falta un requisito para activar el producto" : null;
 
     internal sealed record SetTenantProductRequest(bool Enabled, string? Notes);
 

@@ -53,6 +53,18 @@ public sealed class RotulosDiagnosticoTests
             .Should().Be("La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.");
     }
 
+    /// <summary>
+    /// Decisión del usuario 2026-11-26: el N/A por servicio público dice que el vehículo no paga impuesto, con el mismo texto en
+    /// <c>motivo_na_etiqueta</c> de la API y en el PDF/Excel (<see cref="Flit.Diagnostico.Api.Modulos.Reportes.LectorContenidoReporte.TextoMotivoNa"/>).
+    /// </summary>
+    [Fact]
+    public void Servicio_publico_tiene_literal_exacto_en_la_api_y_en_los_reportes()
+    {
+        RotulosDiagnostico.DeMotivoNa(MotivoNa.ServicioPublico).Should().Be("Vehículo de servicio público: no paga impuesto vehicular");
+        RotulosDiagnostico.DeMotivoNa("SERVICIO_PUBLICO").Should().Be("Vehículo de servicio público: no paga impuesto vehicular");
+        Flit.Diagnostico.Api.Modulos.Reportes.LectorContenidoReporte.TextoMotivoNa[MotivoNa.ServicioPublico].Should().Be("Vehículo de servicio público: no paga impuesto vehicular");
+    }
+
     // ---- AC5: cobertura de todos los códigos ----
 
     [Fact]
@@ -211,7 +223,7 @@ public sealed class RotulosDiagnosticoTests
     {
         var celda = Json(new CeldaGrillaBackofficeDto(Guid.CreateVersion7(), "IMPUESTO_DEPARTAMENTAL", "NA", "SERVICIO_PUBLICO", null, null, false, 1, null, null));
         celda["estado_etiqueta"]!.GetValue<string>().Should().Be("No aplica");
-        celda["motivo_na_etiqueta"]!.GetValue<string>().Should().Be("El vehículo es de servicio público: esta consulta no aplica.");
+        celda["motivo_na_etiqueta"]!.GetValue<string>().Should().Be("Vehículo de servicio público: no paga impuesto vehicular");
 
         var fila = Json(new FilaVehiculoBackofficeDto(Guid.CreateVersion7(), 1, "ABC123", "PLACA_CARRO", "ABC123", null, true, [], null));
         fila["tipo_identificador_etiqueta"]!.GetValue<string>().Should().Be("Placa de carro");

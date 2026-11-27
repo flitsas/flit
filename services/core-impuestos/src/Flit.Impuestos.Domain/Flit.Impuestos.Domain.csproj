@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dominio puro de Impuestos (HU #14694, M05): máquinas de estado del aprovisionamiento, del ítem y del lote (plan §3), placa
+    normalizada (S16) y clase de error del API (§9 de la guía). Sin dependencias de infraestructura: ni EF Core, ni ASP.NET Core,
+    ni gRPC, ni el SDK de plataforma.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Impuestos.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

@@ -153,6 +153,10 @@ public static class ApiSecurityExtensions
             // ADR-0089 (HU #14587) — usuarios de Diagnóstico: solo svc-diagnostico con platform.usuarios.diagnostico[.conteos].
             .AddPolicy(DiagnosticoUsuariosServicioAuthorization.Policy, DiagnosticoUsuariosServicioAuthorization.Configure)
             .AddPolicy(DiagnosticoUsuariosServicioAuthorization.PolicyConteos, DiagnosticoUsuariosServicioAuthorization.ConfigureConteos)
+            // HU #14694 — usuarios por producto generalizados: cada cliente del mapa con el scope de su producto
+            // (svc-diagnostico → platform.usuarios.diagnostico[.conteos], svc-impuestos → platform.usuarios.impuestos[.conteos]).
+            .AddPolicy(UsuariosProductoServicioAuthorization.Policy, UsuariosProductoServicioAuthorization.Configure)
+            .AddPolicy(UsuariosProductoServicioAuthorization.PolicyConteos, UsuariosProductoServicioAuthorization.ConfigureConteos)
             // ADR-0091 — configuración de IA con la llave sellada: solo svc-diagnostico con platform.ia.diagnostico.
             .AddPolicy(DiagnosticoIaServicioAuthorization.Policy, DiagnosticoIaServicioAuthorization.Configure)
             // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.

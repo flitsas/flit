@@ -26,10 +26,24 @@ public sealed class ReglasAplicabilidadTests
     [InlineData("PUBLICO")]
     [InlineData("Público ")]
     [InlineData("SERVICIO PUBLICO")]
+    [InlineData("Público")]
+    [InlineData(" publico ")]
+    [InlineData("PÚBLICO")]
     public void Servicio_publico_deja_el_impuesto_NA(string servicio)
     {
         ReglasAplicabilidad.Evaluar(Fuente.ImpuestoDepartamental, Hechos(servicio)).Should().Be(MotivoNa.ServicioPublico);
         ReglasAplicabilidad.EsServicioPublico(servicio).Should().BeTrue();
+    }
+
+    // Decisión del usuario 2026-11-26 — particular, oficial o sin servicio no son públicos: el impuesto sí se consulta.
+    [Theory]
+    [InlineData("Particular")]
+    [InlineData("Oficial")]
+    [InlineData(null)]
+    public void Servicio_no_publico_no_deja_el_impuesto_NA(string? servicio)
+    {
+        ReglasAplicabilidad.EsServicioPublico(servicio).Should().BeFalse();
+        ReglasAplicabilidad.Evaluar(Fuente.ImpuestoDepartamental, Hechos(servicio)).Should().BeNull();
     }
 
     // AC2 (F03-C9) — departamento sin fila soportada (o desconocido): NA DEPARTAMENTO_NO_SOPORTADO.

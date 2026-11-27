@@ -177,7 +177,7 @@ internal static partial class RotulosDiagnostico
     /// <summary>Motivo de una celda N/A (<see cref="MotivoNa"/>): el mismo texto del detalle de celda y de la leyenda del PDF.</summary>
     public static IReadOnlyDictionary<string, string> MotivosNa { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["SERVICIO_PUBLICO"] = "El vehículo es de servicio público: esta consulta no aplica.",
+        ["SERVICIO_PUBLICO"] = "Vehículo de servicio público: no paga impuesto vehicular",
         ["DEPARTAMENTO_NO_SOPORTADO"] = "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.",
         ["SIN_DOCUMENTO_LOCATARIO"] = "El RUNT no reporta locatario",
     };

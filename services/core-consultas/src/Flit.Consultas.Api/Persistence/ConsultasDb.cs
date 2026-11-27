@@ -112,8 +112,27 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
             e.HasIndex(t => t.TrabajoId).IsUnique().HasDatabaseName("uq_vehicle_tax_jobs_trabajo_id");
             e.HasIndex(t => new { t.TenantId, t.CreatedAt }).HasDatabaseName("ix_vehicle_tax_jobs_tenant_id_created_at");
             e.HasIndex(t => t.CreatedAt).HasDatabaseName("ix_vehicle_tax_jobs_created_at");
+            // HU #14711: el receptor del aviso busca la consulta por (empresa, id externo).
+            e.HasIndex(t => new { t.TenantId, t.ExternalId }).HasDatabaseName("ix_vehicle_tax_jobs_tenant_id_external_id");
             e.ToTable(t => t.HasCheckConstraint("ck_vehicle_tax_jobs_status",
                 "status IN ('reserved','queued','running','succeeded','partial','failed','timeout','error')"));
+        });
+
+        // HU #14711: deduplicación de los avisos del proveedor de impuesto, por (empresa, entrega). Sin cuerpo ni PII; purga a 7 días.
+        modelBuilder.Entity<EntregaAvisoImpuesto>(e =>
+        {
+            e.ToTable("vehicle_tax_webhook_deliveries", t => t.HasComment(
+                "Avisos del proveedor de impuesto ya verificados, para deduplicar por (tenant_id, delivery_id) (HU #14711). Sin cuerpo, firma ni PII. Retención 7 días."));
+            e.HasKey(d => d.Id).HasName("pk_vehicle_tax_webhook_deliveries");
+            e.Property(d => d.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(d => d.TenantId).HasColumnName("tenant_id");
+            e.Property(d => d.DeliveryId).HasColumnName("delivery_id").HasMaxLength(120).IsRequired();
+            e.Property(d => d.ExternalId).HasColumnName("external_id").HasMaxLength(64).IsRequired();
+            e.Property(d => d.Attempt).HasColumnName("attempt");
+            e.Property(d => d.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(d => new { d.TenantId, d.DeliveryId }).IsUnique().HasDatabaseName("uq_vehicle_tax_webhook_deliveries_tenant_id_delivery_id");
+            e.HasIndex(d => d.CreatedAt).HasDatabaseName("ix_vehicle_tax_webhook_deliveries_created_at");
+            e.ToTable(t => t.HasCheckConstraint("ck_vehicle_tax_webhook_deliveries_attempt", "attempt >= 0"));
         });
 
         // Épica #14644 (HU #14647): contingencia de proveedor RUNT, global de plataforma (sin tenant_id: la empresa no la ve).
@@ -171,6 +190,8 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
     public DbSet<TrabajoImpuestoExterno> TrabajosImpuesto => Set<TrabajoImpuestoExterno>();
 
     public DbSet<ContingenciaProveedorRunt> ContingenciasRunt => Set<ContingenciaProveedorRunt>();
+
+    public DbSet<EntregaAvisoImpuesto> EntregasAvisoImpuesto => Set<EntregaAvisoImpuesto>();
 
     /// <summary>Opciones comunes: Npgsql con la tabla de migraciones dentro del propio esquema.</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString) =>

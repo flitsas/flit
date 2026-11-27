@@ -136,7 +136,7 @@ public sealed class OutboxTests(MessagingFixture fixture) : IClassFixture<Messag
 
         // Broker caído: un puerto donde no escucha nadie.
         await using (var caido = new RabbitMqEventPublisher(Options("amqp://flit:flit-prueba@127.0.0.1:1/")))
-            (await Publisher(caido).PublicarAsync(ct)).Should().Be(new CicloOutbox(0, Fallo: true), "el ciclo avisa el fallo para espaciar el siguiente");
+            (await Publisher(caido).PublicarAsync(ct)).Should().Be(new CicloOutbox(0, Fallo: true, BrokerInalcanzable: true), "el ciclo avisa el fallo para espaciar el siguiente");
 
         await using (var check = fixture.NewDb())
         {

@@ -2,7 +2,8 @@
 #
 # FLIT Suite (A-11, HU #13002) — el hub ocupa la raíz de cada ambiente y Trámites pasa a su propio host
 # (plan maestro §4.3). Plantilla para el nginx EXTERNO del VPS; el nginx real no se toca desde este repo.
-# Ejemplo para DEV; en QA y PDN cambian los hosts y los puertos (HUB_PORT 4022/5022/6022, FRONTEND_PORT 4001/5001/6001).
+# Ejemplo para DEV; en QA y PDN cambian los hosts y los puertos (HUB_PORT 4022/5022/6022, FRONTEND_PORT 4001/5001/6001,
+# IMPUESTOS_PORT 4034/5034/6034, GATEWAY_PORT 4002/5002/6002).
 #
 # ORDEN PARA ENCENDERLO EN UN AMBIENTE (y cómo volver atrás):
 #   1. DNS y certificado de dev.tramites.flitsas.online (mismo VPS).
@@ -77,5 +78,45 @@ server {
 
     location / {
         proxy_pass http://127.0.0.1:4022;
+    }
+}
+
+# ── Impuestos en su host (HU #14694, ADR-0093) ─────────────────────────────
+# App web frontend-impuestos en IMPUESTOS_PORT (DEV 4034 / QA 5034 / PDN 6034); el gateway en GATEWAY_PORT
+# (4002 / 5002 / 6002). Host <amb>.impuestos.flitsas.online (impuestos.flitsas.online en PDN), el mismo que arma el
+# hub para el cliente OIDC `impuestos` (Suite:Hosts). Pasos y orden en docs/suite/handoff-vps-impuestos.md §8.
+#
+# Receptor de avisos del API de liquidación (gate G-6): el API llama por POST a
+# IMPUESTOS_SVC_AVISOS_URL_BASE/<token> sin seguir redirecciones y sin Bearer (la credencial es la firma HMAC). Si ese
+# host público es este, /api/v1/impuestos/avisos/ va DIRECTO al gateway: por la app web pasaría por su BFF, que exige
+# la sesión. Si el host público elegido es api.<amb>.flitsas.online, esa location no hace falta (ese host ya va entero
+# al gateway), pero sigue sin poder redirigir de http a https ni de un host a otro.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name dev.impuestos.flitsas.online;
+
+    ssl_certificate     /etc/letsencrypt/live/dev.impuestos.flitsas.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dev.impuestos.flitsas.online/privkey.pem;
+
+    proxy_read_timeout 60s;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    # Carga masiva de placas (plantilla Excel): mismo margen que los demás hosts.
+    client_max_body_size 50m;
+
+    # Avisos firmados del API de liquidación: al gateway, sin redirecciones y sin tocar el cuerpo (la firma se calcula
+    # sobre los bytes exactos). Hereda los proxy_set_header del server{}.
+    location /api/v1/impuestos/avisos/ {
+        proxy_pass http://127.0.0.1:4002;
+        proxy_redirect off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:4034;
     }
 }

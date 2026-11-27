@@ -4,6 +4,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Modules.Platform.Domain.TenantProducts;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories.Platform;
 
@@ -16,10 +17,18 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
 {
     private const string AuditEntityName = "TenantProductCredential";
     private const string AuditTargetType = "TENANT_PRODUCT_CREDENTIAL";
-    private const string FieldName = "impuesto_api_key";
+    /// <summary>HU #14711 — campo de la fila resumen del alta del proveedor (motivo CREDENCIAL_OBTENIDA o CLAVE_ROTADA).</summary>
+    internal const string CampoAltaProveedor = "impuesto_alta_proveedor";
+
+    /// <summary>HU #14711 — operación de la fila resumen del alta del proveedor (propia de este rastro, como la lectura para copia).</summary>
+    internal const string OperacionAltaProveedor = "obtain_from_provider";
     private const string ValorConfigurada = "configurada";
     private const string ValorReemplazada = "reemplazada";
     private const string ValorNoConfigurada = "no_configurada";
+    private const string ValorLeidaParaCopia = "leida_para_copia";
+
+    /// <summary>HU #14694 — operación de la lectura para copia (no está en <c>AuditVocabulary</c>: es propia de este rastro).</summary>
+    internal const string OperacionLecturaParaCopia = "read_for_copy";
 
     private readonly IIdentityDb _context;
     private readonly IAuditContextAccessor _auditContext;
@@ -103,7 +112,7 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
                 UpdatedBy = changedBy,
             };
             _context.Set<TenantProductCredentialEntity>().Add(row);
-            AddAudit(tenantId, row.Id, null, ValorConfigurada, AuditVocabulary.Operations.Create, changedBy, now);
+            AddAudit(tenantId, row.Id, credentialCode, null, ValorConfigurada, AuditVocabulary.Operations.Create, changedBy, now);
             await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return TenantProductCredentialWrite.Created;
         }
@@ -111,9 +120,171 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
         row.SecretProtected = secretProtected;
         row.UpdatedAt = now;
         row.UpdatedBy = changedBy;
-        AddAudit(tenantId, row.Id, ValorConfigurada, ValorReemplazada, AuditVocabulary.Operations.Update, changedBy, now);
+        AddAudit(tenantId, row.Id, credentialCode, ValorConfigurada, ValorReemplazada, AuditVocabulary.Operations.Update, changedBy, now);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return TenantProductCredentialWrite.Replaced;
+    }
+
+    /// <summary>
+    /// HU #14694 (M04b) — reemplaza solo si la fila existe; la auditoría (configurada a reemplazada, operación update, el cliente
+    /// de servicio en <c>user_agent</c>) va en el mismo guardado. Sin fila no escribe nada.
+    /// </summary>
+    public async Task<bool> ReplaceExistingFromServiceAsync(
+        Guid tenantId,
+        string productCode,
+        string credentialCode,
+        string secretProtected,
+        string servicio,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(secretProtected);
+        ArgumentException.ThrowIfNullOrWhiteSpace(servicio);
+
+        var row = await _context.Set<TenantProductCredentialEntity>()
+            .FirstOrDefaultAsync(
+                r => r.TenantId == tenantId && r.ProductCode == productCode && r.CredentialCode == credentialCode,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+            return false;
+
+        var now = _clock.GetUtcNow();
+        row.SecretProtected = secretProtected;
+        row.UpdatedAt = now;
+        row.UpdatedBy = null;
+        AddAudit(tenantId, row.Id, credentialCode, ValorConfigurada, ValorReemplazada, AuditVocabulary.Operations.Update, null, now, servicio);
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// HU #14711 — las credenciales del alta del proveedor en UN <c>SaveChanges</c>: crea o reemplaza cada fila (todas con el
+    /// mismo <c>updated_at</c>; el del secreto anterior marca el inicio de su ventana de 24 h), una auditoría por fila con su
+    /// código real y una fila resumen (<see cref="CampoAltaProveedor"/>) con el motivo. <paramref name="antesDeGuardar"/> encola
+    /// en el mismo contexto. Sin valores ni huellas en la auditoría. Si otro guardado de las mismas credenciales llegó primero
+    /// (<c>23505</c> en el unique o <c>row_version</c> distinto) suelta lo que no se guardó y lanza
+    /// <see cref="TenantProductCredentialConflictException"/> (M-3).
+    /// </summary>
+    public async Task<DateTimeOffset> GuardarAltaProveedorAsync(
+        Guid tenantId,
+        string productCode,
+        IReadOnlyList<EscrituraCredencialAlta> escrituras,
+        string motivo,
+        Guid? changedBy,
+        Action<DateTimeOffset>? antesDeGuardar,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentNullException.ThrowIfNull(escrituras);
+        ArgumentException.ThrowIfNullOrWhiteSpace(motivo);
+        if (escrituras.Count == 0)
+            throw new ArgumentException("El alta no trae credenciales que guardar.", nameof(escrituras));
+
+        var codigos = escrituras.Select(e => e.CredentialCode).ToList();
+        var filas = await _context.Set<TenantProductCredentialEntity>()
+            .Where(r => r.TenantId == tenantId && r.ProductCode == productCode && codigos.Contains(r.CredentialCode))
+            .ToDictionaryAsync(r => r.CredentialCode, StringComparer.Ordinal, cancellationToken)
+            .ConfigureAwait(false);
+
+        var now = _clock.GetUtcNow();
+        foreach (var escritura in escrituras)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(escritura.CredentialCode);
+            ArgumentException.ThrowIfNullOrWhiteSpace(escritura.SecretProtected);
+            if (filas.TryGetValue(escritura.CredentialCode, out var row))
+            {
+                row.SecretProtected = escritura.SecretProtected;
+                row.UpdatedAt = now;
+                row.UpdatedBy = changedBy;
+                AddAudit(tenantId, row.Id, row.CredentialCode, ValorConfigurada, ValorReemplazada, AuditVocabulary.Operations.Update, changedBy, now);
+                continue;
+            }
+
+            row = new TenantProductCredentialEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                ProductCode = productCode,
+                CredentialCode = escritura.CredentialCode,
+                SecretProtected = escritura.SecretProtected,
+                CreatedAt = now,
+                CreatedBy = changedBy,
+                UpdatedAt = now,
+                UpdatedBy = changedBy,
+            };
+            _context.Set<TenantProductCredentialEntity>().Add(row);
+            AddAudit(tenantId, row.Id, row.CredentialCode, null, ValorConfigurada, AuditVocabulary.Operations.Create, changedBy, now);
+        }
+
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = AuditEntityName,
+            FieldName = CampoAltaProveedor,
+            OldValue = null,
+            NewValue = JsonSerializer.Serialize(motivo),
+            ChangedAt = now,
+            ChangedBy = changedBy,
+            ClientIp = _auditContext.ClientIp,
+            Operation = OperacionAltaProveedor,
+            Result = AuditVocabulary.Results.Success,
+            Module = AuditVocabulary.Modules.Companies,
+            TargetEntityType = AuditTargetType,
+            TargetEntityId = null,
+        });
+
+        antesDeGuardar?.Invoke(now);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex is DbUpdateConcurrencyException || ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Lo que no se guardó (filas, auditoría y el trabajo de la outbox) no debe viajar en el siguiente guardado del scope.
+            _context.ChangeTracker.Clear();
+            throw new TenantProductCredentialConflictException("Otro guardado de las credenciales del alta llegó primero.", ex);
+        }
+
+        return now;
+    }
+
+    /// <summary>
+    /// HU #14711 (L-3) — fila resumen <see cref="OperacionAltaProveedor"/> sin credenciales escritas, en su propio guardado:
+    /// <c>SIN_CAMBIOS</c> (éxito) o el código del fallo (también en <c>error_code</c>). Nunca un valor ni una huella.
+    /// </summary>
+    public async Task RegistrarAuditoriaAltaProveedorAsync(
+        Guid tenantId,
+        string productCode,
+        string resultado,
+        bool exito,
+        Guid? changedBy,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(resultado);
+
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = AuditEntityName,
+            FieldName = CampoAltaProveedor,
+            OldValue = null,
+            NewValue = JsonSerializer.Serialize(resultado),
+            ChangedAt = _clock.GetUtcNow(),
+            ChangedBy = changedBy,
+            ClientIp = _auditContext.ClientIp,
+            Operation = OperacionAltaProveedor,
+            Result = exito ? AuditVocabulary.Results.Success : AuditVocabulary.Results.Failure,
+            ErrorCode = exito ? null : resultado,
+            Module = AuditVocabulary.Modules.Companies,
+            TargetEntityType = AuditTargetType,
+            TargetEntityId = null,
+        });
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> DeleteAsync(
@@ -136,27 +307,67 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
             return false;
 
         var now = _clock.GetUtcNow();
-        AddAudit(tenantId, row.Id, ValorConfigurada, ValorNoConfigurada, AuditVocabulary.Operations.Delete, changedBy, now);
+        AddAudit(tenantId, row.Id, credentialCode, ValorConfigurada, ValorNoConfigurada, AuditVocabulary.Operations.Delete, changedBy, now);
         _context.Set<TenantProductCredentialEntity>().Remove(row);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 
+    /// <summary>
+    /// HU #14694 (D-CRED-DIAG) — una fila por lectura para copia, en su propio guardado: operación
+    /// <see cref="OperacionLecturaParaCopia"/>, valor legible (<c>leida_para_copia</c> o <c>no_configurada</c>) y el cliente
+    /// de servicio en <c>user_agent</c>. Nunca la llave ni una huella.
+    /// </summary>
+    public async Task RegistrarLecturaParaCopiaAsync(
+        Guid tenantId,
+        string productCode,
+        string credentialCode,
+        string lector,
+        bool existe,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(lector);
+
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = AuditEntityName,
+            FieldName = credentialCode,
+            OldValue = null,
+            NewValue = JsonSerializer.Serialize(existe ? ValorLeidaParaCopia : ValorNoConfigurada),
+            ChangedAt = _clock.GetUtcNow(),
+            ChangedBy = null,
+            ClientIp = _auditContext.ClientIp,
+            Operation = OperacionLecturaParaCopia,
+            Result = AuditVocabulary.Results.Success,
+            Module = AuditVocabulary.Modules.Companies,
+            TargetEntityType = AuditTargetType,
+            TargetEntityId = null,
+            UserAgent = lector,
+        });
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private void AddAudit(
         Guid tenantId,
         Guid rowId,
+        string credentialCode,
         string? oldValue,
         string newValue,
         string operation,
         Guid? changedBy,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? servicio = null)
     {
         _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             EntityName = AuditEntityName,
-            FieldName = FieldName,
+            FieldName = credentialCode,
             OldValue = oldValue is null ? null : JsonSerializer.Serialize(oldValue),
             NewValue = JsonSerializer.Serialize(newValue),
             ChangedAt = now,
@@ -167,6 +378,7 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
             Module = AuditVocabulary.Modules.Companies,
             TargetEntityType = AuditTargetType,
             TargetEntityId = rowId,
+            UserAgent = servicio,
         });
     }
 

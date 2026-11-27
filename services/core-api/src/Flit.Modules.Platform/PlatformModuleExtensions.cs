@@ -1,9 +1,11 @@
 using Flit.Modules.Platform.Application.Access;
 using Flit.Modules.Platform.Application.Apps;
+using Flit.Modules.Platform.Application.Companies;
 using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Security.Application.Products;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Modules.Platform;
 
@@ -25,6 +27,15 @@ public static class PlatformModuleExtensions
         services.AddScoped<SetTenantProductCredentialHandler>();
         services.AddScoped<DeleteTenantProductCredentialHandler>();
         services.AddScoped<GetTenantProductCredentialHandler>();
+        // HU #14694: reintentar el aprovisionamiento y datos del alta en el proveedor (plan §1.2 R1 y §1.3 P1).
+        services.AddScoped<RetryProvisioningHandler>();
+        services.AddScoped<ObtenerDatosAltaProveedorHandler>();
+        // HU #14694: estado de aprovisionamiento que reporta el producto y copia de la llave de Diagnóstico (D-CRED-DIAG).
+        services.AddScoped<ReportProvisioningStatusHandler>();
+        services.AddScoped<GetTenantProductCredentialForCopyHandler>();
+        // HU #14694 (M04b, D-ALTA-IDEM): Impuestos propaga a Diagnóstico la llave que el alta del proveedor rotó.
+        services.AddScoped<UpdateTenantProductCredentialFromServiceHandler>();
+        services.AddScoped<GetTenantProductWebhookSecretHandler>(); // HU #14711: secreto del webhook del impuesto para core-consultas
         // HU #12965 (B-05): implementación real del contrato §4.
         services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
         // Epic #13316 (HU #13334): productos encendidos de una empresa, para el gRPC de Identidad.
@@ -32,6 +43,10 @@ public static class PlatformModuleExtensions
         // HU #12966 (B-06): me/apps y manifiesto. IProductHosts lo registra la API.
         services.AddScoped<ListMyAppsHandler>();
         services.AddScoped<ApplyProductManifestHandler>();
+        // HU #14711: alta idempotente de la credencial del impuesto de Diagnóstico (botón del admin y alta automática).
+        services.AddScoped<ObtenerCredencialImpuestoDiagnosticoHandler>();
+        services.AddScoped<AltaCredencialDiagnosticoAutomatica>();
+        services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 }

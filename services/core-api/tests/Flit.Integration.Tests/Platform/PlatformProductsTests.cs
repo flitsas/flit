@@ -2,6 +2,7 @@ using System.Text;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Repositories.Platform;
+using Flit.Infrastructure.Platform;
 using Flit.Integration.Tests.Postgres;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -37,14 +38,17 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
     // ── AC1 — catálogo ─────────────────────────────────────────────────────────────
 
     [PostgresFact]
-    public async Task AC1_ElCatalogoTraeLosCincoProductosEnElOrdenDelContrato()
+    public async Task AC1_ElCatalogoTraeLosSeisProductosEnElOrdenDelContrato()
     {
         await using var ctx = NewContext();
         var products = await new ProductCatalogRepository(ctx).ListAsync();
 
         // `caja` (DDL 199) existe porque el rol ot_caja es de ese producto; no es una app de la suite (ListMyApps la excluye, ADR-0082).
-        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja");
-        products.Should().OnlyContain(p => p.IsActive);
+        // `impuestos` (DDL 205, HU #14694) va al final (sort_order 60).
+        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja", "impuestos");
+        // BLOQ-1 (a, HU #14694): `impuestos` nace inactivo y se activa por ambiente (docs/impuestos/guia-despliegue.md).
+        products.Where(p => p.Code != "impuestos").Should().OnlyContain(p => p.IsActive);
+        products.Single(p => p.Code == "impuestos").IsActive.Should().BeFalse();
         products.Single(p => p.Code == "tramites").Name.Should().Be("Trámites");
     }
 
@@ -100,8 +104,9 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
                     await cmd.ExecuteNonQueryAsync();
                 }
 
-                // Cuatro del catálogo + `caja` (DDL 199) + `demo`, que el DDL 119 vuelve a sembrar: sin duplicados.
-                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(6);
+                // Cuatro del catálogo + `caja` (DDL 199) + `impuestos` (DDL 205) + `demo`, que el DDL 119 vuelve a
+                // sembrar: sin duplicados.
+                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(7);
             }
             finally
             {
@@ -258,5 +263,103 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
 
         await using var check = NewContext();
         (await new TenantProductFlagsReader(check).GetAsync(TenantSeed.LoneId, TestContext.Current.CancellationToken)).Tramites.Should().BeTrue();
+    }
+
+    // ── HU #14694 — datos del alta en el proveedor y precondición de activación (plan §1.3, D-EMAIL, DA-8) ──────
+
+    private static readonly Guid AdminViejo = new("14694300-0000-4000-8000-0000000000b1");
+    private static readonly Guid AdminNuevo = new("14694300-0000-4000-8000-0000000000b2");
+    private static readonly Guid AdminPendiente = new("14694300-0000-4000-8000-0000000000b3");
+    private static readonly Guid AdminRetirado = new("14694300-0000-4000-8000-0000000000b4");
+
+    // Hija de una cabeza: cuatro usuarios con AdminCompany en la hija. Solo cuentan los activos con asignación vigente;
+    // el más antiguo es el de la asignación más vieja (assigned_at).
+    private async Task SeedAltaAsync(bool conAdminsActivos = true)
+    {
+        await using (var ctx = NewContext())
+        {
+            var cabeza = TenantSeed.GroupParent();
+            cabeza.TaxId = "900.123.456-7";
+            var hija = TenantSeed.ChildOf(cabeza.Id);
+            hija.TaxId = "800111222-3";
+            hija.LegalName = "Transportes Hija S.A.S.";
+            ctx.Tenants.AddRange(cabeza, hija);
+            await ctx.SaveChangesAsync();
+        }
+
+        var child = TenantSeed.ChildId;
+        var activos = conAdminsActivos
+            ? $"""
+              ('{AdminViejo}','viejo14694@it.local','Viejo','active','{child}',now()),
+              ('{AdminNuevo}','nuevo14694@it.local','Nuevo','active','{child}',now() - interval '30 days'),
+              """
+            : string.Empty;
+        await using var cn = await Fixture.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(
+            $"""
+            INSERT INTO identity.users (id, email, display_name, status, home_tenant_id, created_at) VALUES
+              {activos}
+              ('{AdminPendiente}','pendiente14694@it.local','Pendiente','pending','{child}',now()),
+              ('{AdminRetirado}','retirado14694@it.local','Retirado','active','{child}',now());
+            INSERT INTO security.roles (code, name, is_system, is_active, target_entity_type, product_code, tenant_id)
+              VALUES ('AdminCompany','Administrador de Compañía',true,true,'COMPANY','plataforma',NULL);
+            INSERT INTO security.user_role_assignments (tenant_id, user_id, role_id, assigned_at, deleted_at)
+              SELECT '{child}', u.id, r.id, now() - (u.dias || ' days')::interval, u.borrado
+                FROM security.roles r
+               CROSS JOIN (VALUES
+                 {(conAdminsActivos ? $"('{AdminViejo}'::uuid, 20, NULL::timestamptz), ('{AdminNuevo}'::uuid, 10, NULL::timestamptz)," : string.Empty)}
+                 ('{AdminPendiente}'::uuid, 40, NULL::timestamptz),
+                 ('{AdminRetirado}'::uuid, 50, now())) AS u(id, dias, borrado)
+               WHERE r.code = 'AdminCompany';
+            """,
+            cn);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    [PostgresFact]
+    public async Task DatosAlta_TraeRazonSocialNitYNitsDeLaCadena_YElAdminCompanyActivoMasAntiguo()
+    {
+        await SeedAltaAsync();
+
+        await using var ctx = NewContext();
+        var datos = await new DatosAltaProveedorStore(ctx).ObtenerAsync(TenantSeed.ChildId, TestContext.Current.CancellationToken);
+
+        datos.Should().NotBeNull();
+        datos!.LegalName.Should().Be("Transportes Hija S.A.S.");
+        datos.TaxId.Should().Be("800111222-3");
+        datos.Activa.Should().BeTrue();
+        datos.TaxIdsAncestros.Should().Equal("900.123.456-7");
+        datos.ContactEmail.Should().Be("viejo14694@it.local", "es la asignación de AdminCompany vigente más vieja de un usuario activo");
+    }
+
+    [PostgresFact]
+    public async Task DatosAlta_SinAdminCompanyActivo_CorreoNulo_YLaPrecondicionNoSeCumple()
+    {
+        await SeedAltaAsync(conAdminsActivos: false);
+
+        await using var ctx = NewContext();
+        (await new DatosAltaProveedorStore(ctx).ObtenerAsync(TenantSeed.ChildId, TestContext.Current.CancellationToken))!
+            .ContactEmail.Should().BeNull("el pendiente no está activo y el retirado no tiene la asignación vigente");
+        (await new PrecondicionAdminCompanyActivo(ctx).CumpleAsync(TenantSeed.ChildId, "impuestos", TestContext.Current.CancellationToken))
+            .Should().BeFalse();
+    }
+
+    [PostgresFact]
+    public async Task Precondicion_ConAdminCompanyActivo_SeCumple()
+    {
+        await SeedAltaAsync();
+
+        await using var ctx = NewContext();
+        (await new PrecondicionAdminCompanyActivo(ctx).CumpleAsync(TenantSeed.ChildId, "impuestos", TestContext.Current.CancellationToken))
+            .Should().BeTrue();
+        (await new PrecondicionAdminCompanyActivo(ctx).CumpleAsync(TenantSeed.ParentId, "impuestos", TestContext.Current.CancellationToken))
+            .Should().BeFalse("el AdminCompany de la hija no cuenta para la cabeza");
+    }
+
+    [PostgresFact]
+    public async Task DatosAlta_EmpresaInexistente_EsNull()
+    {
+        await using var ctx = NewContext();
+        (await new DatosAltaProveedorStore(ctx).ObtenerAsync(Guid.NewGuid(), TestContext.Current.CancellationToken)).Should().BeNull();
     }
 }

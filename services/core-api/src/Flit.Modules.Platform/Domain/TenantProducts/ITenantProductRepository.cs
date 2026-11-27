@@ -16,12 +16,17 @@ public interface ITenantProductRepository
     /// Crea o actualiza la fila y audita cada campo que cambia (<c>enabled</c>, <c>notes</c>). Si nada
     /// cambia no escribe ni audita.
     /// </summary>
+    /// <param name="antesDeGuardar">
+    /// HU #14694 (plan §1.1, decisión E2) — se invoca con la fila tal como quedará, solo si hubo cambio y justo antes del
+    /// <c>SaveChanges</c>: lo que encole en el mismo contexto (la outbox) se confirma o se revierte con la fila.
+    /// </param>
     Task<TenantProductChange> SetAsync(
         Guid tenantId,
         string productCode,
         bool enabled,
         string? notes,
         Guid? changedBy,
+        Action<TenantProductChange>? antesDeGuardar = null,
         CancellationToken cancellationToken = default);
 }
 

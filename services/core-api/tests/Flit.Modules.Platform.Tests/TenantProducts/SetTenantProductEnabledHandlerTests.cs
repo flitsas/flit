@@ -20,6 +20,10 @@ public sealed class SetTenantProductEnabledHandlerTests
     private readonly IProductCatalog _catalog = Substitute.For<IProductCatalog>();
     private readonly ITenantProductRepository _repository = Substitute.For<ITenantProductRepository>();
     private readonly IProductAccessStore _access = Substitute.For<IProductAccessStore>();
+    private readonly ITenantProductChangeJobs _jobs = Substitute.For<ITenantProductChangeJobs>();
+    private readonly IPrecondicionActivacion _precondicion = Substitute.For<IPrecondicionActivacion>();
+    private readonly ITenantProductProvisioningStore _provisioning = Substitute.For<ITenantProductProvisioningStore>();
+    private readonly List<DateTimeOffset> _pendientesMarcados = [];
 
     public SetTenantProductEnabledHandlerTests()
     {
@@ -28,13 +32,26 @@ public sealed class SetTenantProductEnabledHandlerTests
             .Returns(new Product("comparendos", "Comparendos", "ticket", ProductStatuses.Active));
         _catalog.FindAsync("viejo", Arg.Any<CancellationToken>())
             .Returns(new Product("viejo", "Viejo", "archive", ProductStatuses.Inactive));
-        _repository.SetAsync(default, default!, default, default, default, Arg.Any<CancellationToken>())
-            .ReturnsForAnyArgs(ci => new TenantProductChange(
-                new TenantProduct(ci.ArgAt<Guid>(0), ci.ArgAt<string>(1), ci.ArgAt<bool>(2), ci.ArgAt<string?>(3), DateTimeOffset.UtcNow, ci.ArgAt<Guid?>(4)),
-                Changed: true));
+        _catalog.FindAsync("impuestos", Arg.Any<CancellationToken>())
+            .Returns(new Product("impuestos", "Impuestos", "receipt", ProductStatuses.Active));
+        _precondicion.CumpleAsync(TenantId, "impuestos", Arg.Any<CancellationToken>()).Returns(true);
+        _catalog.FindAsync("diagnostico", Arg.Any<CancellationToken>())
+            .Returns(new Product("diagnostico", "Diagnóstico", "gauge", ProductStatuses.Active));
+        _provisioning.PrepararPendienteAltaDiagnosticoAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new PreparacionPendienteAltaDiagnostico(FilaExiste: true, _pendientesMarcados.Add));
+        // El repositorio de verdad invoca antesDeGuardar solo si hubo cambio (TenantProductChangeOutboxTests); aquí, siempre.
+        _repository.SetAsync(default, default!, default, default, default, default, Arg.Any<CancellationToken>())
+            .ReturnsForAnyArgs(ci =>
+            {
+                var change = new TenantProductChange(
+                    new TenantProduct(ci.ArgAt<Guid>(0), ci.ArgAt<string>(1), ci.ArgAt<bool>(2), ci.ArgAt<string?>(3), DateTimeOffset.UtcNow, ci.ArgAt<Guid?>(4)),
+                    Changed: true);
+                ci.ArgAt<Action<TenantProductChange>?>(5)?.Invoke(change);
+                return change;
+            });
     }
 
-    private SetTenantProductEnabledHandler Handler() => new(_catalog, _repository, _access);
+    private SetTenantProductEnabledHandler Handler() => new(_catalog, _repository, _access, _jobs, _precondicion, _provisioning);
 
     [Fact]
     public async Task Encender_NormalizaElCodigoYLasNotas_YDelegaEnElRepositorio()
@@ -42,7 +59,7 @@ public sealed class SetTenantProductEnabledHandlerTests
         var result = await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "  Comparendos ", true, "  Piloto  "), AdminId, TestContext.Current.CancellationToken);
 
         result.Changed.Should().BeTrue();
-        await _repository.Received(1).SetAsync(TenantId, "comparendos", true, "Piloto", AdminId, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SetAsync(TenantId, "comparendos", true, "Piloto", AdminId, Arg.Any<Action<TenantProductChange>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -50,7 +67,7 @@ public sealed class SetTenantProductEnabledHandlerTests
     {
         await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "comparendos", false, "   "), AdminId, TestContext.Current.CancellationToken);
 
-        await _repository.Received(1).SetAsync(TenantId, "comparendos", false, null, AdminId, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SetAsync(TenantId, "comparendos", false, null, AdminId, Arg.Any<Action<TenantProductChange>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -59,7 +76,7 @@ public sealed class SetTenantProductEnabledHandlerTests
         var act = () => Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "plataforma", false, null), AdminId, TestContext.Current.CancellationToken);
 
         (await act.Should().ThrowAsync<TenantProductException>()).Which.Code.Should().Be(TenantProductException.ProductAlwaysOn);
-        await _repository.DidNotReceiveWithAnyArgs().SetAsync(default, default!, default, default, default, TestContext.Current.CancellationToken);
+        await _repository.DidNotReceiveWithAnyArgs().SetAsync(default, default!, default, default, default, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -83,7 +100,7 @@ public sealed class SetTenantProductEnabledHandlerTests
     {
         await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "viejo", false, null), AdminId, TestContext.Current.CancellationToken);
 
-        await _repository.Received(1).SetAsync(TenantId, "viejo", false, null, AdminId, Arg.Any<CancellationToken>());
+        await _repository.Received(1).SetAsync(TenantId, "viejo", false, null, AdminId, Arg.Any<Action<TenantProductChange>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -115,5 +132,136 @@ public sealed class SetTenantProductEnabledHandlerTests
         await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "comparendos", false, null), AdminId, TestContext.Current.CancellationToken);
 
         await _access.DidNotReceiveWithAnyArgs().GetTenantChainAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    // ── HU #14694 — producto con aprovisionamiento (plan §1.1 decisión E2, D-ACT, D-EMAIL) ───────────────────
+
+    [Fact]
+    public async Task EncenderImpuestos_SinAdminCompanyActivo_SeRechaza_YNoGuardaNiEncola()
+    {
+        _precondicion.CumpleAsync(TenantId, "impuestos", Arg.Any<CancellationToken>()).Returns(false);
+
+        var act = () => Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "impuestos", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        var ex = (await act.Should().ThrowAsync<TenantProductException>()).Which;
+        ex.Code.Should().Be(TenantProductException.ProvisioningPrerequisiteMissing);
+        ex.Message.Should().Be("La compañía no tiene un Administrador de Compañía activo");
+        await _repository.DidNotReceiveWithAnyArgs().SetAsync(default, default!, default, default, default, default, TestContext.Current.CancellationToken);
+        _jobs.DidNotReceiveWithAnyArgs().EncolarCambio(default!);
+    }
+
+    [Fact]
+    public async Task EncenderImpuestos_ConAdminCompany_EncolaElTrabajoEnElGuardadoDelCambio()
+    {
+        var result = await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "impuestos", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        result.Changed.Should().BeTrue();
+        _jobs.Received(1).EncolarCambio(Arg.Is<TenantProduct>(p => p.TenantId == TenantId && p.ProductCode == "impuestos" && p.Enabled));
+        await _repository.Received(1).SetAsync(TenantId, "impuestos", true, null, AdminId, Arg.Is<Action<TenantProductChange>?>(a => a != null), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApagarImpuestos_NoExigeLaPrecondicion_YEncolaLaSuspension()
+    {
+        _precondicion.CumpleAsync(TenantId, "impuestos", Arg.Any<CancellationToken>()).Returns(false);
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "impuestos", false, null), AdminId, TestContext.Current.CancellationToken);
+
+        await _precondicion.DidNotReceiveWithAnyArgs().CumpleAsync(default, default!, TestContext.Current.CancellationToken);
+        _jobs.Received(1).EncolarCambio(Arg.Is<TenantProduct>(p => p.ProductCode == "impuestos" && !p.Enabled));
+    }
+
+    [Fact]
+    public async Task ProductoSinAprovisionamiento_NiConsultaLaPrecondicion_NiEncola()
+    {
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "comparendos", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        await _precondicion.DidNotReceiveWithAnyArgs().CumpleAsync(default, default!, TestContext.Current.CancellationToken);
+        _jobs.DidNotReceiveWithAnyArgs().EncolarCambio(default!);
+        await _repository.Received(1).SetAsync(TenantId, "comparendos", true, null, AdminId, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EncenderImpuestosEnHijaConCabezaApagada_RechazaPorLaCabezaAntesQuePorLaPrecondicion()
+    {
+        var head = Guid.NewGuid();
+        _access.GetTenantChainAsync(TenantId, Arg.Any<CancellationToken>()).Returns([TenantId, head]);
+        _access.GetTenantsWithProductEnabledAsync(Arg.Any<IReadOnlyList<Guid>>(), "impuestos", Arg.Any<CancellationToken>())
+            .Returns(new HashSet<Guid>());
+        _precondicion.CumpleAsync(TenantId, "impuestos", Arg.Any<CancellationToken>()).Returns(false);
+
+        var act = () => Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "impuestos", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        (await act.Should().ThrowAsync<TenantProductException>()).Which.Code.Should().Be(TenantProductException.ProductNotEnabledForHead);
+    }
+
+    [Theory]
+    [InlineData("impuestos", true)]
+    [InlineData(" IMPUESTOS ", true)]
+    [InlineData("diagnostico", false)]
+    [InlineData("tramites", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void ProductosConAprovisionamiento_HoySoloImpuestos(string? code, bool esperado) =>
+        ProductosConAprovisionamiento.Tiene(code).Should().Be(esperado);
+
+    // ── HU #14711 (AC-DC-03) — encender diagnostico deja el alta de la credencial pendiente ──────────────────
+
+    [Fact]
+    public async Task EncenderDiagnostico_DejaElAltaDeLaCredencialPendienteEnElMismoGuardado_SinPrecondicionNiTrabajo()
+    {
+        var result = await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().Equal(result.Current.UpdatedAt);
+        await _repository.Received(1).SetAsync(TenantId, "diagnostico", true, null, AdminId, Arg.Is<Action<TenantProductChange>?>(a => a != null), Arg.Any<CancellationToken>());
+        await _precondicion.DidNotReceiveWithAnyArgs().CumpleAsync(default, default!, TestContext.Current.CancellationToken);
+        _jobs.DidNotReceiveWithAnyArgs().EncolarCambio(default!);
+    }
+
+    [Fact]
+    public async Task ApagarDiagnostico_NoDejaAltaPendiente()
+    {
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", false, null), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().BeEmpty();
+        await _provisioning.DidNotReceiveWithAnyArgs().PrepararPendienteAltaDiagnosticoAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    // ── N-3: solo se reinicia el alta al pasar de apagado a encendido o si no hay fila ──────────────────────
+
+    private void DiagnosticoPrevio(bool enabled) =>
+        _repository.GetAsync(TenantId, "diagnostico", Arg.Any<CancellationToken>())
+            .Returns(new TenantProduct(TenantId, "diagnostico", enabled, null, DateTimeOffset.UtcNow.AddDays(-1), null));
+
+    [Fact]
+    public async Task EditarNotasDeDiagnosticoYaEncendido_NoReiniciaElAlta()
+    {
+        DiagnosticoPrevio(enabled: true);
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, "notas nuevas"), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DiagnosticoYaEncendidoSinFilaDelAlta_LaCrea()
+    {
+        DiagnosticoPrevio(enabled: true);
+        _provisioning.PrepararPendienteAltaDiagnosticoAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new PreparacionPendienteAltaDiagnostico(FilaExiste: false, _pendientesMarcados.Add));
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, "notas nuevas"), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task EncenderDiagnosticoQueEstabaApagado_ReiniciaElAlta()
+    {
+        DiagnosticoPrevio(enabled: false);
+
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().ContainSingle();
     }
 }

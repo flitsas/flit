@@ -14,7 +14,11 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// <summary>
 /// Lo que el impuesto puede pedir, o el cierre visible si falta un dato. El constructor publica solo cuando hay solicitud.
 /// <see cref="EjecutorCeldaImpuesto.SinConsultaAsync"/> usa el mismo cierre: una lista vacía ya no significa siempre N/A.
-/// El nombre del propietario se lee en memoria y no se guarda.
+/// El nombre del propietario se lee en memoria y no se guarda. Un vehículo de servicio público no paga impuesto (decisión del
+/// usuario 2026-11-26): con el servicio del vehículo, o el <c>tipo_servicio</c> de la respuesta del RUNT si el vehículo no lo
+/// guardó, público según <see cref="ReglasAplicabilidad.EsServicioPublico"/>, cierra en N/A <see cref="MotivoNa.ServicioPublico"/>
+/// antes que cualquier otra falta y sin consultar al proveedor (la misma regla que aplica <see cref="OrquestadorVehiculo"/> al
+/// liberar la celda; aquí cubre la republicación y el reproceso).
 /// </summary>
 internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRequest? Solicitud, ResultadoCelda? Cierre)
 {
@@ -31,6 +35,17 @@ internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRe
         ArgumentNullException.ThrowIfNull(db);
         var celda = new CeldaConsulta { TenantId = tenantId, VehiculoId = vehiculoId, Fuente = Fuente.ImpuestoDepartamental };
         var vehiculo = await db.Set<VehiculoDiagnostico>().SingleOrDefaultAsync(v => v.TenantId == tenantId && v.Id == vehiculoId, ct).ConfigureAwait(false);
+        string? jsonRunt = null;
+        var servicio = Limpio(vehiculo?.Servicio);
+        if (vehiculo is not null && servicio is null)
+        {
+            jsonRunt = await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false);
+            servicio = LectorVehiculoImpuesto.Leer(jsonRunt)?.Servicio;
+        }
+
+        if (ReglasAplicabilidad.EsServicioPublico(servicio))
+            return new(null, ResultadoCelda.Na(MotivoNa.ServicioPublico));
+
         var placa = Limpio(vehiculo?.Placa);
         if (placa is null)
             return Cerrar(EjecutorCeldaImpuesto.SinPlaca, "El vehículo no tiene placa definitiva tras el RUNT.");
@@ -53,7 +68,7 @@ internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRe
         if (organismo is null || Limpio(organismo.Municipio) is not { } municipio || Limpio(organismo.DepartamentoNombre) is not { } departamentoNombre)
             return Cerrar(EjecutorCeldaImpuesto.OrganismoIncompleto, "El organismo no tiene municipio o nombre de departamento.");
 
-        var jsonRunt = await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false);
+        jsonRunt ??= await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false);
         if (LectorNombrePropietario.Leer(jsonRunt, documento) is not { } nombre)
             return Cerrar(EjecutorCeldaImpuesto.SinNombrePropietario, "La respuesta del RUNT no trae el nombre del propietario.");
 
@@ -85,8 +100,8 @@ internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRe
             solicitud.VehiculoClase = clase;
         if (vehiculoRunt?.Marca is { } marca)
             solicitud.VehiculoMarca = marca;
-        if (vehiculoRunt?.Servicio is { } servicio)
-            solicitud.VehiculoServicio = servicio;
+        if (vehiculoRunt?.Servicio is { } servicioRunt)
+            solicitud.VehiculoServicio = servicioRunt;
         if (vehiculoRunt?.Combustible is { } combustible)
             solicitud.VehiculoCombustible = combustible;
 

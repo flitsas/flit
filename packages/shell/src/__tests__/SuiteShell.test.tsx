@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Box } from "lucide-react";
 import { SuiteShell } from "../SuiteShell";
+import { appIcon, appTagline } from "../apps";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/tramites" }));
 afterEach(cleanup);
@@ -102,6 +103,23 @@ describe("SuiteShell", () => {
     expect(within(panel).getByRole("link", { name: /^Comparendos.*Próximamente/ })).toHaveAttribute("href", "https://dev.flitsas.online/proximamente/comparendos");
     // La plataforma no es una fila de producto: es «Ir al inicio», al pie.
     expect(within(panel).queryByRole("link", { name: /^Plataforma/ })).toBeNull();
+  });
+
+  // HU #14695 · M19 (spec-visual §2 y §3.11): Impuestos usa el glifo `pesos` (la DDL trae `receipt`) y su tagline.
+  it("Impuestos: el ícono `receipt` se traduce a un glifo del kit y el menú dice qué es", () => {
+    expect(appIcon("receipt")).not.toBe(Box);
+    expect(appTagline("impuestos")).toBe("Liquidación del impuesto vehicular de tus placas");
+    const apps = [
+      { code: "plataforma", name: "Plataforma", icon: "layout-grid", url: "https://dev.flitsas.online", current: false },
+      { code: "tramites", name: "Trámites", icon: "file-text", url: "https://dev.tramites.flitsas.online", current: true },
+      { code: "impuestos", name: "Impuestos", icon: "receipt", url: "https://dev.flitsas.online/proximamente/impuestos", current: false, comingSoon: true },
+    ];
+    render(<SuiteShell productCode="tramites" productName="Trámites" nav={nav} user={user} apps={apps}>x</SuiteShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Productos" }));
+    const panel = screen.getByRole("region", { name: "Productos" });
+    expect(within(panel).getByRole("link", { name: /^Impuestos.*Próximamente/ })).toHaveTextContent(
+      "Liquidación del impuesto vehicular de tus placas",
+    );
   });
 });
 

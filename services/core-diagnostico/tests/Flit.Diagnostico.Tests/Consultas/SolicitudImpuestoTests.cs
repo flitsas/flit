@@ -136,6 +136,78 @@ public sealed class SolicitudImpuestoTests
         (cierre.Estado, cierre.MotivoNa).Should().Be((EstadoCelda.Na, MotivoNa.DepartamentoNoSoportado));
     }
 
+    // Decisión del usuario 2026-11-26 — un vehículo de servicio público no paga impuesto: el constructor no arma la consulta (cero
+    // solicitudes al proveedor) y la celda cierra en N/A SERVICIO_PUBLICO, sin tipo de error ni intento.
+    [Theory]
+    [InlineData("Público")]
+    [InlineData("PUBLICO")]
+    [InlineData(" publico ")]
+    [InlineData("PÚBLICO")]
+    public async Task Servicio_publico_queda_NA_SERVICIO_PUBLICO_sin_solicitud(string servicio)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, servicio: servicio);
+
+        await DebeQuedarServicioPublicoAsync(api, sembrado, ct);
+    }
+
+    // El servicio público manda sobre el departamento sin cobertura (mismo orden que ReglasAplicabilidad al liberar la celda).
+    [Fact]
+    public async Task Servicio_publico_manda_sobre_el_departamento_no_soportado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, departamento: "11", soportar: false, servicio: "PUBLICO");
+
+        await DebeQuedarServicioPublicoAsync(api, sembrado, ct);
+    }
+
+    // Sin servicio guardado en el vehículo, se lee tipo_servicio de la respuesta del RUNT (Intempo) en memoria.
+    [Fact]
+    public async Task Servicio_publico_solo_en_la_respuesta_del_RUNT_queda_NA_sin_solicitud()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, servicio: null, json: """
+            {"vehiculo":{"informacion_general":{"tipo_servicio":"PÚBLICO"},"propietarios_actuales":[
+              {"id_tipo_documento":"C","no_documento":"9999900001","nombre_completo":"PRIMERO DE PRUEBA"}]}}
+            """);
+
+        await DebeQuedarServicioPublicoAsync(api, sembrado, ct);
+    }
+
+    // Particular, oficial o sin servicio: la consulta se arma igual que antes.
+    [Theory]
+    [InlineData("Particular")]
+    [InlineData("Oficial")]
+    [InlineData(null)]
+    public async Task Servicio_no_publico_arma_la_solicitud(string? servicio)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, servicio: servicio);
+
+        (await UnaAsync(api, sembrado, ct)).Placa.Valor.Should().Be("TST901");
+    }
+
+    private static async Task DebeQuedarServicioPublicoAsync(ApiDePrueba api, Sembrado sembrado, CancellationToken ct)
+    {
+        await using var db = sembrado.Empresa.Db();
+        var celda = await db.Set<CeldaConsulta>().SingleAsync(c => c.Id == sembrado.ImpuestoId, ct);
+        var log = new ListaLog();
+
+        (await ConstruirAsync(api, db, celda, ct)).Should().BeEmpty("un vehículo de servicio público no consulta al proveedor");
+        var cierre = await new EjecutorCeldaImpuesto(Docs(api), Respuestas(api), log).SinConsultaAsync(new ContextoCelda(CeldaEnCurso.De(celda), db), ct);
+
+        (cierre.Estado, cierre.MotivoNa, cierre.TipoError).Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.ServicioPublico, (string?)null));
+        log.Textos.Should().ContainSingle().Which.Should().Contain("servicio público");
+    }
+
     // Plan C3 (:688-692): el primero crudo sin documento no entra a personas_vehiculo, así que el de orden 1 es el segundo crudo.
     [Fact]
     public async Task El_nombre_y_el_documento_son_de_la_misma_persona_si_el_primero_crudo_no_trae_documento()
@@ -255,7 +327,8 @@ public sealed class SolicitudImpuestoTests
 
     internal static async Task<Sembrado> SembrarAsync(
         ApiDePrueba api, CancellationToken ct, string tipo = "CC", string numero = Documento, string? json = null,
-        bool placa = true, bool persona = true, bool modelo = true, bool municipio = true, string departamento = Departamento, bool soportar = true, bool sinRespuesta = false)
+        bool placa = true, bool persona = true, bool modelo = true, bool municipio = true, string departamento = Departamento, bool soportar = true, bool sinRespuesta = false,
+        string? servicio = null)
     {
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST901")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
@@ -274,6 +347,7 @@ public sealed class SolicitudImpuestoTests
         var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.DiagnosticoId == lote, ct);
         vehiculo.Placa = placa ? "TST901" : null;
         vehiculo.DepartamentoCodigo = departamento;
+        vehiculo.Servicio = servicio;
         vehiculo.OrganismoNombre = "SECRETARIA DE TRANSITO DE PRUEBA";
         vehiculo.DatosConsolidados = modelo ? """{"vehiculo":{"modelo":2020}}""" : "{}";
         var runt = await db.Set<CeldaConsulta>().SingleAsync(c => c.VehiculoId == vehiculo.Id && c.Fuente == Fuente.Runt, ct);

@@ -19,6 +19,8 @@ const ICONS: Record<string, NavIcon> = {
   "file-text": iconoComo("documento"),
   ticket: iconoComo("comparendos"),
   gauge: iconoComo("medidor"),
+  // HU #14695 · M19: el kit no trae glifo de recibo; Impuestos usa `pesos` (spec-visual §2, hueco H-5).
+  receipt: iconoComo("pesos"),
   "flask-conical": FlaskConical,
 };
 
@@ -27,6 +29,7 @@ const TAGLINES: Record<string, string> = {
   tramites: "Matrículas, traspasos y trámites vehiculares",
   comparendos: "Los comparendos de tu flota, a tiempo",
   diagnostico: "Estado legal y documental de tus vehículos",
+  impuestos: "Liquidación del impuesto vehicular de tus placas",
 };
 
 export function appTagline(code: string): string | undefined {

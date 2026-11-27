@@ -5,16 +5,26 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProductosTab } from "../tabs/ProductosTab";
 import type { TenantProduct } from "@/lib/api/platform";
+import { ApiError } from "@/lib/api/types";
 
 const listTenantProducts = vi.fn();
 const setTenantProduct = vi.fn();
 const setTenantProductCredential = vi.fn();
 const deleteTenantProductCredential = vi.fn();
-vi.mock("@/lib/api/platform", () => ({
+const listMyApps = vi.fn();
+const getTenantProductProvisioningPreview = vi.fn();
+const retryTenantProductProvisioning = vi.fn();
+const obtenerCredencialImpuestoDiagnostico = vi.fn();
+vi.mock("@/lib/api/platform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/platform")>()),
   listTenantProducts: (id: string) => listTenantProducts(id),
   setTenantProduct: (id: string, code: string, enabled: boolean) => setTenantProduct(id, code, enabled),
   setTenantProductCredential: (...a: unknown[]) => setTenantProductCredential(...a),
   deleteTenantProductCredential: (...a: unknown[]) => deleteTenantProductCredential(...a),
+  listMyApps: () => listMyApps(),
+  getTenantProductProvisioningPreview: (...a: unknown[]) => getTenantProductProvisioningPreview(...a),
+  retryTenantProductProvisioning: (...a: unknown[]) => retryTenantProductProvisioning(...a),
+  obtenerCredencialImpuestoDiagnostico: (...a: unknown[]) => obtenerCredencialImpuestoDiagnostico(...a),
 }));
 
 const product = (code: string, name: string, enabled: boolean, extra: Partial<TenantProduct> = {}): TenantProduct => ({
@@ -37,6 +47,16 @@ describe("ProductosTab", () => {
     setTenantProduct.mockReset().mockResolvedValue({});
     setTenantProductCredential.mockReset().mockResolvedValue(undefined);
     deleteTenantProductCredential.mockReset().mockResolvedValue(undefined);
+    listMyApps.mockReset().mockResolvedValue([]);
+    getTenantProductProvisioningPreview.mockReset().mockResolvedValue({
+      legalName: "Compañía Demo",
+      taxIdBase: "900123456",
+      nitStatus: "VALIDO",
+      contactEmail: "nombre@empresa.com",
+      blocking: null,
+    });
+    retryTenantProductProvisioning.mockReset().mockResolvedValue(undefined);
+    obtenerCredencialImpuestoDiagnostico.mockReset();
   });
 
   it("muestra el estado real de los tres productos, con quién y cuándo los cambió", async () => {
@@ -154,13 +174,205 @@ describe("ProductosTab", () => {
         .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: false })])
         .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true })]);
       render(<ProductosTab tenantId="t1" />);
-      await user.click(await screen.findByRole("button", { name: "Configurar" }));
+      await user.click(await screen.findByRole("button", { name: "Ingresar manualmente" }));
+      await user.click(screen.getByRole("button", { name: "Configurar" }));
       await user.click(screen.getByLabelText("API key de impuesto vehicular"));
       await user.paste("llave-sintetica-0123456789");
       await user.click(screen.getByRole("button", { name: "Guardar" }));
       expect(setTenantProductCredential).toHaveBeenCalledWith("t1", "diagnostico", "impuesto_api_key", "llave-sintetica-0123456789");
       expect(await screen.findByText("Configurada")).toBeInTheDocument();
       expect(listTenantProducts).toHaveBeenCalledTimes(2);
+    });
+
+    // HU #14711 · AC-DC-13 — el alta con el proveedor relee el listado; el secreto del webhook sale del listado.
+    it("«Obtener del proveedor» relee los productos y muestra el secreto de webhook del listado", async () => {
+      const user = userEvent.setup();
+      obtenerCredencialImpuestoDiagnostico.mockResolvedValue({
+        apiKeyPrefix: "AbCdEfGh",
+        created: true,
+        rotated: false,
+        hasWebhookSecret: true,
+        changed: true,
+        updatedAt: "2026-11-25T10:00:00Z",
+      });
+      listTenantProducts
+        .mockResolvedValueOnce([
+          product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: false, impuestoWebhookSecretConfigurada: false }),
+        ])
+        .mockResolvedValueOnce([
+          product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true, impuestoWebhookSecretConfigurada: true }),
+        ]);
+      render(<ProductosTab tenantId="t1" />);
+      expect(await screen.findByText("Sin secreto de webhook")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Obtener del proveedor" }));
+      expect(obtenerCredencialImpuestoDiagnostico).toHaveBeenCalledWith("t1");
+      expect(await screen.findByText("Configurada")).toBeInTheDocument();
+      expect(screen.getByText("Llave configurada · prefijo AbCdEfGh…")).toBeInTheDocument();
+      expect(screen.getByText("Secreto de webhook configurado")).toBeInTheDocument();
+      expect(listTenantProducts).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // HU #14695 · M19 — Impuestos: diálogo de activación, suspensión con texto propio y estado de aprovisionamiento.
+  describe("Impuestos (HU #14695, M19)", () => {
+    const prov = (status: string, action: string | null, message: string | null = null) =>
+      ({
+        status,
+        reason: null,
+        message,
+        action,
+        signatureConfirmed: null,
+        updatedAt: "2026-11-24T15:00:00Z",
+      }) as TenantProduct["provisioning"];
+    const impuestos = (enabled: boolean, extra: Partial<TenantProduct> = {}) =>
+      product("impuestos", "Impuestos", enabled, { comingSoon: true, provisioning: null, ...extra });
+    const grupo = () => screen.getByRole("group", { name: "Conexión con el proveedor de Impuestos" });
+
+    it("encender Impuestos abre el diálogo y solo se aplica al confirmar", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([impuestos(false)])
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("PENDIENTE", null) })]);
+      render(<ProductosTab tenantId="t1" />);
+
+      await user.click(await screen.findByRole("switch", { name: /^Impuestos$/ }));
+      const d = screen.getByRole("dialog", { name: "Activar Impuestos" });
+      expect(setTenantProduct).not.toHaveBeenCalled();
+      expect(await within(d).findByText("900123456")).toBeInTheDocument();
+
+      await user.click(within(d).getByRole("button", { name: "Activar Impuestos" }));
+      expect(setTenantProduct).toHaveBeenCalledWith("t1", "impuestos", true);
+      expect(await screen.findByRole("switch", { name: /^Impuestos$/ })).toBeChecked();
+      expect(screen.queryByRole("dialog", { name: "Activar Impuestos" })).toBeNull();
+      expect(within(grupo()).getByText("Pendiente")).toBeInTheDocument();
+    });
+
+    it("cancelar el diálogo no enciende nada", async () => {
+      const user = userEvent.setup();
+      listTenantProducts.mockResolvedValue([impuestos(false)]);
+      render(<ProductosTab tenantId="t1" />);
+      await user.click(await screen.findByRole("switch", { name: /^Impuestos$/ }));
+      const d = screen.getByRole("dialog", { name: "Activar Impuestos" });
+      await within(d).findByText("900123456");
+      await user.click(within(d).getByRole("button", { name: "Cancelar" }));
+      expect(screen.queryByRole("dialog", { name: "Activar Impuestos" })).toBeNull();
+      expect(setTenantProduct).not.toHaveBeenCalled();
+      expect(switchOf("Impuestos")).not.toBeChecked();
+    });
+
+    it("el 409 PROVISIONING_PREREQUISITE_MISSING se muestra en el diálogo, que no se cierra", async () => {
+      const user = userEvent.setup();
+      listTenantProducts.mockResolvedValue([impuestos(false)]);
+      setTenantProduct.mockRejectedValue(
+        new ApiError(409, "Falta un requisito para activar el producto", { code: "PROVISIONING_PREREQUISITE_MISSING" }),
+      );
+      render(<ProductosTab tenantId="t1" />);
+      await user.click(await screen.findByRole("switch", { name: /^Impuestos$/ }));
+      const d = screen.getByRole("dialog", { name: "Activar Impuestos" });
+      await within(d).findByText("900123456");
+      await user.click(within(d).getByRole("button", { name: "Activar Impuestos" }));
+      expect(await within(d).findByRole("alert")).toHaveTextContent("La compañía no tiene un Administrador de Compañía activo");
+      expect(screen.getByRole("dialog", { name: "Activar Impuestos" })).toBeInTheDocument();
+      expect(switchOf("Impuestos")).not.toBeChecked();
+    });
+
+    it("apagar Impuestos usa la confirmación de suspensión con su texto", async () => {
+      const user = userEvent.setup();
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("LISTO", null) })]);
+      render(<ProductosTab tenantId="t1" />);
+      await user.click(await screen.findByRole("switch", { name: /^Impuestos$/ }));
+      const c = screen.getByRole("alertdialog");
+      expect(within(c).getByText("¿Suspender Impuestos para esta compañía?")).toBeInTheDocument();
+      expect(
+        within(c).getByText(
+          "Nadie de la compañía podrá entrar ni crear liquidaciones. Los lotes en curso terminan y el historial se conserva. Al volver a encenderlo, sigue con las mismas credenciales.",
+        ),
+      ).toBeInTheDocument();
+      await user.click(within(c).getByRole("button", { name: "Suspender Impuestos" }));
+      expect(setTenantProduct).toHaveBeenCalledWith("t1", "impuestos", false);
+    });
+
+    it("el estado de aprovisionamiento usa la URL de Impuestos de me/apps y se anuncia en el tab", async () => {
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("REQUIERE_CREDENCIALES", "CARGAR_CREDENCIALES") })]);
+      listMyApps.mockResolvedValue([{ code: "impuestos", name: "Impuestos", icon: "receipt", url: "https://impuestos.test", current: false }]);
+      render(<ProductosTab tenantId="t1" />);
+      expect(await screen.findByRole("link", { name: /Cargar credenciales/ })).toHaveAttribute(
+        "href",
+        "https://impuestos.test/backoffice/empresas/t1",
+      );
+      const anuncio = screen.getByTestId("anuncio-aprovisionamiento");
+      expect(anuncio).toHaveAttribute("role", "status");
+      expect(anuncio).toHaveAttribute("aria-atomic", "true");
+      expect(anuncio).toHaveTextContent("Conexión con el proveedor: Requiere credenciales");
+    });
+
+    it("si me/apps falla, el estado se pinta igual sin enlace", async () => {
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("REQUIERE_CREDENCIALES", "CARGAR_CREDENCIALES") })]);
+      listMyApps.mockRejectedValue(new Error("x"));
+      render(<ProductosTab tenantId="t1" />);
+      expect(await within(await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" })).findByText("Cargar credenciales: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
+      expect(screen.queryByRole("link")).toBeNull();
+    });
+
+    // Contrato impuestos.v1.yaml 1.2.0 (plan §5.8 punto 5): LISTO_SIN_WEBHOOK lleva REINTENTAR, como en el backoffice.
+    it("LISTO_SIN_WEBHOOK: «Reintentar» pide el reintento y relee; ya no hay «Cargar secreto»", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("LISTO_SIN_WEBHOOK", "REINTENTAR", "Falta el secreto del webhook: los resultados se consultan al proveedor.") })])
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("PENDIENTE", null) })]);
+      listMyApps.mockResolvedValue([{ code: "impuestos", name: "Impuestos", icon: "receipt", url: "https://impuestos.test", current: false }]);
+      render(<ProductosTab tenantId="t1" />);
+      const g = await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" });
+      expect(within(g).getByText("Falta el secreto del webhook: los resultados se consultan al proveedor.")).toBeInTheDocument();
+      expect(screen.queryByText(/Cargar secreto/)).toBeNull();
+      await user.click(within(g).getByRole("button", { name: "Reintentar" }));
+      expect(retryTenantProductProvisioning).toHaveBeenCalledWith("t1", "impuestos");
+      expect(await screen.findByText("Conexión con el proveedor: Pendiente")).toBeInTheDocument();
+    });
+
+    it("un reporte anterior con CARGAR_SECRETO (retirada) también ofrece «Reintentar»", async () => {
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO") })]);
+      listMyApps.mockResolvedValue([{ code: "impuestos", name: "Impuestos", icon: "receipt", url: "https://impuestos.test", current: false }]);
+      render(<ProductosTab tenantId="t1" />);
+      const g = await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" });
+      expect(await within(g).findByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+      expect(within(g).queryByRole("link")).toBeNull();
+      expect(screen.queryByText(/Cargar secreto/)).toBeNull();
+    });
+
+    it("Reintentar relee los productos", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("ERROR", "REINTENTAR", "Motivo demo") })])
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("PENDIENTE", null) })]);
+      render(<ProductosTab tenantId="t1" />);
+      await user.click(await screen.findByRole("button", { name: "Reintentar" }));
+      expect(retryTenantProductProvisioning).toHaveBeenCalledWith("t1", "impuestos");
+      expect(await screen.findByText("Conexión con el proveedor: Pendiente")).toBeInTheDocument();
+      expect(listTenantProducts).toHaveBeenCalledTimes(2);
+    });
+
+    it("con onEditarCompania, «Corregir NIT» lo llama", async () => {
+      const user = userEvent.setup();
+      const onEditarCompania = vi.fn();
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("REQUIERE_REVISION_NIT", "CORREGIR_NIT") })]);
+      render(<ProductosTab tenantId="t1" onEditarCompania={onEditarCompania} />);
+      await user.click(await screen.findByRole("button", { name: "Corregir NIT" }));
+      expect(onEditarCompania).toHaveBeenCalledTimes(1);
+    });
+
+    it("Impuestos apagado y sin reporte no muestra la subtarjeta ni consulta me/apps sin Impuestos", async () => {
+      listTenantProducts.mockResolvedValue([impuestos(false)]);
+      const { unmount } = render(<ProductosTab tenantId="t1" />);
+      await screen.findByRole("switch", { name: /^Impuestos$/ });
+      expect(screen.queryByRole("group", { name: "Conexión con el proveedor de Impuestos" })).toBeNull();
+      unmount();
+
+      listMyApps.mockClear();
+      listTenantProducts.mockResolvedValue([product("tramites", "Trámites", true)]);
+      render(<ProductosTab tenantId="t1" />);
+      await screen.findByRole("switch", { name: /^Trámites$/ });
+      expect(listMyApps).not.toHaveBeenCalled();
     });
   });
 });

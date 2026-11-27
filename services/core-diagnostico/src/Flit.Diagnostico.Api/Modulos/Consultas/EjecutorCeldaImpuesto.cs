@@ -16,6 +16,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// el departamento derivado de su organismo (<c>vehiculos.departamento_codigo</c>). Solo se toma cuando el RUNT la liberó en
 /// PENDIENTE (<see cref="OrquestadorVehiculo"/>: servicio público o departamento no soportado ya quedan N/A ahí). Reglas:
 /// <list type="bullet">
+/// <item>Servicio público (decisión del usuario 2026-11-26, <see cref="PreparacionSolicitudImpuesto"/>): N/A
+/// <c>SERVICIO_PUBLICO</c> antes que cualquier otra regla, sin consultar ni dejar intento; cubre la republicación y el reproceso
+/// de una celda que ya se había liberado.</item>
 /// <item>Sin placa: ERROR <see cref="SinPlaca"/>, definitivo, sin consultar.</item>
 /// <item>Sin propietario con documento, sin modelo, organismo sin municipio o sin nombre de departamento, o RUNT sin el
 /// nombre del propietario: ERROR con ese código. Definitivo y reprocesable desde el tablero.</item>
@@ -64,7 +67,9 @@ internal sealed partial class EjecutorCeldaImpuesto(
         var preparada = await PreparacionSolicitudImpuesto.PrepararAsync(
             contexto.Db, contexto.Celda.TenantId, contexto.Celda.VehiculoId, documentos, respuestas, ct).ConfigureAwait(false);
         var cierre = preparada.Cierre ?? ResultadoCelda.Na(MotivoNa.DepartamentoNoSoportado);
-        if (cierre.Estado == EstadoCelda.Na)
+        if (cierre.MotivoNa == MotivoNa.ServicioPublico)
+            ImpuestoServicioPublico(log, contexto.Celda.Id);
+        else if (cierre.Estado == EstadoCelda.Na)
             ImpuestoNoSoportado(log, contexto.Celda.Id);
         else
             ImpuestoEnError(log, contexto.Celda.Id, cierre.TipoError ?? SinPlaca);
@@ -126,4 +131,7 @@ internal sealed partial class EjecutorCeldaImpuesto(
 
     [LoggerMessage(EventId = 138622, Level = LogLevel.Information, Message = "La celda IMPUESTO_DEPARTAMENTAL {CeldaId} queda N/A: departamento sin cobertura de impuesto")]
     private static partial void ImpuestoNoSoportado(ILogger logger, Guid celdaId);
+
+    [LoggerMessage(EventId = 138623, Level = LogLevel.Information, Message = "La celda IMPUESTO_DEPARTAMENTAL {CeldaId} queda N/A: vehículo de servicio público")]
+    private static partial void ImpuestoServicioPublico(ILogger logger, Guid celdaId);
 }

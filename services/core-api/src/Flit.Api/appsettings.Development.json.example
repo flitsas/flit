@@ -15,6 +15,11 @@
   // deploy/rabbitmq/usuario-de-servicio.sh tramites <clave> notificaciones.
   "Tramites": { "Bus": { "Habilitado": true } },
   "Platform": {
+    "ImpuestoProveedor": {
+      "BaseUrl": "http://127.0.0.1:8898",
+      "IntegrationToken": "",
+      "TimeoutSeconds": 30
+    },
     "Messaging": {
       "Producer": "tramites",
       "ConnectionString": "amqp://tramites:CAMBIAR@127.0.0.1:5672/flit"

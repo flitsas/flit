@@ -1,13 +1,34 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de plataforma
-  version: "1.0.0"
+  version: "1.2.0"
   description: >
     Endpoints de plataforma de la FLIT Suite (contrato de plataforma v1, §6), servidos por core-api
     bajo /api/v1/platform. Productos de la suite, su habilitación por empresa y el manifiesto que
     registra cada producto (HU #12966, tarea B-06). Los errores siguen RFC 7807 con un campo `code`
     estable (contrato §10). Las consultas externas compartidas no son REST: las atiende core-consultas
     por gRPC (flit.consultas.v1, contracts/proto; ADR-0065 y ADR-0070).
+
+
+    Versión 1.1.0 (HU #14694, producto Impuestos, ADR-0093; plan docs/impuestos/plan-implementacion.md §5.4): cambio
+    aditivo. Las rutas /api/v1/platform/admin/tenants/{tenantId}/products* las mapean core-api y core-identity
+    (Flit.Identity.Web PlatformEndpoints). GET .../products suma `provisioning` (null en los productos sin
+    aprovisionamiento; hoy solo `impuestos` lo tiene). Rutas nuevas: GET .../products/{productCode}/alta-previa y POST
+    .../products/{productCode}/aprovisionamiento/reintentar. PUT .../products/{productCode} suma el 409
+    PROVISIONING_PREREQUISITE_MISSING al encender un producto con aprovisionamiento sin AdminCompany activo. Los textos
+    visibles están cerrados en `x-flit-etiquetas` (por enum) y en los ejemplos de Problem: el front no redacta otros.
+
+
+    Versión 1.1.1 (solo descripciones, alineada con impuestos.v1.yaml 1.2.0): LISTO_SIN_WEBHOOK lleva la acción
+    REINTENTAR y CARGAR_SECRETO queda retirada (valor del enum conservado para reportes anteriores); el reintento
+    describe los estados que admite el servicio del producto; el ejemplo de `reason` usa un motivo vigente.
+
+
+    Versión 1.2.0 (HU #14711, plan docs/diagnosticos/plan-alta-credencial-impuesto-diagnostico.md §3.1): cambio aditivo.
+    Ruta nueva POST .../products/diagnostico/credentials/impuesto/obtener (alta idempotente en el proveedor del impuesto,
+    solo metadatos en la respuesta). GET .../products suma `impuestoWebhookSecretConfigurada` y `provisioning` también en
+    `diagnostico` (estado del alta de la credencial, que escribe la plataforma). El PUT/DELETE de credenciales sigue
+    admitiendo solo (diagnostico, impuesto_api_key): los secretos del webhook solo los escribe el alta.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -157,7 +178,90 @@ paths:
         "404":
           $ref: "#/components/responses/Problem"
         "409":
-          $ref: "#/components/responses/Problem"
+          description: >
+            PRODUCT_NOT_ENABLED_FOR_HEAD (la cabeza lo tiene apagado), PRODUCT_INACTIVE, PRODUCT_ALWAYS_ON o, al
+            encender un producto con aprovisionamiento (hoy `impuestos`), PROVISIONING_PREREQUISITE_MISSING: la compañía
+            no tiene un AdminCompany activo (D-EMAIL). Con ese código no se guarda nada ni se encola trabajo; `detail` es
+            el literal del ejemplo y el front lo muestra tal cual. Apagar nunca exige la precondición.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                title: Falta un requisito para activar el producto
+                status: 409
+                detail: La compañía no tiene un Administrador de Compañía activo
+                code: PROVISIONING_PREREQUISITE_MISSING
+
+  /api/v1/platform/admin/tenants/{tenantId}/products/{productCode}/alta-previa:
+    get:
+      tags: [Platform]
+      operationId: getTenantProductProvisioningPreview
+      summary: Vista previa de los datos del alta en el proveedor (SuperAdmin)
+      description: >
+        HU #14694 (ADR-0093, plan §1.3 decisión P1). La usa el diálogo de activación de Impuestos antes de confirmar:
+        muestra el NIT base (`taxIdBase`) y el correo (`contactEmail`) que core-impuestos enviará al proveedor. El mismo
+        handler atiende el rpc flit.identidad.v1.EmpresasService.ObtenerDatosAltaProveedor. Solo lectura; no llama al
+        proveedor. `blocking` = SIN_ADMIN cuando no hay AdminCompany activo: el diálogo deshabilita «Confirmar» (el PUT
+        respondería 409 PROVISIONING_PREREQUISITE_MISSING). Un `nitStatus` distinto de VALIDO no bloquea el PUT (supuesto
+        S-C): la compañía queda activada y su aprovisionamiento en REQUIERE_REVISION_NIT; el diálogo lo advierte con la
+        etiqueta del estado y ofrece «Corregir NIT».
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/ProvisionedProductCode"
+      responses:
+        "200":
+          description: Datos que se enviarán.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvisioningPreview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          description: TENANT_NOT_FOUND, o PRODUCT_WITHOUT_PROVISIONING si `productCode` no tiene aprovisionamiento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /api/v1/platform/admin/tenants/{tenantId}/products/{productCode}/aprovisionamiento/reintentar:
+    post:
+      tags: [Platform]
+      operationId: retryTenantProductProvisioning
+      summary: Reintentar el aprovisionamiento del producto (SuperAdmin)
+      description: >
+        HU #14694 (plan §1.2 decisión R1). Encola por la outbox, en la misma transacción, el trabajo
+        `impuestos.aprovisionamiento.reintentar` (contracts/asyncapi/impuestos-events.v1.yaml) con el id del SuperAdmin.
+        No espera a core-impuestos: el estado nuevo llega cuando el servicio lo reporta (GET .../products). El front solo
+        muestra «Reintentar» cuando `provisioning.action` = REINTENTAR (estados ERROR, INCIERTO y LISTO_SIN_WEBHOOK). La
+        plataforma no mira el estado: solo exige el producto encendido (409 PRODUCT_NOT_ENABLED). core-impuestos aplica
+        el trabajo desde ERROR, INCIERTO, REQUIERE_REVISION_NIT o LISTO_SIN_WEBHOOK y lo ignora en cualquier otro estado.
+        Sin cuerpo.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/ProvisionedProductCode"
+      responses:
+        "202":
+          description: Trabajo encolado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          description: TENANT_NOT_FOUND, o PRODUCT_WITHOUT_PROVISIONING si `productCode` no tiene aprovisionamiento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: PRODUCT_NOT_ENABLED, el producto está apagado para la compañía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /api/v1/platform/admin/tenants/{tenantId}/products/{productCode}/credentials/{credentialCode}:
     put:
@@ -230,6 +334,78 @@ paths:
         "404":
           $ref: "#/components/responses/Problem"
 
+  /api/v1/platform/admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener:
+    post:
+      tags: [Platform]
+      operationId: obtenerCredencialImpuestoDiagnostico
+      summary: Obtener del proveedor la credencial del impuesto de Diagnóstico (SuperAdmin)
+      description: >
+        HU #14711. Sin cuerpo: el servidor arma el alta (razón social, NIT base sin DV y correo del AdminCompany activo más
+        antiguo) y llama al alta idempotente del proveedor (guía de integración §3). Guarda en una sola transacción la
+        impuesto_api_key y el impuesto_webhook_secret (el secreto anterior queda 24 h como impuesto_webhook_secret_anterior).
+        Si los valores son los mismos no cambia nada (`changed=false`). Si la llave cambió, deja el trabajo
+        impuestos.credencial_diagnostico.actualizada (impuestos-events.v1 1.2.0). Nunca devuelve la llave ni el secreto.
+        Cada llamada deja una fila resumen de auditoría (obtain_from_provider): el motivo del guardado, SIN_CAMBIOS o el
+        código del rechazo. Si el guardado choca con la ronda del alta automática, se relee una vez: con los mismos valores
+        responde 200 con `changed=false`; si no, 409 ALTA_EN_CURSO. La URL del proveedor debe ser https (http solo en
+        loopback); si no, 503 PROVEEDOR_NO_CONFIGURADO sin enviar el token.
+        Límite: 5 llamadas por minuto por usuario (`sub`) y empresa, aplicado después de la autorización: una petición
+        anónima o sin rol no consume cupo (429 sin cuerpo).
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: Credencial obtenida (o confirmada sin cambios).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredencialImpuestoObtenida"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          description: TENANT_NOT_FOUND — la empresa no existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: >
+            PRODUCTO_NO_HABILITADO — Diagnóstico no está encendido para la empresa. ALTA_EN_CURSO — el alta automática guardó
+            otra credencial a la vez («Ya hay un alta de la credencial del impuesto en curso para la compañía. Intenta de nuevo
+            en unos segundos.»).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: about:blank
+                title: Conflict
+                status: 409
+                detail: Ya hay un alta de la credencial del impuesto en curso para la compañía. Intenta de nuevo en unos segundos.
+                code: ALTA_EN_CURSO
+        "422":
+          description: NIT_AUSENTE, NIT_AMBIGUO, NIT_IGUAL_A_CABEZA o SIN_ADMIN (no se llama al proveedor).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Límite por usuario y empresa superado.
+        "502":
+          description: PROVEEDOR_TOKEN_INVALIDO, PROVEEDOR_INTEGRACION_DESHABILITADA, PROVEEDOR_SOLICITUD_INVALIDA o PROVEEDOR_NO_DISPONIBLE.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: PROVEEDOR_NO_CONFIGURADO — falta el token de integración en el ambiente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /api/v1/platform/issuers:
     get:
       tags: [Platform]
@@ -264,9 +440,17 @@ components:
       name: code
       in: path
       required: true
-      description: Código del contrato §1 (plataforma, tramites, comparendos, diagnostico, demo).
+      description: Código del contrato §1 (plataforma, tramites, comparendos, diagnostico, caja, impuestos).
       schema:
         type: string
+    ProvisionedProductCode:
+      name: productCode
+      in: path
+      required: true
+      description: Producto con aprovisionamiento (ProductosConAprovisionamiento). Hoy solo `impuestos`.
+      schema:
+        type: string
+        example: impuestos
     TenantId:
       name: tenantId
       in: path
@@ -350,6 +534,168 @@ components:
               description: >
                 ADR-0092. true/false solo en diagnostico (si hay fila de impuesto_api_key).
                 null en los demás productos. Nunca el valor.
+            impuestoWebhookSecretConfigurada:
+              type: boolean
+              nullable: true
+              description: >
+                HU #14711. true/false solo en diagnostico (si hay fila de impuesto_webhook_secret). null en los demás
+                productos. Nunca el valor.
+            provisioning:
+              type: object
+              allOf:
+                - $ref: "#/components/schemas/TenantProductProvisioning"
+              nullable: true
+              description: >
+                HU #14711: en diagnostico es el estado del alta de la credencial del impuesto (lo escribe la plataforma; motivos
+                NIT_*, SIN_ADMIN, PRODUCTO_NO_HABILITADO, PROVEEDOR_* o SIN_WEBHOOK_SECRET).
+                HU #14694. Estado de aprovisionamiento que reporta el servicio del producto
+                (platform.tenant_product_provisioning, DDL 205). null en los productos sin aprovisionamiento y en un
+                producto con aprovisionamiento del que la plataforma aún no recibe reporte.
+
+    CredencialImpuestoObtenida:
+      type: object
+      description: HU #14711. Solo metadatos; nunca la llave ni el secreto.
+      required: [apiKeyPrefix, created, rotated, hasWebhookSecret, changed, updatedAt]
+      properties:
+        apiKeyPrefix:
+          type: string
+          nullable: true
+          description: Primeros 8 caracteres de la llave (los mismos de api_key_prefix del proveedor).
+          example: AbCdEfGh
+        created:
+          type: boolean
+          description: El proveedor creó la empresa en esta llamada (201).
+        rotated:
+          type: boolean
+          description: La llave guardada era otra y se reemplazó (auditoría CLAVE_ROTADA).
+        hasWebhookSecret:
+          type: boolean
+          description: Queda un secreto de webhook guardado.
+        changed:
+          type: boolean
+          description: Se escribió algo. false = los valores eran los mismos (no sube versión ni audita).
+        updatedAt:
+          type: string
+          format: date-time
+          description: Último cambio de la llave.
+      example:
+        apiKeyPrefix: AbCdEfGh
+        created: true
+        rotated: false
+        hasWebhookSecret: true
+        changed: true
+        updatedAt: "2026-11-25T15:00:00Z"
+
+    TenantProductProvisioning:
+      type: object
+      description: >
+        Último estado reportado por el servicio del producto (rpc ReportarEstadoAprovisionamiento, versión monotónica).
+        Consistencia eventual: puede ir unos segundos detrás del servicio. El chip del admin muestra la etiqueta de
+        `status` (texto e icono, nunca solo color), `message` como motivo legible y la acción de `action`.
+      required: [status, reason, message, action, signatureConfirmed, updatedAt]
+      properties:
+        status:
+          $ref: "#/components/schemas/ProvisioningStatus"
+        reason:
+          type: string
+          nullable: true
+          description: >
+            Código del motivo. null = sin motivo. En `impuestos`: MotivoAprovisionamiento de contracts/openapi/impuestos.v1.yaml.
+            En `diagnostico` (estado del alta de la credencial del impuesto, HU #14711, lo escribe la plataforma): NIT_AUSENTE,
+            NIT_AMBIGUO y NIT_IGUAL_A_CABEZA (REQUIERE_REVISION_NIT); SIN_ADMIN (ERROR); PROVEEDOR_NO_DISPONIBLE y
+            PROVEEDOR_NO_CONFIGURADO (PENDIENTE con reintento escalonado y ERROR al tope); PROVEEDOR_TOKEN_INVALIDO,
+            PROVEEDOR_INTEGRACION_DESHABILITADA y PROVEEDOR_SOLICITUD_INVALIDA (ERROR); PRODUCTO_NO_HABILITADO (SUSPENDIDO);
+            SIN_WEBHOOK_SECRET (LISTO_SIN_WEBHOOK, acción REINTENTAR); ERROR_INTERNO (error inesperado de la ronda, PENDIENTE con
+            reintento y ERROR al tope) y ALTA_EN_CURSO (la ronda chocó con el botón, PENDIENTE con reintento). `message` lleva
+            su literal cerrado.
+          example: CREDENCIAL_RECHAZADA
+        message:
+          type: string
+          nullable: true
+          maxLength: 300
+          description: >
+            Motivo legible: el literal cerrado de `reason` (x-flit-etiquetas de MotivoAprovisionamiento en
+            impuestos.v1.yaml), ya puesto por el servicio. Sin secretos ni datos personales.
+        action:
+          $ref: "#/components/schemas/ProvisioningAction"
+        signatureConfirmed:
+          type: boolean
+          nullable: true
+          description: >
+            Solo en LISTO. false = marca «Firma sin confirmar» (aún no llega el primer webhook con firma válida). null en
+            los demás estados.
+          x-flit-etiquetas:
+            "false": Firma sin confirmar
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProvisioningStatus:
+      type: string
+      enum: [PENDIENTE, LISTO, LISTO_SIN_WEBHOOK, ERROR, INCIERTO, REQUIERE_CREDENCIALES, REQUIERE_REVISION_NIT, SUSPENDIDO]
+      description: Estados del plan §3.1. Texto visible en x-flit-etiquetas.
+      x-flit-etiquetas:
+        PENDIENTE: Pendiente
+        LISTO: Listo
+        LISTO_SIN_WEBHOOK: Listo sin webhook
+        ERROR: Error
+        INCIERTO: Incierto
+        REQUIERE_CREDENCIALES: Requiere credenciales
+        REQUIERE_REVISION_NIT: Requiere revisión del NIT
+        SUSPENDIDO: Suspendido
+
+    ProvisioningAction:
+      type: string
+      nullable: true
+      enum: [REINTENTAR, CARGAR_SECRETO, CARGAR_CREDENCIALES, CORREGIR_NIT]
+      description: >
+        Acción del SuperAdmin por estado (AC-FE-04): ERROR, INCIERTO y LISTO_SIN_WEBHOOK -> REINTENTAR (botón que llama
+        a .../aprovisionamiento/reintentar; en LISTO_SIN_WEBHOOK desde impuestos.v1.yaml 1.2.0, porque el alta
+        idempotente trae el secreto); REQUIERE_CREDENCIALES -> CARGAR_CREDENCIALES (enlace al backoffice del producto
+        Impuestos, /backoffice/empresas/{tenantId});
+        REQUIERE_REVISION_NIT -> CORREGIR_NIT (abre la pestaña de datos de la compañía). null en PENDIENTE, LISTO y
+        SUSPENDIDO. CARGAR_SECRETO queda retirada desde la 1.2.0 de Impuestos: ningún estado la produce y su valor y
+        literal se conservan solo para reportes anteriores (el front la trata como REINTENTAR).
+      x-flit-etiquetas:
+        REINTENTAR: Reintentar
+        CARGAR_SECRETO: Cargar secreto
+        CARGAR_CREDENCIALES: Cargar credenciales
+        CORREGIR_NIT: Corregir NIT
+
+    ProvisioningPreview:
+      type: object
+      required: [legalName, taxIdBase, nitStatus, contactEmail, blocking]
+      properties:
+        legalName:
+          type: string
+          description: Razón social de la compañía (identity.tenants.legal_name).
+        taxIdBase:
+          type: string
+          nullable: true
+          description: NIT base sin dígito de verificación que se enviará (regla D-TAXID). null si nitStatus no es VALIDO.
+          example: "900123456"
+        nitStatus:
+          type: string
+          enum: [VALIDO, AMBIGUO, AUSENTE, IGUAL_A_CABEZA]
+          description: >
+            Todo lo que no es VALIDO es «Requiere revisión del NIT» (DA-8). La etiqueta es el motivo que muestra el
+            diálogo junto a la etiqueta del estado.
+          x-flit-etiquetas:
+            VALIDO: NIT válido
+            AMBIGUO: No se puede separar el dígito de verificación del NIT
+            AUSENTE: La compañía no tiene NIT
+            IGUAL_A_CABEZA: El NIT es el mismo de su compañía cabeza
+        contactEmail:
+          type: string
+          nullable: true
+          description: Correo del AdminCompany activo más antiguo (D-EMAIL). null si no hay ninguno.
+        blocking:
+          type: string
+          nullable: true
+          enum: [SIN_ADMIN]
+          description: SIN_ADMIN = no hay AdminCompany activo; no se puede confirmar la activación. null = sin bloqueo.
+          x-flit-etiquetas:
+            SIN_ADMIN: La compañía no tiene un Administrador de Compañía activo
 
     ProductManifest:
       type: object
@@ -422,4 +768,5 @@ components:
           description: >
             PRODUCT_NOT_ENABLED, PRODUCT_NOT_FOUND, PRODUCT_INACTIVE, PRODUCT_ALWAYS_ON,
             PRODUCT_NOT_ENABLED_FOR_HEAD, PRODUCT_NOTES_TOO_LONG, TENANT_NOT_FOUND,
-            MANIFEST_INVALID, MANIFEST_SLUG_PREFIX, MANIFEST_CONFLICT
+            MANIFEST_INVALID, MANIFEST_SLUG_PREFIX, MANIFEST_CONFLICT,
+            PROVISIONING_PREREQUISITE_MISSING y PRODUCT_WITHOUT_PROVISIONING (v1.1.0)
