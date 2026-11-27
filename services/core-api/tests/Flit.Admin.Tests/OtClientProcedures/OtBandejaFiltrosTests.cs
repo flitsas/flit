@@ -377,6 +377,99 @@ public sealed class OtBandejaFiltrosTests
         bandeja.Data.Select(p => p.ReferenceNumber).Should().BeEquivalentTo(["FT1-0000003"]);
     }
 
+    // ── Búsqueda de varios valores separados por coma (HU #14747) ───────────────────────────
+
+    /// <summary>
+    /// A los tres trámites del escenario se les da una placa y un VIN conocidos (el 1 ya tiene la
+    /// placa ABC123) para poder pegar listas mixtas de ID / placa / VIN.
+    /// </summary>
+    private static async Task<string> SembrarMultivalorAsync()
+    {
+        var db = await SembrarEscenarioAsync();
+        await using var ctx = NewContext(db);
+        var filas = await ctx.ProcedureInstances.ToListAsync(TestContext.Current.CancellationToken);
+        filas.Single(f => f.Consecutivo == 1).Vin = "VIN0000001";
+        var dos = filas.Single(f => f.Consecutivo == 2);
+        dos.Plate = "XYZ789";
+        dos.Vin = "VIN0000002";
+        filas.Single(f => f.Consecutivo == 3).Plate = "QQQ333";
+        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return db;
+    }
+
+    private static async Task<IReadOnlyList<string>> BuscarTextoAsync(string db, string texto)
+    {
+        var r = await ListarAsync(db, new ListOtClientProceduresQuery { OtTenantId = OtTenant, Busqueda = texto });
+        r.Data.Select(p => p.ReferenceNumber).Should().OnlyHaveUniqueItems();
+        r.TotalCount.Should().Be(r.Data.Count);
+        return r.Data.Select(p => p.ReferenceNumber).ToList();
+    }
+
+    [Fact]
+    public async Task AC1_Multivalor_VariasPlacas_TraeLosTramitesDeCada()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "abc123, xyz789")).Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002"]);
+    }
+
+    [Theory]
+    [InlineData("abc123, FT2-0000002")]
+    [InlineData("abc123, 2")]
+    [InlineData("abc123, 0000002")]
+    [InlineData("abc123,ft2 2")]
+    public async Task AC2_Multivalor_PlacaMasId_EnCualquierForma(string texto)
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, texto)).Should().BeEquivalentTo(["FT1-0000001", "FT2-0000002"]);
+    }
+
+    [Fact]
+    public async Task AC3_Multivalor_VinMasPlaca()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "vin0000002 , QQQ333")).Should().BeEquivalentTo(["FT2-0000002", "FT1-0000003"]);
+    }
+
+    [Fact]
+    public async Task AC4_SinComa_ConservaElComportamientoDeSiempre()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "xyz789")).Should().BeEquivalentTo(["FT2-0000002"]);
+        (await BuscarTextoAsync(db, "vin0000001")).Should().BeEquivalentTo(["FT1-0000001"]);
+        (await BuscarTextoAsync(db, "FT1-0000003")).Should().BeEquivalentTo(["FT1-0000003"]);
+        // Empresa cliente: solo sin coma.
+        (await BuscarTextoAsync(db, "Zulia")).Should().BeEquivalentTo(["FT1-0000003"]);
+    }
+
+    [Fact]
+    public async Task AC5_Multivalor_ComasDoblesYFinales_SeIgnoran()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "aaa111 ,, QQQ333,")).Should().BeEquivalentTo(["FT1-0000003"]);
+        (await BuscarTextoAsync(db, ",, ,")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AC6_Multivalor_UnTramoInexistente_NoEscondeALosDemas()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "ZZZ999, XYZ789, 999")).Should().BeEquivalentTo(["FT2-0000002"]);
+    }
+
+    [Fact]
+    public async Task AC7_Multivalor_UnTramiteQueCasaPorVariosTramos_SaleUnaVez()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "XYZ789, VIN0000002, 0000002, FT2-0000002")).Should().BeEquivalentTo(["FT2-0000002"]);
+    }
+
+    [Fact]
+    public async Task AC8_Multivalor_NoBuscaPorEmpresaNiNombre()
+    {
+        var db = await SembrarMultivalorAsync();
+        (await BuscarTextoAsync(db, "Zulia, Flota")).Should().BeEmpty();
+    }
+
     // ── El rango de fechas (AC6) ──────────────────────────────────────────────────────────────
 
     [Fact]
