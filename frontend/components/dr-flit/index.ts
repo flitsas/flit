@@ -2,6 +2,7 @@ export { DrFlitAssistant } from "./DrFlitAssistant";
 export {
   DR_FLIT_GESTION_INTENTS,
   DR_FLIT_INTENTS,
+  DR_FLIT_UI_ENABLED,
   buildGreeting,
   getIntentById,
 } from "./dr-flit-intents";

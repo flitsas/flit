@@ -20,7 +20,7 @@ import {
 import { apiFetch } from "@/lib/api/client";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { SEGMENTO_ORGANISMO_PROPIO, extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
-import { DrFlitAssistant } from "@/components/dr-flit";
+import { DrFlitAssistant, DR_FLIT_UI_ENABLED } from "@/components/dr-flit";
 import { LoteDescargaTracker, LoteDescargaTrackerProvider } from "@/components/shared/LoteDescargaTracker";
 import { tramitesNav } from "./dock/tramitesNav";
 import { ACCIONES_BUSCADOR, PLACA_BUSCADOR } from "@/components/inicio/destinos";
@@ -200,16 +200,18 @@ export function Shell({
         layout="app"
         overlay={
           <>
-            {/* DR. FLIT — asistente conversacional sobre APIs existentes (búsqueda por rol/alcance). */}
-            <DrFlitAssistant
-              displayName={currentUser?.displayName ?? currentUser?.email ?? null}
-              routeScope={`${pathname}|${activeModule}`}
-              historialPlacaEnabled={hasModule("historial-placa")}
-              canSearchValidaciones={hasModule("validaciones")}
-              // Épica #12718 — al caso de soporte solo va un nombre real: `displayName` es null si el token no lo trae
-              // (no cae al correo); sin nombre, la persona lo escribe.
-              supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email || null }}
-            />
+            {/* DR. FLIT — HU #14770: UI apagada por defecto (`NEXT_PUBLIC_DR_FLIT_UI_ENABLED=true` para montarla). */}
+            {DR_FLIT_UI_ENABLED ? (
+              <DrFlitAssistant
+                displayName={currentUser?.displayName ?? currentUser?.email ?? null}
+                routeScope={`${pathname}|${activeModule}`}
+                historialPlacaEnabled={hasModule("historial-placa")}
+                canSearchValidaciones={hasModule("validaciones")}
+                // Épica #12718 — al caso de soporte solo va un nombre real: `displayName` es null si el token no lo trae
+                // (no cae al correo); sin nombre, la persona lo escribe.
+                supportContact={{ name: currentUser?.displayName ?? null, email: currentUser?.email || null }}
+              />
+            ) : null}
             {/* HU #13382 — aviso del lote arriba a la derecha del contenido: fuera de la barra de marca (#12237),
                 del dock y del botón de Dr. FLIT. */}
             <LoteDescargaTracker />
