@@ -12,7 +12,7 @@ public sealed class MotorDeConsultasTests
 {
     private sealed record Fila(string Numero, string Placa, string Estado, DateTimeOffset? Fecha);
 
-    private sealed class Catalogo(string? rowNoun = null) : IQueryFieldCatalog
+    private sealed class Catalogo(string? rowNoun = null, bool contieneVarios = false) : IQueryFieldCatalog
     {
         private static readonly string[] Ops =
             [QueryOperator.EsAlguno, QueryOperator.NoEsNinguno, QueryOperator.Contiene, QueryOperator.EstaVacio];
@@ -37,6 +37,28 @@ public sealed class MotorDeConsultasTests
         public string RowNoun => rowNoun ?? "trámite";
 
         public bool IsIdentifier(string fieldId) => fieldId is "numero" or "placa";
+
+        public bool ContieneAdmiteVarios => contieneVarios;
+    }
+
+    [Fact]
+    public void Contiene_ConVariosValores_SinOptIn_SeRechazaYSeRecorta()
+    {
+        var catalogo = new Catalogo();
+        var cond = new QueryCondition("placa", QueryOperator.Contiene, ["ABC", "XYZ"]);
+
+        QueryConditionValidator.Validate(catalogo, [cond], "la pantalla").Should().Contain("admite un solo valor");
+        QueryNormalizer.Normalize(catalogo, cond)!.Values.Should().Equal("ABC");
+    }
+
+    [Fact]
+    public void Contiene_ConVariosValores_ConOptIn_SeAceptaYSeConservan()
+    {
+        var catalogo = new Catalogo(contieneVarios: true);
+        var cond = new QueryCondition("placa", QueryOperator.Contiene, ["ABC", "XYZ"]);
+
+        QueryConditionValidator.Validate(catalogo, [cond], "la pantalla").Should().BeNull();
+        QueryNormalizer.Normalize(catalogo, cond)!.Values.Should().Equal("ABC", "XYZ");
     }
 
     private static readonly DateTimeOffset Desde = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);

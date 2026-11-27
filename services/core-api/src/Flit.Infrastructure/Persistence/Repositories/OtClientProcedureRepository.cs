@@ -2566,8 +2566,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     u.Id == x.CreatedByUserId && valores.Contains(u.DisplayName.ToUpper()))),
                 QueryOperator.NoEsNinguno => query.Where(x => !_context.Users.Any(u =>
                     u.Id == x.CreatedByUserId && valores.Contains(u.DisplayName.ToUpper()))),
-                QueryOperator.Contiene => query.Where(x => _context.Users.Any(u =>
-                    u.Id == x.CreatedByUserId && u.DisplayName.ToUpper().Contains(valores[0]))),
+                QueryOperator.Contiene => ProcedureInstanceFiltroSql.ContieneAlguno(query, valores, v => x =>
+                    _context.Users.Any(u =>
+                        u.Id == x.CreatedByUserId && u.DisplayName.ToUpper().Contains(v))),
                 QueryOperator.EstaVacio => query.Where(x =>
                     !_context.Users.Any(u => u.Id == x.CreatedByUserId)),
                 QueryOperator.NoEstaVacio => query.Where(x =>

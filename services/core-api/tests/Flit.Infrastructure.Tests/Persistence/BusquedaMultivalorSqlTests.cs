@@ -68,4 +68,23 @@ public sealed class BusquedaMultivalorSqlTests
         var act = () => ProcedureInstanceFiltroSql.AplicarBusquedaMultivalor(db.ProcedureInstances, tramos).ToQueryString();
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void ContieneAlguno_SeTraduceASql_ConUnParametroPorValor()
+    {
+        using var db = NewContext();
+        var valores = new List<string> { "AAA111", "BBB222" };
+
+        var placa = ProcedureInstanceFiltroSql.PorPlaca(db.ProcedureInstances, "contiene", valores).ToQueryString();
+        var vin = ProcedureInstanceFiltroSql.PorVin(db.ProcedureInstances, "contiene", valores).ToQueryString();
+        var radicado = ProcedureInstanceFiltroSql.PorRadicado(db.ProcedureInstances, "contiene", valores).ToQueryString();
+        var comprador = ProcedureInstanceFiltroSql.PorActor(
+            db.ProcedureInstances, "contiene", valores, ProcedureInstanceFiltroSql.ActorTipoComprador).ToQueryString();
+
+        foreach (var sql in new[] { placa, vin, radicado, comprador })
+        {
+            sql.Should().Contain("='%AAA111%'").And.Contain("='%BBB222%'").And.Contain(" OR ");
+            string.Join('\n', sql.Split('\n').Where(l => !l.StartsWith("--"))).Should().NotContain("AAA111");
+        }
+    }
 }

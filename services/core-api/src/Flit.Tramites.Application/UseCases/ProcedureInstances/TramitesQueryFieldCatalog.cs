@@ -131,17 +131,17 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
         // Excel trae «ABC-123» tan a menudo como «ABC123»— y `contiene` cubre la búsqueda parcial:
         // por eso el criterio «exacta o parcial» no obliga a elegir, lo decide el operador.
         new(Radicado, "ID Trámite", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
-            "Radicado que emite FLIT (FT1-0000012). Vale también el número solo. Se puede pegar una lista.",
+            "Radicado que emite FLIT (FT1-0000012). Vale también el número solo. Puede poner varios, separados por coma.",
             AdmiteLista: true),
         new(Placa, "Placa", QueryFieldKind.Texto, GrupoVehiculo, TextoOperators, [],
-            "Se puede pegar una lista completa desde Excel.", AdmiteLista: true),
+            "Puede poner varias, separadas por coma, o pegar una lista de Excel.", AdmiteLista: true),
         new(Vin, "VIN", QueryFieldKind.Texto, GrupoVehiculo, TextoOperators, [],
-            "Se puede pegar una lista completa desde Excel.", AdmiteLista: true),
+            "Puede poner varias, separadas por coma, o pegar una lista de Excel.", AdmiteLista: true),
 
         new(Comprador, "Comprador", QueryFieldKind.Texto, GrupoPersonas, TextoOperators, [],
-            "Busca por nombre y también por número de documento.", AdmiteLista: true),
+            "Busca por nombre y también por documento. Varios, separados por coma.", AdmiteLista: true),
         new(Vendedor, "Vendedor", QueryFieldKind.Texto, GrupoPersonas, TextoOperators, [],
-            "Busca por nombre y también por documento. Solo los traspasos tienen vendedor.",
+            "Busca por nombre y también por documento; varios, separados por coma. Solo los traspasos tienen vendedor.",
             AdmiteLista: true),
 
         // Opciones resueltas por el repositorio: los organismos con los que esta empresa tramita de
@@ -155,7 +155,7 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
             OpcionOperators, EstadoOptions,
             "El estado en su empresa, no el de la bandeja del organismo.", AdmiteLista: true),
         new(Gestor, "Gestor", QueryFieldKind.Texto, GrupoTramite, TextoOperators, [],
-            "Quién creó el trámite en FLIT.", AdmiteLista: false),
+            "Quién creó el trámite en FLIT. Varios, separados por coma.", AdmiteLista: true),
 
         new(Fuente, "Fuente", QueryFieldKind.Opcion, GrupoOrigen, OpcionOperators, FuenteOptions,
             "Por dónde entró el trámite a FLIT.", AdmiteLista: false),
@@ -220,6 +220,9 @@ public sealed class TramitesQueryFieldCatalog : IQueryFieldCatalog
     string IQueryFieldCatalog.Universo => "su empresa";
 
     bool IQueryFieldCatalog.IsIdentifier(string fieldId) => IsIdentifier(fieldId);
+
+    /// <inheritdoc />
+    bool IQueryFieldCatalog.ContieneAdmiteVarios => true;
 
     // ── Superficie estática ───────────────────────────────────────────────────────────────────
 

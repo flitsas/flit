@@ -3204,9 +3204,10 @@ internal sealed partial class ProcedureInstanceRepository(
                 QueryOperator.NoEsNinguno => query.Where(x => !x.FieldValues.Any(fv =>
                     fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null
                     && valores.Contains(fv.ValueText.ToUpper()))),
-                QueryOperator.Contiene => query.Where(x => x.FieldValues.Any(fv =>
-                    fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null
-                    && fv.ValueText.ToUpper().Contains(valores[0]))),
+                QueryOperator.Contiene => ProcedureInstanceFiltroSql.ContieneAlguno(query, valores, v => x =>
+                    x.FieldValues.Any(fv =>
+                        fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null
+                        && fv.ValueText.ToUpper().Contains(v))),
                 QueryOperator.EstaVacio => query.Where(x => !x.FieldValues.Any(fv =>
                     fv.FieldKey == TransitOfficeNameFieldKey && fv.ValueText != null && fv.ValueText != "")),
                 QueryOperator.NoEstaVacio => query.Where(x => x.FieldValues.Any(fv =>
@@ -3240,9 +3241,10 @@ internal sealed partial class ProcedureInstanceRepository(
                 QueryOperator.NoEsNinguno => query.Where(x => !db.Users.Any(u =>
                     u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
                     && valores.Contains(u.DisplayName.ToUpper()))),
-                QueryOperator.Contiene => query.Where(x => db.Users.Any(u =>
-                    u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
-                    && u.DisplayName.ToUpper().Contains(valores[0]))),
+                QueryOperator.Contiene => ProcedureInstanceFiltroSql.ContieneAlguno(query, valores, v => x =>
+                    db.Users.Any(u =>
+                        u.Id == (x.AssignedToUserId ?? x.CreatedByUserId)
+                        && u.DisplayName.ToUpper().Contains(v))),
                 // "Sin gestor" no es una columna nula —el id efectivo siempre trae valor, porque cae
                 // a `CreatedByUserId`— sino un usuario que ya no se puede resolver, que es justo
                 // cuando la fila muestra "—".
