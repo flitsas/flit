@@ -170,6 +170,7 @@ describe("catálogo de Trámites", () => {
       "FUR",
       "Notificaciones",
       "Configuración de IA",
+      "Asistente DR. FLIT",
       "Mensajes muertos",
       "Descarga masiva",
       "Overrides persona RUNT",

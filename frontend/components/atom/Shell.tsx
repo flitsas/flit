@@ -18,6 +18,7 @@ import {
   TOKEN_STORAGE_KEY,
 } from "@/lib/auth/jwt";
 import { apiFetch } from "@/lib/api/client";
+import { getDrFlitUiVisibility } from "@/lib/api/admin-plataforma-dr-flit";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { SEGMENTO_ORGANISMO_PROPIO, extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import { DrFlitAssistant, DR_FLIT_UI_ENABLED } from "@/components/dr-flit";
@@ -180,6 +181,22 @@ export function Shell({
   // Mismo criterio que el dock: sin filtro RBAC se ve todo; con filtro, solo si el módulo viene.
   const hasModule = (code: string) => (visibleModuleCodes ? visibleModuleCodes.includes(code) : true);
 
+  // HU #14772 — setting de plataforma (API). Env `NEXT_PUBLIC_DR_FLIT_UI_ENABLED=true` fuerza ON (local/emergencia).
+  const [drFlitUiFromApi, setDrFlitUiFromApi] = useState(false);
+  useEffect(() => {
+    if (!currentUser) return;
+    const controller = new AbortController();
+    void getDrFlitUiVisibility(controller.signal)
+      .then((v) => {
+        if (!controller.signal.aborted) setDrFlitUiFromApi(Boolean(v.uiEnabled));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setDrFlitUiFromApi(false);
+      });
+    return () => controller.abort();
+  }, [currentUser]);
+  const showDrFlitUi = DR_FLIT_UI_ENABLED || drFlitUiFromApi;
+
   return (
     // HU #13382 — seguimiento global del lote de descarga masiva: el provider envuelve todo para que
     // cualquier página (p. ej. el listado al crear el lote o ante 409 `lote_activo`) pueda pedir que se
@@ -200,8 +217,8 @@ export function Shell({
         layout="app"
         overlay={
           <>
-            {/* DR. FLIT — HU #14770: UI apagada por defecto (`NEXT_PUBLIC_DR_FLIT_UI_ENABLED=true` para montarla). */}
-            {DR_FLIT_UI_ENABLED ? (
+            {/* DR. FLIT — HU #14770/#14772: API de plataforma o env de emergencia. */}
+            {showDrFlitUi ? (
               <DrFlitAssistant
                 displayName={currentUser?.displayName ?? currentUser?.email ?? null}
                 routeScope={`${pathname}|${activeModule}`}
