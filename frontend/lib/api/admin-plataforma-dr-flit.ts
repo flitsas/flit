@@ -24,8 +24,7 @@ export function putDrFlitPlatformSettings(
 ) {
   return apiFetch<DrFlitPlatformSettings>(RUTA, {
     method: "PUT",
-    body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    body,
     signal,
   });
 }
