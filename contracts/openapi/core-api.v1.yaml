@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.10"
+  version: "1.0.11"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -13908,6 +13908,80 @@ paths:
         "403": { description: Usuario de compañía sin tenant en el token. }
         "428": { description: "Falta aceptar la versión vigente del tratamiento de datos (code consent_required, HU #12931). No se llama al LLM ni a Azure DevOps." }
 
+  /api/v1/dr-flit/ui:
+    get:
+      tags: [DR. FLIT]
+      operationId: drFlitGetUiVisibility
+      summary: Indica si la UI de DR. FLIT (FAB y panel) debe mostrarse
+      description: >
+        HU #14771 (Feature #14769). Lee `admin.dr_flit_settings.ui_enabled` (fila única de plataforma).
+        Cualquier usuario autenticado. El SuperAdmin cambia el valor con PUT /api/v1/admin/plataforma/dr-flit.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Visibilidad actual.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uiEnabled]
+                properties:
+                  uiEnabled: { type: boolean }
+        "401": { description: No autenticado. }
+
+  /api/v1/admin/plataforma/dr-flit:
+    get:
+      tags: [Admin · Plataforma · DR. FLIT]
+      operationId: adminPlataformaDrFlitGetSettings
+      summary: Lee la visibilidad de la UI de DR. FLIT (SuperAdmin)
+      description: HU #14771. Fila única `admin.dr_flit_settings`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Setting actual.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrFlitPlatformSettings'
+        "401": { description: No autenticado. }
+        "403": { description: No es SuperAdmin. }
+    put:
+      tags: [Admin · Plataforma · DR. FLIT]
+      operationId: adminPlataformaDrFlitUpdateSettings
+      summary: Actualiza la visibilidad de la UI de DR. FLIT (SuperAdmin)
+      description: HU #14771. Concurrencia vía `rowVersion` (409 si no coincide).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uiEnabled]
+              properties:
+                uiEnabled: { type: boolean }
+                rowVersion: { type: integer, format: int64, nullable: true }
+      responses:
+        "200":
+          description: Setting actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrFlitPlatformSettings'
+        "401": { description: No autenticado. }
+        "403": { description: No es SuperAdmin. }
+        "409":
+          description: Conflicto de rowVersion.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: row_version_conflict }
+
   /api/v1/dr-flit/consent:
     get:
       tags: [DR. FLIT]
@@ -14437,6 +14511,14 @@ components:
           additionalProperties:
             type: array
             items: { type: string }
+    DrFlitPlatformSettings:
+      type: object
+      required: [uiEnabled, rowVersion]
+      properties:
+        uiEnabled: { type: boolean, description: "true = montar FAB/panel de DR. FLIT" }
+        rowVersion: { type: integer, format: int64 }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        updatedBy: { type: string, format: uuid, nullable: true }
     NotificationTestMailboxResponse:
       type: object
       required: [isConfigured, rowVersion]

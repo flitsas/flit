@@ -417,6 +417,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
         Set<Entities.Admin.NotificationTestSettingsRow>();
 
+    // HU #14771 (Feature #14769) — visibilidad UI de DR. FLIT; fila única global (sin tenant_id / RLS).
+    internal DbSet<Entities.Admin.DrFlitSettingsRow> DrFlitSettings =>
+        Set<Entities.Admin.DrFlitSettingsRow>();
+
     // Feature #13508 (Épica #13272) — configuración multi-proveedor IA por herramienta (global SuperAdmin).
     internal DbSet<Entities.Admin.AiToolProviderSettingsRow> AiToolProviderSettings =>
         Set<Entities.Admin.AiToolProviderSettingsRow>();
