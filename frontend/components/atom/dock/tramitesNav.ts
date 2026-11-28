@@ -154,6 +154,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", iconoComo("campana")),
         // Feature #13508 / HU #13511 — multi-proveedor OCR y DR. FLIT (solo SuperAdmin).
         superAdmin("admin-configuracion-ia", "Configuración de IA", "/admin/plataforma/configuracion-ia", iconoComo("asistente")),
+        // HU #14772 (Feature #14769) — visibilidad UI del asistente (solo SuperAdmin).
+        superAdmin("admin-dr-flit", "Asistente DR. FLIT", "/admin/plataforma/dr-flit", iconoComo("asistente")),
         // Epic #13316 (HU #13358): correos y webhooks que agotaron sus reintentos.
         superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", iconoComo("correo")),
         // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).

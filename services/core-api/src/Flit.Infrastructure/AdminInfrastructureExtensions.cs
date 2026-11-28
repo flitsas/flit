@@ -232,6 +232,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
 
+        // HU #14771 (Feature #14769) — visibilidad UI de DR. FLIT (admin.dr_flit_settings).
+        services.AddScoped<Flit.Admin.Application.Plataforma.DrFlit.IDrFlitPlatformSettingsAdminService,
+            Flit.Infrastructure.DrFlit.DrFlitPlatformSettingsAdminService>();
+
         // HU #11367 (Feature #11349) — canales de notificación con su remitente; desde el corte (HU #13359) los da
         // core-notificaciones (ICanalesDeNotificaciones, que registra Flit.Api).
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,

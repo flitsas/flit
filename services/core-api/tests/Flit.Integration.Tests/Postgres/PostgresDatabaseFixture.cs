@@ -126,6 +126,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // HU #14073 (DDL 166): las cinco preguntas frecuentes iniciales son contenido de trabajo, no catálogo.
         // Se truncan; el portal y Plataforma las gestionan, y la prueba que las necesite las inserta.
         "admin.persona_natural_faqs",
+        // HU #14771 (DDL 207): fila única de visibilidad UI de DR. FLIT. Configuración, no catálogo
+        // (como persona_natural_settings): se trunca; la prueba que la necesite vuelve a insertar la fila.
+        "admin.dr_flit_settings",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

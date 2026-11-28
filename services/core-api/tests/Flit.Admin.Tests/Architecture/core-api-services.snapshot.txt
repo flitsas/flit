@@ -248,6 +248,7 @@ Flit.Admin.Application.Plataforma.Ai.ListAiFailoverAlertsHandler => Flit.Admin.A
 Flit.Admin.Application.Plataforma.Ai.ListAiProviderTransitionsHandler => Flit.Admin.Application.Plataforma.Ai.ListAiProviderTransitionsHandler (Scoped)
 Flit.Admin.Application.Plataforma.Ai.ListAiToolsHandler => Flit.Admin.Application.Plataforma.Ai.ListAiToolsHandler (Scoped)
 Flit.Admin.Application.Plataforma.Ai.SaveAiToolSettingsHandler => Flit.Admin.Application.Plataforma.Ai.SaveAiToolSettingsHandler (Scoped)
+Flit.Admin.Application.Plataforma.DrFlit.IDrFlitPlatformSettingsAdminService => Flit.Infrastructure.DrFlit.DrFlitPlatformSettingsAdminService (Scoped)
 Flit.Admin.Application.Plataforma.Mandatos.IMandateConfigAdminService => Flit.Infrastructure.OtRules.MandateConfigAdminService (Scoped)
 Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatAdminService => Flit.Infrastructure.OtRules.MandateFormatAdminService (Scoped)
 Flit.Admin.Application.Plataforma.Mandatos.IMandateFormatRepository => Flit.Infrastructure.OtRules.MandateFormatRepository (Scoped)
